@@ -21,6 +21,11 @@ const MEMORY_CONTEXT_CUSTOM_TYPE = "pi-memory-context";
 const TURN_MEMORY_RESULT_LIMIT = 3;
 const TURN_MEMORY_STAGE_LIMIT = 4;
 
+export interface RetrieveTurnMemoriesOptions {
+  resultLimit?: number;
+  stageLimit?: number;
+}
+
 export interface MemoryTurnContext {
   cwd: string;
   sessionId: string;
@@ -73,17 +78,22 @@ export function decorateCreateMemoryInput(input: CreateMemoryInput, context: Mem
   return enriched;
 }
 
-export function buildTurnSearchPlan(query: string, context: MemoryTurnContext): SearchMemoriesInput[] {
+export function buildTurnSearchPlan(
+  query: string,
+  context: MemoryTurnContext,
+  options: Pick<RetrieveTurnMemoriesOptions, "stageLimit"> = {},
+): SearchMemoriesInput[] {
   const normalizedQuery = query.trim();
   if (normalizedQuery.length < 2) {
     return [];
   }
 
+  const stageLimit = options.stageLimit ?? TURN_MEMORY_STAGE_LIMIT;
   const stages: SearchMemoriesInput[] = [];
 
   stages.push({
     query: normalizedQuery,
-    limit: TURN_MEMORY_STAGE_LIMIT,
+    limit: stageLimit,
     scope: ["session"],
     sessionId: context.sessionId,
   });
@@ -91,7 +101,7 @@ export function buildTurnSearchPlan(query: string, context: MemoryTurnContext): 
   if (context.projectId) {
     stages.push({
       query: normalizedQuery,
-      limit: TURN_MEMORY_STAGE_LIMIT,
+      limit: stageLimit,
       scope: ["project"],
       projectId: context.projectId,
     });
@@ -100,7 +110,7 @@ export function buildTurnSearchPlan(query: string, context: MemoryTurnContext): 
   if (context.repoPath) {
     stages.push({
       query: normalizedQuery,
-      limit: TURN_MEMORY_STAGE_LIMIT,
+      limit: stageLimit,
       scope: ["repo"],
       repoPath: context.repoPath,
     });
@@ -108,13 +118,13 @@ export function buildTurnSearchPlan(query: string, context: MemoryTurnContext): 
 
   stages.push({
     query: normalizedQuery,
-    limit: TURN_MEMORY_STAGE_LIMIT,
+    limit: stageLimit,
     scope: ["global"],
   });
 
   stages.push({
     query: normalizedQuery,
-    limit: TURN_MEMORY_STAGE_LIMIT,
+    limit: stageLimit,
   });
 
   return dedupeSearchPlan(stages);
@@ -124,8 +134,10 @@ export function retrieveMemoriesForTurn(
   store: Pick<MemoryStore, "searchMemories">,
   query: string,
   context: MemoryTurnContext,
+  options: RetrieveTurnMemoriesOptions = {},
 ): { results: MemorySearchResult[]; searchPlan: SearchMemoriesInput[] } {
-  const searchPlan = buildTurnSearchPlan(query, context);
+  const resultLimit = options.resultLimit ?? TURN_MEMORY_RESULT_LIMIT;
+  const searchPlan = buildTurnSearchPlan(query, context, { stageLimit: options.stageLimit });
   if (searchPlan.length === 0) {
     return { results: [], searchPlan };
   }
@@ -140,9 +152,9 @@ export function retrieveMemoriesForTurn(
         dedupedResults.set(result.id, result);
       }
 
-      if (dedupedResults.size >= TURN_MEMORY_RESULT_LIMIT) {
+      if (dedupedResults.size >= resultLimit) {
         return {
-          results: Array.from(dedupedResults.values()).slice(0, TURN_MEMORY_RESULT_LIMIT),
+          results: Array.from(dedupedResults.values()).slice(0, resultLimit),
           searchPlan,
         };
       }
@@ -150,7 +162,7 @@ export function retrieveMemoriesForTurn(
   }
 
   return {
-    results: Array.from(dedupedResults.values()).slice(0, TURN_MEMORY_RESULT_LIMIT),
+    results: Array.from(dedupedResults.values()).slice(0, resultLimit),
     searchPlan,
   };
 }

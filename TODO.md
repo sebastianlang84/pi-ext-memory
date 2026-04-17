@@ -14,12 +14,7 @@ Rule: Completed items are removed, not checked off.
 
 Each step should land as a small, reviewable, testable commit. `v1.0` is explicitly feature-free: only final review, fixes, cleanup, and release closeout.
 
-### v0.8
-- Implement `memory_update`, `memory_link`, and `memory_archive`.
-- Add `/memory-search` for manual retrieval/debugging.
-- Add tests for patch updates, relations, and archive semantics.
-
-### v0.9
+### v0.8.1
 - Implement `/memory-review` and `/memory-session-save`.
 - Persist compact session summaries.
 - Finalize the manual-first write policy and candidate review flow.

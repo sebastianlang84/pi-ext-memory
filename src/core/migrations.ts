@@ -128,6 +128,24 @@ export const memoryMigrations: MemoryMigration[] = [
       CREATE INDEX idx_memory_embeddings_content_hash ON memory_embeddings(content_hash);
     `,
   },
+  {
+    version: 4,
+    name: "fix_memory_fts_update_delete_triggers",
+    sql: `
+      DROP TRIGGER IF EXISTS memories_ad;
+      DROP TRIGGER IF EXISTS memories_au;
+
+      CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.rowid;
+      END;
+
+      CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.rowid;
+        INSERT INTO memory_fts(rowid, title, summary, body, tags)
+        VALUES (new.rowid, new.title, new.summary, coalesce(new.body, ''), coalesce(new.tags_json, '[]'));
+      END;
+    `,
+  },
 ];
 
 export const LATEST_MEMORY_SCHEMA_VERSION = memoryMigrations.at(-1)?.version ?? 0;

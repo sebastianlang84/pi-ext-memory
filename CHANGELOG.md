@@ -40,15 +40,20 @@ This changelog follows the Keep a Changelog format.
 - Scope-aware runtime enrichment for `memory_save`, so project/repo/session memories inherit current context automatically.
 - Session-aware search filtering in the local core, including automatic session-row creation for persisted session-scoped memories.
 - Extension-focused tests covering context mapping, staged retrieval planning, and compact top-N injection behavior.
+- A v0.8 `memory_update` flow with patch validation, persisted readback, and embedding refresh on content changes.
+- A v0.8 `memory_link` flow backed by the existing `links` table, including idempotent link persistence for simple V1 relations.
+- A v0.8 `memory_archive` flow that keeps records durable while removing archived items from active retrieval.
+- A `/memory-search` command for manual staged retrieval/debugging in the current session/project/repo context.
+- Core tests covering patch updates, relations, and archive semantics.
 
 ### Changed
 - Expanded the root `README.md` from a placeholder to a navigable project guide.
 - Updated `README.md` with the current extension/core structure, test entry points, and v0.6 implementation status.
-- Updated the Pi extension status/reporting strings to reflect v0.7 retrieval-hook readiness and the next v0.8 implementation slice.
-- Updated `README.md` with the v0.7 retrieval-hook status, extension-test coverage, and current verification paths.
+- Updated the Pi extension status/reporting strings to reflect v0.8 update/link/archive readiness and the next v0.8.1 implementation slice.
+- Updated `README.md` with the v0.8 status, verification paths, and manual retrieval command smoke check.
 
 ### Fixed
-- None.
+- FTS5 update/delete trigger behavior via schema v4 so memory updates and archives keep the lexical index consistent instead of failing on row updates.
 
 ### Breaking
 - None.

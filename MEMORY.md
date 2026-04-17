@@ -7,7 +7,7 @@ write-when: Stable truth, project state, open decisions, next steps, or durable 
 
 # MEMORY
 
-last_updated: 2026-04-16
+last_updated: 2026-04-17
 scope: always-loaded bootstrap; keep lean
 
 ## 1) Current State
@@ -16,7 +16,7 @@ scope: always-loaded bootstrap; keep lean
 - Product direction for V1 is documented in `docs/prd-lightweight-local-memory-system.md`.
 - A working Pi integration plan now exists in `docs/plans/pi-extension-v1.md`.
 - A v0.1 project-local Pi extension skeleton now exists under `.pi/extensions/pi-memory/`, backed by a thin local core under `src/core/` and Pi-facing modules under `src/pi-extension/`.
-- The local core now supports SQLite store initialization, schema migrations via `PRAGMA user_version`, schema v2 FTS5 lexical indexing, and schema v3 persisted embeddings.
+- The local core now supports SQLite store initialization, schema migrations via `PRAGMA user_version`, schema v2 FTS5 lexical indexing, schema v3 persisted embeddings, and schema v4 FTS trigger fixes for reliable memory updates/archives.
 - v0.3 implemented validated memory creation: the core normalizes and persists memory records with immediate readback, and the Pi extension registers a `memory_save` tool.
 - v0.4 is now implemented for lexical retrieval: the core supports metadata-filtered FTS5 search with compact result shaping, and the Pi extension now registers a `memory_search` tool.
 - v0.5 now adds embedding generation/storage behind a narrow adapter: schema v3 persists embeddings in `memory_embeddings`, the store supports injected adapters, and the built-in deterministic profiles are `builtin-hash-384-v1` (default) and `builtin-hash-64-v1` (low-footprint fallback).
@@ -24,8 +24,10 @@ scope: always-loaded bootstrap; keep lean
 - v0.6 also adds basic near-duplicate suppression for search results and ranking-focused hybrid retrieval tests, including mixed German/English semantic cases via a mock embedding adapter.
 - v0.7 now implements the Pi `before_agent_start` retrieval hook: the extension derives session/project/repo context from the active Pi session, runs staged retrieval, and injects a compact top-N memory block into the turn.
 - v0.7 also auto-enriches `memory_save` writes for scoped memories with runtime project/repo/session context, and the core now supports session-aware filtering plus automatic `sessions` row creation when session-scoped memories are persisted.
+- v0.8 now implements `memory_update`, `memory_link`, and `memory_archive` in the local core and registers the corresponding Pi tools plus `/memory-search`.
+- v0.8 also adds patch/update embedding refresh, idempotent memory relations, archive-safe retrieval filtering, and a schema v4 fix for FTS update/delete triggers.
 - ADR 001 records the v0.5 embedding baseline decision.
-- Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, embedding persistence, and retrieval-hook injection checks, plus `npm run smoke:memory-status` for the extension smoke run.
+- Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, patch updates, relations, archive semantics, embedding persistence, and retrieval-hook injection checks, plus `npm run smoke:memory-status` and a manual `/memory-search` smoke run for the extension.
 - Current V1 direction from the PRD and plan: local-first, single-user, SQLite-based, hybrid retrieval, Pi-first extension surface, thin local core boundary, no heavy server infrastructure.
 
 ## 2) Long-Term Memory
@@ -44,15 +46,16 @@ scope: always-loaded bootstrap; keep lean
 - 2026-04-16 — Implemented v0.5 embedding generation/storage with schema v3, a narrow adapter boundary, deterministic built-in default/fallback profiles, and adapter-focused tests.
 - 2026-04-16 — Implemented v0.6 hybrid retrieval with lexical/vector candidate merging, application-layer ranking inputs, basic dedupe, Pi result formatting updates, and multilingual ranking-focused tests.
 - 2026-04-16 — Implemented v0.7 turn-start retrieval with Pi `before_agent_start` injection, scope-aware runtime context mapping/enrichment, session-aware filtering, and compact injection-focused tests.
+- 2026-04-17 — Implemented v0.8 memory updates, links, archive semantics, the `/memory-search` command, schema v4 FTS trigger fixes, and v0.8 verification coverage.
 
 ## 4) Open Decisions
 - Whether V1 should ship as a pure local library or as a small localhost service.
 - How much memory creation should be manual vs assisted in V1.
 
 ## 5) Next Steps
-1. Implement v0.8: `memory_update`, `memory_link`, `memory_archive`, and `/memory-search`.
-2. Refine the schema details as needed while retrieval and update flows become concrete.
-3. Define write policy and Pi integration boundary further as more tools land.
+1. Implement v0.8.1: `/memory-review`, `/memory-session-save`, and compact session summaries.
+2. Finalize the manual-first write policy and candidate review flow.
+3. Add end-to-end tests for save -> search -> review -> session summary.
 4. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
 
 ## 6) Known Risks / Blockers

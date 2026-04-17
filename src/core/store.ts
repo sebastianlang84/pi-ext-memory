@@ -10,13 +10,20 @@ import {
   type MemoryEmbeddingRecord,
 } from "./embeddings.ts";
 import {
+  type ArchiveMemoryInput,
   type CreateMemoryInput,
+  type LinkMemoriesInput,
+  type MemoryLinkRecord,
   type MemoryRecord,
   type MemorySearchResult,
   type NormalizedSearchMemoriesInput,
   type SearchMemoriesInput,
+  type UpdateMemoryInput,
+  normalizeArchiveMemoryInput,
   normalizeCreateMemoryInput,
+  normalizeLinkMemoriesInput,
   normalizeSearchMemoriesInput,
+  normalizeUpdateMemoryInput,
 } from "./memories.ts";
 import { LATEST_MEMORY_SCHEMA_VERSION, memoryMigrations } from "./migrations.ts";
 
@@ -58,8 +65,12 @@ export interface MemoryStoreStatus {
 
 export interface MemoryStore extends MemoryStoreStatus {
   createMemory(input: CreateMemoryInput): MemoryRecord;
+  updateMemory(input: UpdateMemoryInput): MemoryRecord;
+  archiveMemory(input: ArchiveMemoryInput): MemoryRecord;
   getMemory(id: string): MemoryRecord | null;
   getMemoryEmbedding(id: string): MemoryEmbeddingRecord | null;
+  linkMemories(input: LinkMemoriesInput): MemoryLinkRecord;
+  listMemoryLinks(memoryId: string): MemoryLinkRecord[];
   searchMemories(input: SearchMemoriesInput): MemorySearchResult[];
   close(): void;
 }
@@ -96,6 +107,14 @@ interface MemoryEmbeddingRow {
   content_hash: string;
   created_at: string;
   updated_at: string;
+}
+
+interface MemoryLinkRow {
+  id: number;
+  from_memory_id: string;
+  to_memory_id: string;
+  relation: MemoryLinkRecord["relation"];
+  created_at: string;
 }
 
 interface MemorySearchBaseRow {
@@ -244,6 +263,98 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
 
         return persistedMemory;
       },
+      updateMemory(input) {
+        assertStoreOpen(isClosed);
+
+        const patch = normalizeUpdateMemoryInput(input);
+        const existingMemory = readMemoryById(db, patch.id);
+
+        if (!existingMemory) {
+          throw new Error(`Memory ${patch.id} was not found`);
+        }
+
+        const timestamp = new Date().toISOString();
+        const updatedMemory: MemoryRecord = {
+          ...existingMemory,
+          title: patch.title ?? existingMemory.title,
+          summary: patch.summary ?? existingMemory.summary,
+          body: patch.body === undefined ? existingMemory.body : (patch.body ?? undefined),
+          tags: patch.tags ?? existingMemory.tags,
+          importance: patch.importance ?? existingMemory.importance,
+          confidence: patch.confidence ?? existingMemory.confidence,
+          status: patch.status ?? existingMemory.status,
+          pinned: patch.pinned ?? existingMemory.pinned,
+          updatedAt: timestamp,
+          expiresAt: patch.expiresAt === undefined ? existingMemory.expiresAt : (patch.expiresAt ?? undefined),
+        };
+
+        const shouldRefreshEmbedding =
+          patch.title !== undefined || patch.summary !== undefined || patch.body !== undefined || patch.tags !== undefined;
+        const embedding = shouldRefreshEmbedding
+          ? embeddingAdapter.generateEmbedding(createMemoryContentForEmbedding(updatedMemory))
+          : undefined;
+
+        db.exec("BEGIN IMMEDIATE;");
+
+        try {
+          if (updatedMemory.sessionId) {
+            ensureSessionRow(db, updatedMemory);
+          }
+
+          writeMemoryRow(db, updatedMemory);
+
+          if (embedding) {
+            writeMemoryEmbedding(db, updatedMemory.id, embedding, timestamp);
+          }
+
+          db.exec("COMMIT;");
+        } catch (error) {
+          db.exec("ROLLBACK;");
+          throw error;
+        }
+
+        const persistedMemory = readMemoryById(db, updatedMemory.id);
+        if (!persistedMemory) {
+          throw new Error(`Failed to read back updated memory ${updatedMemory.id}`);
+        }
+
+        return persistedMemory;
+      },
+      archiveMemory(input) {
+        assertStoreOpen(isClosed);
+
+        const { id, reason } = normalizeArchiveMemoryInput(input);
+        const existingMemory = readMemoryById(db, id);
+
+        if (!existingMemory) {
+          throw new Error(`Memory ${id} was not found`);
+        }
+
+        const timestamp = new Date().toISOString();
+        const updatedMemory: MemoryRecord = {
+          ...existingMemory,
+          status: "archived",
+          updatedAt: timestamp,
+          metadata: buildArchivedMetadata(existingMemory.metadata, reason, timestamp),
+        };
+
+        db.exec("BEGIN IMMEDIATE;");
+
+        try {
+          writeMemoryRow(db, updatedMemory);
+          db.exec("COMMIT;");
+        } catch (error) {
+          db.exec("ROLLBACK;");
+          throw error;
+        }
+
+        const persistedMemory = readMemoryById(db, updatedMemory.id);
+        if (!persistedMemory) {
+          throw new Error(`Failed to read back archived memory ${updatedMemory.id}`);
+        }
+
+        return persistedMemory;
+      },
       getMemory(id) {
         assertStoreOpen(isClosed);
 
@@ -259,6 +370,48 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
         if (normalizedId.length === 0) return null;
 
         return readMemoryEmbeddingById(db, normalizedId);
+      },
+      linkMemories(input) {
+        assertStoreOpen(isClosed);
+
+        const normalizedInput = normalizeLinkMemoriesInput(input);
+
+        if (!readMemoryById(db, normalizedInput.fromId)) {
+          throw new Error(`Memory ${normalizedInput.fromId} was not found`);
+        }
+
+        if (!readMemoryById(db, normalizedInput.toId)) {
+          throw new Error(`Memory ${normalizedInput.toId} was not found`);
+        }
+
+        const timestamp = new Date().toISOString();
+
+        db.prepare(`
+          INSERT INTO links (
+            from_memory_id,
+            to_memory_id,
+            relation,
+            created_at
+          ) VALUES (?, ?, ?, ?)
+          ON CONFLICT(from_memory_id, to_memory_id, relation) DO NOTHING;
+        `).run(normalizedInput.fromId, normalizedInput.toId, normalizedInput.relation, timestamp);
+
+        const link = readMemoryLink(db, normalizedInput.fromId, normalizedInput.toId, normalizedInput.relation);
+        if (!link) {
+          throw new Error(
+            `Failed to read back persisted link ${normalizedInput.fromId} -> ${normalizedInput.toId} (${normalizedInput.relation})`,
+          );
+        }
+
+        return link;
+      },
+      listMemoryLinks(memoryId) {
+        assertStoreOpen(isClosed);
+
+        const normalizedId = memoryId.trim();
+        if (normalizedId.length === 0) return [];
+
+        return readMemoryLinksForMemory(db, normalizedId);
       },
       searchMemories(input) {
         assertStoreOpen(isClosed);
@@ -365,6 +518,92 @@ function readMemoryEmbeddingById(db: DatabaseSync, id: string): MemoryEmbeddingR
     .get(id) as MemoryEmbeddingRow | undefined;
 
   return row ? mapMemoryEmbeddingRow(row) : null;
+}
+
+function readMemoryLink(
+  db: DatabaseSync,
+  fromId: string,
+  toId: string,
+  relation: MemoryLinkRecord["relation"],
+): MemoryLinkRecord | null {
+  const row = db
+    .prepare(
+      `SELECT
+        id,
+        from_memory_id,
+        to_memory_id,
+        relation,
+        created_at
+      FROM links
+      WHERE from_memory_id = ? AND to_memory_id = ? AND relation = ?;`,
+    )
+    .get(fromId, toId, relation) as MemoryLinkRow | undefined;
+
+  return row ? mapMemoryLinkRow(row) : null;
+}
+
+function readMemoryLinksForMemory(db: DatabaseSync, memoryId: string): MemoryLinkRecord[] {
+  const rows = db
+    .prepare(
+      `SELECT
+        id,
+        from_memory_id,
+        to_memory_id,
+        relation,
+        created_at
+      FROM links
+      WHERE from_memory_id = ? OR to_memory_id = ?
+      ORDER BY created_at DESC, id DESC;`,
+    )
+    .all(memoryId, memoryId) as MemoryLinkRow[];
+
+  return rows.map(mapMemoryLinkRow);
+}
+
+function writeMemoryRow(db: DatabaseSync, memory: MemoryRecord): void {
+  db.prepare(`
+    UPDATE memories
+    SET
+      kind = ?,
+      scope = ?,
+      session_id = ?,
+      title = ?,
+      summary = ?,
+      body = ?,
+      tags_json = ?,
+      source_agent = ?,
+      project_id = ?,
+      repo_path = ?,
+      branch = ?,
+      importance = ?,
+      confidence = ?,
+      status = ?,
+      pinned = ?,
+      updated_at = ?,
+      expires_at = ?,
+      metadata_json = ?
+    WHERE id = ?;
+  `).run(
+    memory.kind,
+    memory.scope,
+    memory.sessionId ?? null,
+    memory.title,
+    memory.summary,
+    memory.body ?? null,
+    JSON.stringify(memory.tags),
+    memory.sourceAgent ?? null,
+    memory.projectId ?? null,
+    memory.repoPath ?? null,
+    memory.branch ?? null,
+    memory.importance,
+    memory.confidence,
+    memory.status,
+    memory.pinned ? 1 : 0,
+    memory.updatedAt,
+    memory.expiresAt ?? null,
+    JSON.stringify(memory.metadata),
+    memory.id,
+  );
 }
 
 function ensureSessionRow(db: DatabaseSync, memory: Pick<MemoryRecord, "sessionId" | "projectId" | "repoPath" | "branch" | "createdAt">): void {
@@ -822,6 +1061,37 @@ function mapMemoryEmbeddingRow(row: MemoryEmbeddingRow): MemoryEmbeddingRecord {
     contentHash: row.content_hash,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapMemoryLinkRow(row: MemoryLinkRow): MemoryLinkRecord {
+  return {
+    id: row.id,
+    fromId: row.from_memory_id,
+    toId: row.to_memory_id,
+    relation: row.relation,
+    createdAt: row.created_at,
+  };
+}
+
+function buildArchivedMetadata(
+  metadata: Record<string, unknown>,
+  reason: string | undefined,
+  archivedAt: string,
+): Record<string, unknown> {
+  const archived = {
+    archivedAt,
+    ...(reason ? { archivedReason: reason } : {}),
+  };
+
+  return {
+    ...metadata,
+    archive: {
+      ...(typeof metadata.archive === "object" && metadata.archive !== null && !Array.isArray(metadata.archive)
+        ? (metadata.archive as Record<string, unknown>)
+        : {}),
+      ...archived,
+    },
   };
 }
 
