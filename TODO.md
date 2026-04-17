@@ -20,6 +20,12 @@ Each step should land as a small, reviewable, testable commit. `v1.0` is explici
 - Finalize the manual-first write policy and candidate review flow.
 - Add end-to-end tests for save -> search -> review -> session summary.
 
+### v0.8.2
+- Replace the deterministic built-in default embedding path with a real local semantic embedding adapter, targeting BGE-M3 first.
+- Validate BGE-M3 retrieval quality and local runtime cost on target machines, and decide whether a lighter fallback model must ship alongside it.
+- Make the project installable as a normal Pi extension package instead of only as a repo-local dev extension.
+- Document the install/upgrade/smoke-test path for the packaged extension.
+
 ### v1.0
 - No new features.
 - Final code review pass.
