@@ -53,6 +53,7 @@ This changelog follows the Keep a Changelog format.
 - Updated `README.md` with the v0.8 status, verification paths, and manual retrieval command smoke check.
 
 ### Fixed
+- `/memory-status` now toggles its UI widget off on a second invocation instead of leaving the status block stuck above the editor for the rest of the session.
 - FTS5 update/delete trigger behavior via schema v4 so memory updates and archives keep the lexical index consistent instead of failing on row updates.
 
 ### Breaking

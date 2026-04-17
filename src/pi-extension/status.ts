@@ -22,3 +22,15 @@ export function formatMemoryStatus(status: MemoryCoreStatus, cwd: string): strin
 export function formatStatusWidgetLines(status: MemoryCoreStatus, cwd: string): string[] {
   return formatMemoryStatus(status, cwd).split("\n");
 }
+
+export function getNextStatusWidgetLines(
+  isVisible: boolean,
+  status: MemoryCoreStatus,
+  cwd: string,
+): string[] | undefined {
+  if (isVisible) {
+    return undefined;
+  }
+
+  return formatStatusWidgetLines(status, cwd);
+}

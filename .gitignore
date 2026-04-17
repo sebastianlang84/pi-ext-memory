@@ -1,0 +1,3 @@
+.pi/*.sqlite
+.pi/*.sqlite-shm
+.pi/*.sqlite-wal

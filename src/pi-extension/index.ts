@@ -22,7 +22,7 @@ import {
   deriveMemoryTurnContext,
   retrieveMemoriesForTurn,
 } from "./retrieval.ts";
-import { formatMemoryStatus, formatStatusWidgetLines } from "./status.ts";
+import { formatMemoryStatus, getNextStatusWidgetLines } from "./status.ts";
 
 const DEFAULT_DB_FILE = [".pi", "pi-memory.sqlite"] as const;
 const MANUAL_SEARCH_RESULT_LIMIT = 8;
@@ -31,6 +31,7 @@ const MANUAL_SEARCH_STAGE_LIMIT = 6;
 export default function registerPiMemoryExtension(pi: ExtensionAPI) {
   const core = createMemoryCore();
   let store: MemoryStore | undefined;
+  let isStatusWidgetVisible = false;
 
   pi.on("session_start", async (_event, ctx) => {
     if (!ctx.hasUI) return;
@@ -55,7 +56,13 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
     return { message };
   });
 
-  pi.on("session_shutdown", async () => {
+  pi.on("session_shutdown", async (_event, ctx) => {
+    if (ctx.hasUI) {
+      ctx.ui.setWidget("pi-memory-status", undefined);
+      ctx.ui.setWidget("pi-memory-search", undefined);
+    }
+
+    isStatusWidgetVisible = false;
     store?.close();
     store = undefined;
   });
@@ -240,8 +247,10 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
       const output = formatMemoryStatus(status, ctx.cwd);
 
       if (ctx.hasUI) {
-        ctx.ui.setWidget("pi-memory-status", formatStatusWidgetLines(status, ctx.cwd));
-        ctx.ui.notify("pi-memory status updated", "info");
+        const widgetLines = getNextStatusWidgetLines(isStatusWidgetVisible, status, ctx.cwd);
+        isStatusWidgetVisible = widgetLines !== undefined;
+        ctx.ui.setWidget("pi-memory-status", widgetLines);
+        ctx.ui.notify(isStatusWidgetVisible ? "pi-memory status shown" : "pi-memory status cleared", "info");
         return;
       }
 
