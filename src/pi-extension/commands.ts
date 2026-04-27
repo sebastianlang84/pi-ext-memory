@@ -21,6 +21,7 @@ const MIN_SESSION_SUMMARY_LENGTH = 12;
 export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCommand">, core: MemoryCore): void {
   let store: MemoryStore | undefined;
   let isStatusWidgetVisible = false;
+  let isReviewWidgetVisible = false;
 
   pi.on("session_shutdown", async (_event, ctx) => {
     if (ctx.hasUI) {
@@ -31,6 +32,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
     }
 
     isStatusWidgetVisible = false;
+    isReviewWidgetVisible = false;
     store?.close();
     store = undefined;
   });
@@ -98,8 +100,16 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
       const output = formatMemoryReview(results, searchPlan, turnContext, activeStore.dbPath, session?.summary);
 
       if (ctx.hasUI) {
+        if (isReviewWidgetVisible) {
+          ctx.ui.setWidget("pi-memory-review", undefined);
+          isReviewWidgetVisible = false;
+          ctx.ui.notify("pi-memory review cleared", "info");
+          return;
+        }
+
         ctx.ui.setWidget("pi-memory-review", output.split("\n"));
-        ctx.ui.notify("pi-memory review updated", "info");
+        isReviewWidgetVisible = true;
+        ctx.ui.notify("pi-memory review shown", "info");
         return;
       }
 

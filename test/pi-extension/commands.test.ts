@@ -153,7 +153,7 @@ test("formatMemorySessionSaved renders the persisted session summary", () => {
   assert.match(output, /repo_path: \/repo/);
 });
 
-test("/memory-review handler registers and renders review details in the UI", async () => {
+test("/memory-review handler toggles review details in the UI", async () => {
   const { cwd, repoRoot } = createProjectContext();
   const dbPath = join(createTempDir("pi-memory-command-db-"), "memory.sqlite");
   const store = initializeMemoryStore({ dbPath });
@@ -192,12 +192,20 @@ test("/memory-review handler registers and renders review details in the UI", as
     const { ctx, widgets, notifications } = createMockCommandContext(cwd, "session-review-123");
     await handler("", ctx);
 
-    assert.deepEqual(notifications, [{ message: "pi-memory review updated", level: "info" }]);
+    assert.deepEqual(notifications, [{ message: "pi-memory review shown", level: "info" }]);
     const widget = widgets.get("pi-memory-review")?.join("\n") ?? "";
     assert.match(widget, /Manual memory review \(read-only\)\./);
     assert.match(widget, /session_id: session-review-123/);
     assert.match(widget, /session_summary: Reviewed relevant memories before deciding what to persist\./);
     assert.match(widget, /Keep writes manual-first for next steps/);
+
+    await handler("", ctx);
+
+    assert.equal(widgets.get("pi-memory-review"), undefined);
+    assert.deepEqual(notifications, [
+      { message: "pi-memory review shown", level: "info" },
+      { message: "pi-memory review cleared", level: "info" },
+    ]);
   } finally {
     if (previousDbPath === undefined) {
       delete process.env.PI_MEMORY_DB_PATH;
@@ -310,7 +318,7 @@ test("commands cover save -> search -> review -> session summary end to end", as
     assert.match(sessionWidget, /Closed v0\.8\.1 after save, search, review/);
 
     assert.deepEqual(notifications, [
-      { message: "pi-memory review updated", level: "info" },
+      { message: "pi-memory review shown", level: "info" },
       { message: "pi-memory session summary saved", level: "info" },
     ]);
 

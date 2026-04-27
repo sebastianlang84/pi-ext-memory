@@ -15,6 +15,14 @@ This changelog follows the Keep a Changelog format.
 ### Added
 - Nothing yet.
 
+## [1.0.1] - 2026-04-28
+
+### Fixed
+- `/memory-review` now toggles its UI widget off on a second invocation instead of leaving the manual review widget stuck until session shutdown.
+
+### Changed
+- Updated package metadata and extension status/version strings for v1.0.1.
+
 ## [1.0.0] - 2026-04-28
 
 ### Added

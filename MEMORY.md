@@ -31,6 +31,7 @@ scope: always-loaded bootstrap; keep lean
 - The Pi extension now defaults to a global store at `~/.pi/agent/pi-memory.sqlite` with `PI_MEMORY_DB_PATH` override; project/repo/session scopes remain metadata filters instead of separate repo-local databases.
 - v0.8.2 targets a real local BGE-M3 command adapter first via `PI_MEMORY_BGE_M3_COMMAND`, synchronously piping JSON on stdin, accepting common embedding JSON stdout shapes, enforcing finite 1024d vectors plus a bounded timeout, and falling back to the built-in deterministic 384d profile when no command is configured; the low-footprint profile remains deterministic 64d.
 - v1.0.0 is closed as the first stable local-first Pi extension release after green automated tests and Pi smoke checks; no v0.8.3 debug release was needed.
+- v1.0.1 fixes `/memory-review` UI behavior so running the command a second time clears the review widget instead of leaving it stuck until session shutdown.
 - `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`, with both dev-entry and package-path smoke scripts; the package smoke script disables project-local extension discovery to avoid loading the dev shim twice.
 - ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default.
 - Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus `npm run smoke:memory-status`, `npm run smoke:package-status`, and a manual `/memory-search` smoke run for the extension.
@@ -59,6 +60,7 @@ scope: always-loaded bootstrap; keep lean
 - 2026-04-27 — Closed v0.8.1 by finalizing the manual-first review flow, adding save -> search -> review -> session-summary end-to-end coverage, and setting package metadata to `0.8.1`.
 - 2026-04-27 — Closed v0.8.2 by adding the local `PI_MEMORY_BGE_M3_COMMAND` adapter, shipping a Pi package manifest, and documenting install/upgrade/smoke plus repo-local -> global DB migration.
 - 2026-04-28 — Closed v1.0.0 after `npm test`, `npm run smoke:memory-status`, and `npm run smoke:package-status` passed; `PI_MEMORY_BGE_M3_COMMAND` was not configured, so validation covered the deterministic fallback path.
+- 2026-04-28 — Closed v1.0.1 by making `/memory-review` toggle/clear its UI widget and rerunning `npm test`, `npm run smoke:memory-status`, and `npm run smoke:package-status`.
 
 ## 4) Open Decisions
 - Whether a post-V1 runtime should remain a pure local library or grow into a small localhost service if future evidence requires it.
