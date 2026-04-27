@@ -130,6 +130,28 @@ test("buildTurnSearchPlan separates session, project, repo, global, and legacy f
   );
 });
 
+test("buildTurnMemoryMessage injects memory triggers even when no results match", () => {
+  const message = buildTurnMemoryMessage(
+    "subagent setup",
+    [],
+    {
+      cwd: "/repo/packages/api",
+      sessionId: "session-789",
+      projectId: "@acme/api",
+      projectPath: "/repo/packages/api",
+      repoPath: "/repo",
+    },
+    "/home/user/.pi/agent/pi-memory.sqlite",
+    [],
+  );
+
+  assert.ok(message);
+  assert.match(message?.content ?? "", /Relevant memory context: none found\./);
+  assert.match(message?.content ?? "", /Memory triggers: search before guessing/);
+  assert.match(message?.content ?? "", /Save or update durable user corrections/);
+  assert.deepEqual(message?.details.resultIds, []);
+});
+
 test("buildTurnMemoryMessage injects only a compact top-N context block", () => {
   const results = [
     createResult("1", "First memory"),

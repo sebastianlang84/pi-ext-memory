@@ -45,12 +45,15 @@ This changelog follows the Keep a Changelog format.
 - A v0.8 `memory_archive` flow that keeps records durable while removing archived items from active retrieval.
 - A `/memory-search` command for manual staged retrieval/debugging in the current session/project/repo context.
 - Core tests covering patch updates, relations, and archive semantics.
+- A global Pi-agent memory DB default at `~/.pi/agent/pi-memory.sqlite`, with `PI_MEMORY_DB_PATH` override for custom storage locations.
+- Compact memory trigger guidance in the turn-start injection so agents search before guessing about prior context and save/update durable corrections, decisions, facts, preferences, and todos.
 
 ### Changed
 - Expanded the root `README.md` from a placeholder to a navigable project guide.
 - Updated `README.md` with the current extension/core structure, test entry points, and v0.6 implementation status.
 - Updated the Pi extension status/reporting strings to reflect v0.8 update/link/archive readiness and the next v0.8.1 implementation slice.
 - Updated `README.md` with the v0.8 status, verification paths, and manual retrieval command smoke check.
+- Changed the Pi extension store resolution from repo-local `.pi/pi-memory.sqlite` to a global store while keeping project/repo/session scopes as metadata filters.
 
 ### Fixed
 - `/memory-status` now toggles its UI widget off on a second invocation instead of leaving the status block stuck above the editor for the rest of the session.

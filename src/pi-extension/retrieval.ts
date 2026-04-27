@@ -179,7 +179,7 @@ export function buildTurnMemoryMessage(
   display: false;
   details: MemoryTurnMessageDetails;
 } | null {
-  if (results.length === 0) {
+  if (query.trim().length < 2) {
     return null;
   }
 
@@ -202,10 +202,15 @@ export function buildTurnMemoryMessage(
 
 export function formatTurnMemoryContext(results: MemorySearchResult[]): string {
   const topResults = results.slice(0, TURN_MEMORY_RESULT_LIMIT);
+  const contextLines =
+    topResults.length > 0
+      ? ["Relevant memory context:", ...topResults.map((result, index) => formatTurnMemoryLine(index + 1, result))]
+      : ["Relevant memory context: none found."];
 
   return [
-    "Relevant memory context:",
-    ...topResults.map((result, index) => formatTurnMemoryLine(index + 1, result)),
+    ...contextLines,
+    "Memory triggers: search before guessing about prior/project/workflow context.",
+    "Save or update durable user corrections, decisions, facts, preferences, and todos.",
     "Prefer current user instructions if they conflict with older memory.",
   ].join("\n");
 }

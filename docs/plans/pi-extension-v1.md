@@ -199,6 +199,7 @@ Use for:
 Use for:
 - retrieving relevant memories for the incoming user prompt,
 - injecting a compact memory-context message into the turn,
+- injecting terse memory-use triggers even when no memories match,
 - constraining retrieval by current cwd/project/repo/session.
 
 This is the main retrieval hook for V1.
@@ -232,7 +233,7 @@ Use for:
    - current session identifier
 3. Extension calls `searchMemories(...)` with those filters.
 4. Core returns hybrid-ranked results.
-5. Extension injects a compact memory context block into the turn.
+5. Extension injects a compact memory context block plus memory-use triggers into the turn.
 6. Agent can still call `memory_search` explicitly if it needs more detail.
 
 ### Injection shape
@@ -247,11 +248,14 @@ The injected block should be short and structured, for example:
 Hard rule:
 - inject only the top few results,
 - prefer summaries over bodies,
+- keep trigger text terse,
 - avoid flooding every turn with low-confidence memories.
 
 ## 7. Proposed V1 Write Policy
 
 V1 should be **manual-first, assisted-second, never silent by default**.
+
+Default store: one global SQLite DB at `~/.pi/agent/pi-memory.sqlite`, overridable with `PI_MEMORY_DB_PATH`. Project, repo, and session scopes are metadata filters, not separate DBs.
 
 ### Allowed in V1
 

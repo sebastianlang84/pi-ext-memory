@@ -1,5 +1,3 @@
-import { resolve } from "node:path";
-
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
@@ -16,6 +14,7 @@ import {
   type MemoryStore,
   type SearchMemoriesInput,
 } from "../core/index.ts";
+import { resolveMemoryDbPath } from "./config.ts";
 import {
   buildTurnMemoryMessage,
   decorateCreateMemoryInput,
@@ -23,8 +22,6 @@ import {
   retrieveMemoriesForTurn,
 } from "./retrieval.ts";
 import { formatMemoryStatus, getNextStatusWidgetLines } from "./status.ts";
-
-const DEFAULT_DB_FILE = [".pi", "pi-memory.sqlite"] as const;
 const MANUAL_SEARCH_RESULT_LIMIT = 8;
 const MANUAL_SEARCH_STAGE_LIMIT = 6;
 
@@ -292,9 +289,9 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
 function getStoreForCwd(
   core: ReturnType<typeof createMemoryCore>,
   currentStore: MemoryStore | undefined,
-  cwd: string,
+  _cwd: string,
 ): MemoryStore {
-  const dbPath = resolve(cwd, ...DEFAULT_DB_FILE);
+  const dbPath = resolveMemoryDbPath();
 
   if (currentStore?.dbPath === dbPath) {
     return currentStore;
