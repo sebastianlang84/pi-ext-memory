@@ -131,6 +131,50 @@ test("buildTurnSearchPlan separates session, project, repo, and global stages wi
   );
 });
 
+test("buildTurnSearchPlan skips session stage for blank session ids", () => {
+  const plan = buildTurnSearchPlan("cache rollout", {
+    cwd: "/repo/packages/api",
+    sessionId: "   ",
+    projectId: "@acme/api",
+    projectPath: "/repo/packages/api",
+    repoPath: "/repo",
+  });
+
+  assert.deepEqual(
+    plan.map((stage) => ({ scope: stage.scope, sessionId: stage.sessionId, projectId: stage.projectId, repoPath: stage.repoPath })),
+    [
+      { scope: ["project"], sessionId: undefined, projectId: "@acme/api", repoPath: undefined },
+      { scope: ["repo"], sessionId: undefined, projectId: undefined, repoPath: "/repo" },
+      { scope: ["global"], sessionId: undefined, projectId: undefined, repoPath: undefined },
+    ],
+  );
+});
+
+test("retrieveMemoriesForTurn does not retrieve all session memories for blank session ids", () => {
+  const dbPath = join(createTempDir("pi-memory-retrieval-blank-session-"), "memory.sqlite");
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    store.createMemory({
+      kind: "fact",
+      scope: "session",
+      sessionId: "other-session",
+      title: "Other session memory",
+      summary: "Blanksessionneedle belongs to a different session and must not be injected.",
+    });
+
+    const result = retrieveMemoriesForTurn(store, "blanksessionneedle", {
+      cwd: "/repo/packages/api",
+      sessionId: "  \t ",
+    });
+
+    assert.deepEqual(result.results, []);
+    assert.ok(result.searchPlan.every((stage) => stage.scope?.[0] !== "session"));
+  } finally {
+    store.close();
+  }
+});
+
 test("retrieveMemoriesForTurn reuses one query embedding across staged searches", () => {
   const embedding: GeneratedMemoryEmbedding = {
     model: "mock-query-embedding",

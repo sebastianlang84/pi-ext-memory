@@ -96,14 +96,17 @@ export function buildTurnSearchPlan(
   }
 
   const stageLimit = options.stageLimit ?? TURN_MEMORY_STAGE_LIMIT;
+  const normalizedSessionId = context.sessionId.trim();
   const stages: SearchMemoriesInput[] = [];
 
-  stages.push({
-    query: normalizedQuery,
-    limit: stageLimit,
-    scope: ["session"],
-    sessionId: context.sessionId,
-  });
+  if (normalizedSessionId.length > 0) {
+    stages.push({
+      query: normalizedQuery,
+      limit: stageLimit,
+      scope: ["session"],
+      sessionId: normalizedSessionId,
+    });
+  }
 
   if (context.projectId) {
     stages.push({
