@@ -61,7 +61,7 @@ The extension should depend on a small internal interface such as:
 - `updateMemory(input)`
 - `linkMemories(input)`
 - `archiveMemory(input)`
-- `summarizeSession(input)`
+- `saveSessionSummary(input)`
 
 The extension should **not** contain SQL or ranking logic directly.
 
@@ -177,10 +177,10 @@ Show:
 Manual search for debugging retrieval quality.
 
 ### `/memory-review`
-Show candidate memories from the current session that are worth saving, but do not save automatically.
+Show relevant existing memories for the current session/project/repo context plus explicit suggested actions, but do not save automatically.
 
 ### `/memory-session-save`
-Create or update a session summary explicitly.
+Create or update a session summary explicitly from user-provided text.
 
 V1 can ship with these four commands only.
 
@@ -293,7 +293,7 @@ V1 should bias toward these practical write cases:
 
 ## 9. Session Summary Shape
 
-A V1 session summary should be stored as a structured memory or tightly related memory set containing:
+A V1 session summary should be stored in the existing `sessions.summary` field rather than as a normal memory record, and should contain:
 
 - what changed,
 - what was decided,

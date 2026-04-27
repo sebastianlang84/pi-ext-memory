@@ -63,12 +63,34 @@ export interface MemoryStoreStatus {
   embeddingStrategy: string;
 }
 
+export interface SessionRecord {
+  id: string;
+  projectId?: string;
+  repoPath?: string;
+  branch?: string;
+  startedAt: string;
+  endedAt?: string;
+  summary?: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface SaveSessionSummaryInput {
+  sessionId: string;
+  summary: string;
+  projectId?: string;
+  repoPath?: string;
+  branch?: string;
+  startedAt?: string;
+}
+
 export interface MemoryStore extends MemoryStoreStatus {
   createMemory(input: CreateMemoryInput): MemoryRecord;
   updateMemory(input: UpdateMemoryInput): MemoryRecord;
   archiveMemory(input: ArchiveMemoryInput): MemoryRecord;
   getMemory(id: string): MemoryRecord | null;
   getMemoryEmbedding(id: string): MemoryEmbeddingRecord | null;
+  getSession(sessionId: string): SessionRecord | null;
+  saveSessionSummary(input: SaveSessionSummaryInput): SessionRecord;
   linkMemories(input: LinkMemoriesInput): MemoryLinkRecord;
   listMemoryLinks(memoryId: string): MemoryLinkRecord[];
   searchMemories(input: SearchMemoriesInput): MemorySearchResult[];
@@ -115,6 +137,17 @@ interface MemoryLinkRow {
   to_memory_id: string;
   relation: MemoryLinkRecord["relation"];
   created_at: string;
+}
+
+interface SessionRow {
+  id: string;
+  project_id: string | null;
+  repo_path: string | null;
+  branch: string | null;
+  started_at: string;
+  ended_at: string | null;
+  summary: string | null;
+  metadata_json: string;
 }
 
 interface MemorySearchBaseRow {
@@ -371,6 +404,59 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
 
         return readMemoryEmbeddingById(db, normalizedId);
       },
+      getSession(sessionId) {
+        assertStoreOpen(isClosed);
+
+        const normalizedSessionId = sessionId.trim();
+        if (normalizedSessionId.length === 0) return null;
+
+        return readSessionById(db, normalizedSessionId);
+      },
+      saveSessionSummary(input) {
+        assertStoreOpen(isClosed);
+
+        const sessionId = input.sessionId.trim();
+        const summary = input.summary.trim();
+        const startedAt = input.startedAt?.trim() || new Date().toISOString();
+
+        if (sessionId.length === 0) {
+          throw new Error("Session id is required");
+        }
+
+        if (summary.length === 0) {
+          throw new Error("Session summary is required");
+        }
+
+        db.exec("BEGIN IMMEDIATE;");
+
+        try {
+          ensureSessionRow(db, {
+            sessionId,
+            projectId: input.projectId,
+            repoPath: input.repoPath,
+            branch: input.branch,
+            createdAt: startedAt,
+          });
+
+          db.prepare(`
+            UPDATE sessions
+            SET summary = ?
+            WHERE id = ?;
+          `).run(summary, sessionId);
+
+          db.exec("COMMIT;");
+        } catch (error) {
+          db.exec("ROLLBACK;");
+          throw error;
+        }
+
+        const session = readSessionById(db, sessionId);
+        if (!session) {
+          throw new Error(`Failed to read back persisted session ${sessionId}`);
+        }
+
+        return session;
+      },
       linkMemories(input) {
         assertStoreOpen(isClosed);
 
@@ -518,6 +604,26 @@ function readMemoryEmbeddingById(db: DatabaseSync, id: string): MemoryEmbeddingR
     .get(id) as MemoryEmbeddingRow | undefined;
 
   return row ? mapMemoryEmbeddingRow(row) : null;
+}
+
+function readSessionById(db: DatabaseSync, sessionId: string): SessionRecord | null {
+  const row = db
+    .prepare(
+      `SELECT
+        id,
+        project_id,
+        repo_path,
+        branch,
+        started_at,
+        ended_at,
+        summary,
+        metadata_json
+      FROM sessions
+      WHERE id = ?;`,
+    )
+    .get(sessionId) as SessionRow | undefined;
+
+  return row ? mapSessionRow(row) : null;
 }
 
 function readMemoryLink(
@@ -1061,6 +1167,19 @@ function mapMemoryEmbeddingRow(row: MemoryEmbeddingRow): MemoryEmbeddingRecord {
     contentHash: row.content_hash,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapSessionRow(row: SessionRow): SessionRecord {
+  return {
+    id: row.id,
+    projectId: row.project_id ?? undefined,
+    repoPath: row.repo_path ?? undefined,
+    branch: row.branch ?? undefined,
+    startedAt: row.started_at,
+    endedAt: row.ended_at ?? undefined,
+    summary: row.summary ?? undefined,
+    metadata: parseObject(row.metadata_json),
   };
 }
 

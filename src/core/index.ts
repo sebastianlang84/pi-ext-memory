@@ -37,4 +37,10 @@ export type {
   UpdateMemoryInput,
 } from "./memories.ts";
 export type { MemoryCore, MemoryCoreStatus } from "./memory-core.ts";
-export type { InitializeMemoryStoreInput, MemoryStore, MemoryStoreStatus } from "./store.ts";
+export type {
+  InitializeMemoryStoreInput,
+  MemoryStore,
+  MemoryStoreStatus,
+  SaveSessionSummaryInput,
+  SessionRecord,
+} from "./store.ts";

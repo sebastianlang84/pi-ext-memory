@@ -21,9 +21,19 @@ import {
   deriveMemoryTurnContext,
   retrieveMemoriesForTurn,
 } from "./retrieval.ts";
+import {
+  formatMemoryReview,
+  formatMemorySearchResultLine,
+  formatMemorySessionSaved,
+  formatMemorySessionSaveUsage,
+  formatSearchPlanStage,
+} from "./formatters.ts";
 import { formatMemoryStatus, getNextStatusWidgetLines } from "./status.ts";
 const MANUAL_SEARCH_RESULT_LIMIT = 8;
 const MANUAL_SEARCH_STAGE_LIMIT = 6;
+const MEMORY_REVIEW_QUERY = "decisions facts preferences todos risks next steps";
+const MEMORY_REVIEW_RESULT_LIMIT = 8;
+const MIN_SESSION_SUMMARY_LENGTH = 12;
 
 export default function registerPiMemoryExtension(pi: ExtensionAPI) {
   const core = createMemoryCore();
@@ -34,7 +44,7 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
     if (!ctx.hasUI) return;
     ctx.ui.setStatus(
       "pi-memory",
-      "pi-memory v0.8 ready — retrieval hook, /memory-status, /memory-search, memory_search, memory_save, memory_update, memory_link, memory_archive",
+      "pi-memory v0.8.1 ready — retrieval hook, /memory-status, /memory-search, /memory-review, /memory-session-save, memory_search, memory_save, memory_update, memory_link, memory_archive",
     );
   });
 
@@ -57,6 +67,7 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
     if (ctx.hasUI) {
       ctx.ui.setWidget("pi-memory-status", undefined);
       ctx.ui.setWidget("pi-memory-search", undefined);
+      ctx.ui.setWidget("pi-memory-review", undefined);
     }
 
     isStatusWidgetVisible = false;
@@ -284,6 +295,59 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
       process.stdout.write(`${output}\n`);
     },
   });
+
+  pi.registerCommand("memory-review", {
+    description: "Show relevant existing memories and explicit suggested next actions without saving anything",
+    handler: async (_args, ctx) => {
+      const activeStore = getStoreForCwd(core, store, ctx.cwd);
+      store = activeStore;
+
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const session = activeStore.getSession(turnContext.sessionId);
+      const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, MEMORY_REVIEW_QUERY, turnContext, {
+        resultLimit: MEMORY_REVIEW_RESULT_LIMIT,
+        stageLimit: MANUAL_SEARCH_STAGE_LIMIT,
+      });
+      const output = formatMemoryReview(results, searchPlan, turnContext, activeStore.dbPath, session?.summary);
+
+      if (ctx.hasUI) {
+        ctx.ui.setWidget("pi-memory-review", output.split("\n"));
+        ctx.ui.notify("pi-memory review updated", "info");
+        return;
+      }
+
+      process.stdout.write(`${output}\n`);
+    },
+  });
+
+  pi.registerCommand("memory-session-save", {
+    description: "Persist a compact summary for the current Pi session",
+    handler: async (args, ctx) => {
+      const summary = args.trim();
+      if (summary.length < MIN_SESSION_SUMMARY_LENGTH) {
+        writeCommandOutput(formatMemorySessionSaveUsage(MIN_SESSION_SUMMARY_LENGTH), ctx);
+        return;
+      }
+
+      const activeStore = getStoreForCwd(core, store, ctx.cwd);
+      store = activeStore;
+
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const session = activeStore.saveSessionSummary({
+        sessionId: turnContext.sessionId,
+        summary,
+        projectId: turnContext.projectId,
+        repoPath: turnContext.repoPath,
+      });
+      const output = formatMemorySessionSaved(session, activeStore.dbPath);
+
+      if (ctx.hasUI) {
+        ctx.ui.notify("pi-memory session summary saved", "info");
+      }
+
+      process.stdout.write(`${output}\n`);
+    },
+  });
 }
 
 function getStoreForCwd(
@@ -432,42 +496,3 @@ function formatManualMemorySearch(
   return lines.join("\n");
 }
 
-function formatSearchPlanStage(stage: SearchMemoriesInput): string {
-  if (stage.scope?.includes("session")) {
-    return `session(${stage.sessionId ?? "unknown"})`;
-  }
-
-  if (stage.scope?.includes("project")) {
-    return `project(${stage.projectId ?? "unknown"})`;
-  }
-
-  if (stage.scope?.includes("repo")) {
-    return `repo(${stage.repoPath ?? "unknown"})`;
-  }
-
-  if (stage.scope?.includes("global")) {
-    return "global";
-  }
-
-  return "unscoped";
-}
-
-function formatMemorySearchResultLine(index: number, result: MemorySearchResult): string {
-  const metadata: string[] = [`${result.kind}/${result.scope}`];
-
-  if (result.tags.length > 0) {
-    metadata.push(`tags=${result.tags.join(",")}`);
-  }
-
-  metadata.push(`score=${result.matchScore.toFixed(3)}`);
-
-  if (result.lexicalScore > 0) {
-    metadata.push(`lex=${result.lexicalScore.toFixed(3)}`);
-  }
-
-  if (result.semanticScore > 0) {
-    metadata.push(`sem=${result.semanticScore.toFixed(3)}`);
-  }
-
-  return `${index}. [${metadata.join(" | ")}] ${result.title} — ${result.summary}`;
-}

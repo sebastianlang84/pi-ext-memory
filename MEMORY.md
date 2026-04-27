@@ -26,7 +26,8 @@ scope: always-loaded bootstrap; keep lean
 - v0.7 also auto-enriches `memory_save` writes for scoped memories with runtime project/repo/session context, and the core now supports session-aware filtering plus automatic `sessions` row creation when session-scoped memories are persisted.
 - v0.8 now implements `memory_update`, `memory_link`, and `memory_archive` in the local core and registers the corresponding Pi tools plus `/memory-search`.
 - v0.8 also adds patch/update embedding refresh, idempotent memory relations, archive-safe retrieval filtering, and a schema v4 fix for FTS update/delete triggers.
-- v0.8.1 development now adds compact turn-start memory triggers even when no memories match: search before guessing about prior/project/workflow context, and save/update durable corrections, decisions, facts, preferences, and todos.
+- v0.8.1 now adds compact turn-start memory triggers even when no memories match: search before guessing about prior/project/workflow context, and save/update durable corrections, decisions, facts, preferences, and todos.
+- v0.8.1 also adds `/memory-review` as a read-only/manual review helper plus `/memory-session-save <summary>` for explicit session recap persistence into the existing `sessions.summary` column.
 - The Pi extension now defaults to a global store at `~/.pi/agent/pi-memory.sqlite` with `PI_MEMORY_DB_PATH` override; project/repo/session scopes remain metadata filters instead of separate repo-local databases.
 - ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default.
 - Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, patch updates, relations, archive semantics, embedding persistence, and retrieval-hook injection checks, plus `npm run smoke:memory-status` and a manual `/memory-search` smoke run for the extension.
@@ -51,17 +52,17 @@ scope: always-loaded bootstrap; keep lean
 - 2026-04-16 — Implemented v0.7 turn-start retrieval with Pi `before_agent_start` injection, scope-aware runtime context mapping/enrichment, session-aware filtering, and compact injection-focused tests.
 - 2026-04-17 — Implemented v0.8 memory updates, links, archive semantics, the `/memory-search` command, schema v4 FTS trigger fixes, and v0.8 verification coverage.
 - 2026-04-27 — Added explicit turn-start memory triggers and switched the extension default DB to the global Pi-agent memory store.
+- 2026-04-27 — Implemented `/memory-review`, `/memory-session-save`, and explicit session summary persistence via `sessions.summary`.
 
 ## 4) Open Decisions
 - Whether V1 should ship as a pure local library or as a small localhost service.
 - How much memory creation should be manual vs assisted in V1.
 
 ## 5) Next Steps
-1. Implement v0.8.1: `/memory-review`, `/memory-session-save`, and compact session summaries.
+1. Add end-to-end coverage for save -> search -> review -> session summary once command-level harness coverage is practical.
 2. Finalize the manual-first write policy and candidate review flow on top of the new terse turn-start triggers.
-3. Add end-to-end tests for save -> search -> review -> session summary.
-4. Document migration guidance for existing repo-local dev DBs into the global store when packaging/install work lands.
-5. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
+3. Document migration guidance for existing repo-local dev DBs into the global store when packaging/install work lands.
+4. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
 
 ## 6) Known Risks / Blockers
 - `sqlite-vec` maturity risk.

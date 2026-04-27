@@ -5,18 +5,18 @@ import { getNextStatusWidgetLines } from "../../src/pi-extension/status.ts";
 import type { MemoryCoreStatus } from "../../src/core/index.ts";
 
 const status: MemoryCoreStatus = {
-  version: "v0.8",
+  version: "v0.8.1",
   mode: "local-core",
-  storage: "sqlite-update-link-archive-ready",
+  storage: "sqlite-session-summary-ready",
   latestSchemaVersion: 4,
   embeddingStrategy: "deterministic-hash",
   defaultEmbeddingModel: "builtin-hash-384-v1",
   fallbackEmbeddingModel: "builtin-hash-64-v1",
   activeEmbeddingModel: "builtin-hash-384-v1",
   embeddingDimensions: 384,
-  availableCommands: ["/memory-status", "/memory-search"],
+  availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-session-save"],
   availableTools: ["memory_search", "memory_save", "memory_update", "memory_link", "memory_archive"],
-  nextStep: "Implement /memory-review, /memory-session-save, and compact session summaries in v0.8.1.",
+  nextStep: "Validate /memory-review and /memory-session-save flow, then package the extension install path.",
 };
 
 test("getNextStatusWidgetLines shows the status widget when currently hidden", () => {
