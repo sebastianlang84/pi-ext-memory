@@ -6,7 +6,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  createDefaultMemoryEmbeddingAdapter,
   initializeMemoryStore,
+  resolveMemoryEmbeddingConfig,
   type MemoryContentForEmbedding,
   type MemoryEmbeddingAdapter,
 } from "../../src/core/index.ts";
@@ -107,6 +109,84 @@ test("createMemory stores a command-produced embedding when PI_MEMORY_BGE_M3_COM
   assert.equal(payload.embedding.vector.length, 1024);
   assert.deepEqual(payload.embedding.vector.slice(0, 4), [11, 2, 0.5, 0]);
   assert.match(payload.embedding.contentHash, /^[0-9a-f]{64}$/);
+});
+
+test("createDefaultMemoryEmbeddingAdapter accepts env-free BGE-M3 command config injection", () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "pi-memory-bge-m3-config-"));
+  const dbPath = join(tempRoot, "memory.sqlite");
+  const embedderPath = join(tempRoot, "embedder.mjs");
+
+  writeFileSync(
+    embedderPath,
+    [
+      'process.stdin.resume();',
+      'process.stdin.on("end", () => {',
+      '  const embedding = Array.from({ length: 1024 }, (_, index) => index === 0 ? 7 : 0);',
+      '  process.stdout.write(JSON.stringify({ embedding }));',
+      '});',
+    ].join("\n"),
+  );
+
+  const adapter = createDefaultMemoryEmbeddingAdapter("default", {
+    bgeM3Command: {
+      shellCommand: `${process.execPath} ${embedderPath}`,
+      timeoutMs: 15_000,
+    },
+  });
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: adapter });
+
+  try {
+    const memory = store.createMemory({
+      kind: "fact",
+      scope: "repo",
+      title: "Injected BGE command",
+      summary: "Use explicit config instead of mutating process.env.",
+      tags: ["bge", "config"],
+    });
+    const embedding = store.getMemoryEmbedding(memory.id);
+
+    assert.equal(store.embeddingStrategy, "local-command");
+    assert.equal(store.embeddingModel, "local-bge-m3-command");
+    assert.equal(embedding?.model, "local-bge-m3-command");
+    assert.equal(embedding?.dimensions, 1024);
+    assert.deepEqual(embedding?.vector.slice(0, 3), [7, 0, 0]);
+  } finally {
+    store.close();
+  }
+});
+
+test("resolveMemoryEmbeddingConfig keeps command env parsing and timeout defaults explicit", () => {
+  assert.deepEqual(resolveMemoryEmbeddingConfig({}), {});
+  assert.deepEqual(resolveMemoryEmbeddingConfig({ PI_MEMORY_BGE_M3_COMMAND: "  node embedder.mjs  " }), {
+    bgeM3Command: {
+      shellCommand: "node embedder.mjs",
+      timeoutMs: 15_000,
+    },
+  });
+  assert.deepEqual(
+    resolveMemoryEmbeddingConfig({
+      PI_MEMORY_BGE_M3_COMMAND: "embed",
+      PI_MEMORY_BGE_M3_TIMEOUT_MS: "2500.9",
+    }),
+    {
+      bgeM3Command: {
+        shellCommand: "embed",
+        timeoutMs: 2500,
+      },
+    },
+  );
+  assert.deepEqual(
+    resolveMemoryEmbeddingConfig({
+      PI_MEMORY_BGE_M3_COMMAND: "embed",
+      PI_MEMORY_BGE_M3_TIMEOUT_MS: "invalid",
+    }),
+    {
+      bgeM3Command: {
+        shellCommand: "embed",
+        timeoutMs: 15_000,
+      },
+    },
+  );
 });
 
 test("initializeMemoryStore accepts a custom embedding adapter for deterministic tests", () => {

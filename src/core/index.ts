@@ -1,4 +1,4 @@
-export { DEFAULT_EMBEDDING_MODEL, FALLBACK_EMBEDDING_MODEL, createDefaultMemoryEmbeddingAdapter } from "./embeddings.ts";
+export { DEFAULT_EMBEDDING_MODEL, FALLBACK_EMBEDDING_MODEL, createDefaultMemoryEmbeddingAdapter, resolveMemoryEmbeddingConfig } from "./embeddings.ts";
 export { LATEST_MEMORY_SCHEMA_VERSION } from "./migrations.ts";
 export { createMemoryCore } from "./memory-core.ts";
 export {
@@ -20,6 +20,8 @@ export type {
   MemoryContentForEmbedding,
   MemoryEmbeddingAdapter,
   MemoryEmbeddingAdapterStatus,
+  MemoryEmbeddingCommandConfig,
+  MemoryEmbeddingConfig,
   MemoryEmbeddingRecord,
 } from "./embeddings.ts";
 export type {

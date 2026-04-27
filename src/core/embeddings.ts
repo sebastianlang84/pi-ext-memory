@@ -46,6 +46,16 @@ const BGE_M3_COMMAND_ENV = "PI_MEMORY_BGE_M3_COMMAND";
 const BGE_M3_COMMAND_TIMEOUT_ENV = "PI_MEMORY_BGE_M3_TIMEOUT_MS";
 const DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS = 15_000;
 
+export interface MemoryEmbeddingCommandConfig {
+  /** Shell command string executed with `shell: true`; JSON input is written to stdin. */
+  shellCommand: string;
+  timeoutMs: number;
+}
+
+export interface MemoryEmbeddingConfig {
+  bgeM3Command?: MemoryEmbeddingCommandConfig;
+}
+
 export const DEFAULT_EMBEDDING_MODEL = {
   model: "builtin-hash-384-v1",
   dimensions: 384,
@@ -63,12 +73,13 @@ const BGE_M3_COMMAND_MODEL = {
 
 export function createDefaultMemoryEmbeddingAdapter(
   profile: BuiltinEmbeddingProfile = "default",
+  config: MemoryEmbeddingConfig = resolveMemoryEmbeddingConfig(),
 ): MemoryEmbeddingAdapter {
   if (profile === "low-footprint") {
     return createDeterministicEmbeddingAdapter(FALLBACK_EMBEDDING_MODEL, FALLBACK_EMBEDDING_MODEL.model);
   }
 
-  const configuredCommand = process.env[BGE_M3_COMMAND_ENV]?.trim();
+  const configuredCommand = config.bgeM3Command;
 
   return {
     getStatus() {
@@ -86,6 +97,20 @@ export function createDefaultMemoryEmbeddingAdapter(
       }
 
       return generateDeterministicEmbedding(memory, DEFAULT_EMBEDDING_MODEL);
+    },
+  };
+}
+
+export function resolveMemoryEmbeddingConfig(env: Record<string, string | undefined> = process.env): MemoryEmbeddingConfig {
+  const shellCommand = env[BGE_M3_COMMAND_ENV]?.trim();
+  if (!shellCommand) {
+    return {};
+  }
+
+  return {
+    bgeM3Command: {
+      shellCommand,
+      timeoutMs: resolveCommandTimeoutMs(env[BGE_M3_COMMAND_TIMEOUT_ENV]),
     },
   };
 }
@@ -134,14 +159,14 @@ function generateDeterministicEmbedding(
   };
 }
 
-function generateCommandEmbedding(command: string, memory: MemoryContentForEmbedding): GeneratedMemoryEmbedding {
+function generateCommandEmbedding(command: MemoryEmbeddingCommandConfig, memory: MemoryContentForEmbedding): GeneratedMemoryEmbedding {
   const input = serializeEmbeddingInput(memory);
-  const result = spawnSync(command, {
+  const result = spawnSync(command.shellCommand, {
     shell: true,
     input,
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
-    timeout: getCommandTimeoutMs(),
+    timeout: command.timeoutMs,
   });
 
   if (result.error) {
@@ -168,8 +193,8 @@ function generateCommandEmbedding(command: string, memory: MemoryContentForEmbed
   };
 }
 
-function getCommandTimeoutMs(): number {
-  const configured = process.env[BGE_M3_COMMAND_TIMEOUT_ENV]?.trim();
+function resolveCommandTimeoutMs(configuredValue: string | undefined): number {
+  const configured = configuredValue?.trim();
   if (!configured) {
     return DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS;
   }
