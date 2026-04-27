@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { registerHooks } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import type {
@@ -78,8 +81,8 @@ function createMemory(overrides: Partial<MemoryRecord> = {}): MemoryRecord {
     title: "Keep writes manual-first",
     summary: "Use explicit review and save tools for durable memory updates.",
     tags: ["policy"],
-    projectId: "pi-memory",
-    repoPath: process.cwd(),
+    projectId: "fixture-project",
+    repoPath: "/tmp/pi-memory-fixture",
     importance: 0.8,
     confidence: 0.9,
     status: "active",
@@ -121,7 +124,15 @@ function toolByName(tools: RegisteredTool[], name: string): RegisteredTool {
   return tool;
 }
 
-test("registerMemoryTools registers expected tools and wires their executors", async () => {
+async function createTempPiToolContext() {
+  const projectId = "tools-temp-project";
+  const cwd = await mkdtemp(join(tmpdir(), "pi-memory-tools-"));
+  await writeFile(join(cwd, "package.json"), JSON.stringify({ name: projectId }), "utf8");
+
+  return { cwd, projectId, sessionId: "session-123" };
+}
+
+test("registerMemoryTools registers expected tools and wires their executors", async (t) => {
   const tools: RegisteredTool[] = [];
   const requestedCwds: string[] = [];
   const calls: {
@@ -131,8 +142,19 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     link: LinkMemoriesInput[];
     archive: ArchiveMemoryInput[];
   } = { search: [], create: [], update: [], link: [], archive: [] };
-  const result = createResult();
-  const savedMemory = createMemory({ id: "memory-saved", scope: "session", sessionId: "session-123", sourceAgent: "pi" });
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => {
+    await rm(projectContext.cwd, { recursive: true, force: true });
+  });
+  const result = createResult({ projectId: projectContext.projectId, repoPath: projectContext.cwd });
+  const savedMemory = createMemory({
+    id: "memory-saved",
+    scope: "session",
+    projectId: projectContext.projectId,
+    repoPath: projectContext.cwd,
+    sessionId: projectContext.sessionId,
+    sourceAgent: "pi",
+  });
   const updatedMemory = createMemory({ id: "memory-updated", title: "Updated title", pinned: true });
   const archivedMemory = createMemory({
     id: "memory-archived",
@@ -191,7 +213,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.deepEqual(new Set(tools.map((tool) => tool.name)), new Set(expectedToolNames));
   assert.ok(tools.every((tool) => tool.parameters), "expected all registered tools to expose parameters");
 
-  const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "session-123" } };
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
   const signal = new AbortController().signal;
   const onUpdate = () => undefined;
 
@@ -235,9 +257,8 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       summary: "Keep durable writes explicit.",
       tags: ["policy"],
       sourceAgent: "pi",
-      projectId: "pi-memory",
-      repoPath: process.cwd(),
-      sessionId: "session-123",
+      projectId: projectContext.projectId,
+      sessionId: projectContext.sessionId,
     },
   ]);
   assert.deepEqual(calls.update, [{ id: "memory-saved", title: "Updated title", pinned: true }]);
@@ -246,6 +267,18 @@ test("registerMemoryTools registers expected tools and wires their executors", a
 
   assert.match(searchOutput.content[0].text, /Found 1 memory result for "manual policy"\./);
   assert.match(searchOutput.content[0].text, /Keep writes manual-first/);
+  assert.match(saveOutput.content[0].text, /Saved memory memory-saved\./);
+  assert.match(saveOutput.content[0].text, /title: Keep writes manual-first/);
+  assert.match(saveOutput.content[0].text, new RegExp(`project_id: ${projectContext.projectId}`));
+  assert.match(saveOutput.content[0].text, new RegExp(`session_id: ${projectContext.sessionId}`));
+  assert.match(updateOutput.content[0].text, /Updated memory memory-updated\./);
+  assert.match(updateOutput.content[0].text, /pinned: yes/);
+  assert.match(updateOutput.content[0].text, /title: Updated title/);
+  assert.match(linkOutput.content[0].text, /Linked memory memory-saved -> memory-updated\./);
+  assert.match(linkOutput.content[0].text, /relation: supersedes/);
+  assert.match(archiveOutput.content[0].text, /Archived memory memory-archived\./);
+  assert.match(archiveOutput.content[0].text, /status: archived/);
+  assert.match(archiveOutput.content[0].text, /reason: superseded/);
   assert.deepEqual(searchOutput.details, { dbPath: store.dbPath, results: [result] });
   assert.deepEqual(saveOutput.details, { dbPath: store.dbPath, memory: savedMemory });
   assert.deepEqual(updateOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
