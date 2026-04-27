@@ -1,6 +1,7 @@
 import { type DatabaseSync } from "node:sqlite";
 
 import { type GeneratedMemoryEmbedding } from "./embeddings.ts";
+import { parseNumberArray, parseStringArray } from "./mappers.ts";
 import { type MemoryRecord, type MemorySearchResult, type NormalizedSearchMemoriesInput } from "./memories.ts";
 
 const SEARCH_CANDIDATE_MULTIPLIER = 5;
@@ -448,24 +449,6 @@ function calculateCosineSimilarity(left: number[], right: number[]): number | un
 
   const similarity = dotProduct / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
   return Number(similarity.toFixed(6));
-}
-
-function parseStringArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function parseNumberArray(value: string): number[] {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((item): item is number => typeof item === "number") : [];
-  } catch {
-    return [];
-  }
 }
 
 function createPlaceholders(count: number): string {
