@@ -1,4 +1,10 @@
-export { DEFAULT_EMBEDDING_MODEL, FALLBACK_EMBEDDING_MODEL, createDefaultMemoryEmbeddingAdapter, resolveMemoryEmbeddingConfig } from "./embeddings.ts";
+export {
+  DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS,
+  DEFAULT_EMBEDDING_MODEL,
+  FALLBACK_EMBEDDING_MODEL,
+  createDefaultMemoryEmbeddingAdapter,
+  resolveMemoryEmbeddingConfig,
+} from "./embeddings.ts";
 export { LATEST_MEMORY_SCHEMA_VERSION } from "./migrations.ts";
 export { createMemoryCore } from "./memory-core.ts";
 export {

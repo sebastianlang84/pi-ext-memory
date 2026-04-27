@@ -44,12 +44,12 @@ export interface MemoryContentForEmbedding {
 
 const BGE_M3_COMMAND_ENV = "PI_MEMORY_BGE_M3_COMMAND";
 const BGE_M3_COMMAND_TIMEOUT_ENV = "PI_MEMORY_BGE_M3_TIMEOUT_MS";
-const DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS = 15_000;
+export const DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS = 15_000;
 
 export interface MemoryEmbeddingCommandConfig {
   /** Shell command string executed with `shell: true`; JSON input is written to stdin. */
   shellCommand: string;
-  timeoutMs: number;
+  timeoutMs?: number;
 }
 
 export interface MemoryEmbeddingConfig {
@@ -79,7 +79,12 @@ export function createDefaultMemoryEmbeddingAdapter(
     return createDeterministicEmbeddingAdapter(FALLBACK_EMBEDDING_MODEL, FALLBACK_EMBEDDING_MODEL.model);
   }
 
-  const configuredCommand = config.bgeM3Command;
+  const configuredCommand = config.bgeM3Command
+    ? {
+        ...config.bgeM3Command,
+        timeoutMs: resolveCommandTimeoutMs(config.bgeM3Command.timeoutMs),
+      }
+    : undefined;
 
   return {
     getStatus() {
@@ -193,13 +198,12 @@ function generateCommandEmbedding(command: MemoryEmbeddingCommandConfig, memory:
   };
 }
 
-function resolveCommandTimeoutMs(configuredValue: string | undefined): number {
-  const configured = configuredValue?.trim();
-  if (!configured) {
+function resolveCommandTimeoutMs(configuredValue: string | number | undefined): number {
+  if (typeof configuredValue === "string" && configuredValue.trim().length === 0) {
     return DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS;
   }
 
-  const timeoutMs = Number(configured);
+  const timeoutMs = Number(configuredValue);
   return Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.floor(timeoutMs) : DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS;
 }
 
