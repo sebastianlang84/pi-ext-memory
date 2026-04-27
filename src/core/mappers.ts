@@ -1,5 +1,6 @@
 import { type MemoryEmbeddingRecord } from "./embeddings.ts";
 import { type MemoryRecord } from "./memories.ts";
+import { type SessionRecord } from "./store.ts";
 
 export interface MemoryRow {
   id: string;
@@ -84,7 +85,7 @@ export function mapMemoryEmbeddingRow(row: MemoryEmbeddingRow): MemoryEmbeddingR
   };
 }
 
-export function mapSessionRow(row: SessionRow) {
+export function mapSessionRow(row: SessionRow): SessionRecord {
   return {
     id: row.id,
     projectId: row.project_id ?? undefined,
