@@ -5,7 +5,7 @@ import { initializeMemoryStore, type InitializeMemoryStoreInput, type MemoryStor
 const embeddingStatus = createDefaultMemoryEmbeddingAdapter().getStatus();
 
 export interface MemoryCoreStatus {
-  version: "v0.8.2";
+  version: "v1.0.0";
   mode: "local-core";
   storage: "sqlite-session-summary-ready";
   latestSchemaVersion: number;
@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v0.8.2",
+        version: "v1.0.0",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
@@ -39,7 +39,7 @@ export function createMemoryCore(): MemoryCore {
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-session-save"],
         availableTools: ["memory_search", "memory_save", "memory_update", "memory_link", "memory_archive"],
-        nextStep: "Validate local BGE-M3 command quality/cost and close out the v1.0 release pass.",
+        nextStep: "V1 release is complete; monitor local embedding quality and latency in normal use.",
       };
     },
     initializeStore(input) {

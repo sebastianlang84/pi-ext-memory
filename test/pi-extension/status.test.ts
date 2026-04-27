@@ -5,7 +5,7 @@ import { getNextStatusWidgetLines } from "../../src/pi-extension/status.ts";
 import type { MemoryCoreStatus } from "../../src/core/index.ts";
 
 const status: MemoryCoreStatus = {
-  version: "v0.8.2",
+  version: "v1.0.0",
   mode: "local-core",
   storage: "sqlite-session-summary-ready",
   latestSchemaVersion: 4,
@@ -16,7 +16,7 @@ const status: MemoryCoreStatus = {
   embeddingDimensions: 384,
   availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-session-save"],
   availableTools: ["memory_search", "memory_save", "memory_update", "memory_link", "memory_archive"],
-  nextStep: "Validate local BGE-M3 command quality/cost and close out the v1.0 release pass.",
+  nextStep: "V1 release is complete; monitor local embedding quality and latency in normal use.",
 };
 
 test("getNextStatusWidgetLines shows the status widget when currently hidden", () => {

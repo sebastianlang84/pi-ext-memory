@@ -39,5 +39,5 @@ The low-footprint profile remains `builtin-hash-64-v1`.
 
 ## Follow-up
 
-- Run final real-machine retrieval-quality and latency validation before v1.0.
+- Monitor real-machine retrieval quality and latency in normal use after v1.0.
 - Keep the deterministic fallback shipped unless real-machine evidence justifies standardizing a different lighter semantic fallback.

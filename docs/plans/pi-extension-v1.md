@@ -355,17 +355,17 @@ That keeps V1 easy to run while preserving a later extraction path.
 - Pi package manifest/install path
 - upgrade and DB-migration documentation, including WAL-safe repo-local DB migration guidance
 
-## 13. Open Decisions Still Needing ADRs
+## 13. Post-v1 Decisions To Revisit If Evidence Changes
 
-- exact SQLite schema and migration format
-- final hybrid ranking formula
-- whether a localhost service remains unnecessary after V1 validation
+- whether a localhost service becomes necessary after real-world V1 usage
+- whether real-machine embedding measurements justify replacing the deterministic fallback
+- whether post-V1 assisted memory creation should expand beyond the manual-first policy
 
 ## 14. Working Recommendation
 
-Until an ADR says otherwise, work as if:
+For V1:
 
-- **Pi extension is the V1 product surface**,
+- **Pi extension is the product surface**,
 - **the core runs in-process**,
 - **retrieval happens automatically at turn start**,
 - **durable writes stay explicit or review-based**.

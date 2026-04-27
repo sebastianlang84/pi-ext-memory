@@ -84,7 +84,7 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 - v0.6 hybrid retrieval is implemented by merging lexical FTS and vector candidates, reranking them in application code, and suppressing near-duplicate matches.
 - v0.7 turn-start retrieval is implemented via a `before_agent_start` hook that derives session/project/repo context, injects a compact top-N memory block, and auto-enriches saved scoped memories with runtime context.
 - v0.8 adds `memory_update`, `memory_link`, `memory_archive`, `/memory-search`, archive-safe retrieval filtering, and tests covering updates, relations, and archive semantics.
-- v0.8.2 is closed: the default embedding path now targets a local `PI_MEMORY_BGE_M3_COMMAND` adapter first with deterministic fallback, the package exposes a Pi manifest at `src/pi-extension/index.ts`, and the docs now cover install/upgrade/smoke plus repo-local -> global DB migration. The lightweight fallback remains shipped until real-machine BGE-M3 latency/quality observations justify removing or changing it.
+- v1.0.0 is closed: pi-memory now ships the local-first Pi extension surface, SQLite-backed memory store, hybrid retrieval, turn-start context injection, manual review/session-summary commands, package manifest, and local BGE-M3 command adapter with deterministic fallback. The lightweight fallback remains shipped while real-machine BGE-M3 latency/quality observations accumulate.
 
 ## License
 See `LICENSE`.
