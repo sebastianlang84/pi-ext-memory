@@ -128,6 +128,7 @@ async function createTempPiToolContext() {
   const projectId = "tools-temp-project";
   const cwd = await mkdtemp(join(tmpdir(), "pi-memory-tools-"));
   await writeFile(join(cwd, "package.json"), JSON.stringify({ name: projectId }), "utf8");
+  await writeFile(join(cwd, ".git"), "gitdir: fixture\n", "utf8");
 
   return { cwd, projectId, sessionId: "session-123" };
 }
@@ -258,6 +259,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       tags: ["policy"],
       sourceAgent: "pi",
       projectId: projectContext.projectId,
+      repoPath: projectContext.cwd,
       sessionId: projectContext.sessionId,
     },
   ]);
@@ -270,6 +272,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.match(saveOutput.content[0].text, /Saved memory memory-saved\./);
   assert.match(saveOutput.content[0].text, /title: Keep writes manual-first/);
   assert.match(saveOutput.content[0].text, new RegExp(`project_id: ${projectContext.projectId}`));
+  assert.match(saveOutput.content[0].text, new RegExp(`repo_path: ${projectContext.cwd}`));
   assert.match(saveOutput.content[0].text, new RegExp(`session_id: ${projectContext.sessionId}`));
   assert.match(updateOutput.content[0].text, /Updated memory memory-updated\./);
   assert.match(updateOutput.content[0].text, /pinned: yes/);
