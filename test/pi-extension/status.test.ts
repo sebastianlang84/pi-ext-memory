@@ -5,7 +5,7 @@ import { getNextStatusWidgetLines } from "../../src/pi-extension/status.ts";
 import type { MemoryCoreStatus } from "../../src/core/index.ts";
 
 const status: MemoryCoreStatus = {
-  version: "v1.0.1",
+  version: "v1.1.0",
   mode: "local-core",
   storage: "sqlite-session-summary-ready",
   latestSchemaVersion: 4,

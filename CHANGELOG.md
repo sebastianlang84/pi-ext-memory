@@ -12,10 +12,16 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+### Added
+- Nothing yet.
+
+## [1.1.0] - 2026-04-28
+
 ### Changed
 - Hardened retrieval quality by avoiding unscoped staged-search fallback and reusing a single query embedding across staged searches.
 - Hardened `/memory-review` so a second invocation quickly clears the review widget.
 - Hardened embedding configuration/timeout handling, core/Pi-extension module boundaries, and Pi tool registration test coverage.
+- Updated package metadata and extension status/version strings for v1.1.0.
 
 ### Fixed
 - Blank session ids no longer add a session-scoped turn retrieval stage, preventing broad session-memory retrieval without a real `session_id`.
