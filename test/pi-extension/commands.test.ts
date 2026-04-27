@@ -252,3 +252,87 @@ test("/memory-session-save handler persists the current session and shows detail
     }
   }
 });
+
+test("commands cover save -> search -> review -> session summary end to end", async () => {
+  const { cwd, repoRoot } = createProjectContext();
+  const dbPath = join(createTempDir("pi-memory-e2e-db-"), "memory.sqlite");
+  const core = createMemoryCore();
+  const setupStore = core.initializeStore({ dbPath });
+
+  try {
+    const savedMemory = setupStore.createMemory({
+      kind: "decision",
+      scope: "session",
+      title: "Close v0.8.1 manually",
+      summary: "decisions facts preferences todos risks next steps: use explicit review and session summary commands to close the manual-first v0.8.1 flow.",
+      tags: ["release", "policy"],
+      sessionId: "session-e2e-123",
+      projectId: "@acme/api",
+      repoPath: repoRoot,
+      sourceAgent: "test",
+    });
+
+    const searchResults = setupStore.searchMemories({
+      query: "manual-first v0.8.1 flow",
+      scope: ["session"],
+      sessionId: "session-e2e-123",
+      limit: 5,
+    });
+
+    assert.equal(searchResults[0]?.id, savedMemory.id);
+  } finally {
+    setupStore.close();
+  }
+
+  const previousDbPath = process.env.PI_MEMORY_DB_PATH;
+  process.env.PI_MEMORY_DB_PATH = dbPath;
+
+  try {
+    const { pi, commands, eventHandlers } = createMockPi();
+    registerMemoryCommands(pi as never, core);
+
+    const { ctx, widgets, notifications } = createMockCommandContext(cwd, "session-e2e-123");
+    const memoryReview = commands.get("memory-review");
+    const memorySessionSave = commands.get("memory-session-save");
+
+    assert.ok(memoryReview, "expected memory-review command to be registered");
+    assert.ok(memorySessionSave, "expected memory-session-save command to be registered");
+
+    await memoryReview("", ctx);
+    const reviewWidget = widgets.get("pi-memory-review")?.join("\n") ?? "";
+    assert.match(reviewWidget, /Manual memory review \(read-only\)\./);
+    assert.match(reviewWidget, /Close v0\.8\.1 manually/);
+    assert.match(reviewWidget, /Use memory_update/);
+
+    await memorySessionSave("Closed v0.8.1 after save, search, review, and explicit session-summary verification.", ctx);
+    const sessionWidget = widgets.get("pi-memory-session-save")?.join("\n") ?? "";
+    assert.match(sessionWidget, /Saved session summary for session-e2e-123\./);
+    assert.match(sessionWidget, /Closed v0\.8\.1 after save, search, review/);
+
+    assert.deepEqual(notifications, [
+      { message: "pi-memory review updated", level: "info" },
+      { message: "pi-memory session summary saved", level: "info" },
+    ]);
+
+    const shutdownHandlers = eventHandlers.get("session_shutdown") ?? [];
+    for (const handler of shutdownHandlers) {
+      await handler({}, ctx);
+    }
+
+    const persistedStore = initializeMemoryStore({ dbPath });
+    try {
+      const session = persistedStore.getSession("session-e2e-123");
+      assert.equal(session?.summary, "Closed v0.8.1 after save, search, review, and explicit session-summary verification.");
+      assert.equal(session?.projectId, "@acme/api");
+      assert.equal(session?.repoPath, repoRoot);
+    } finally {
+      persistedStore.close();
+    }
+  } finally {
+    if (previousDbPath === undefined) {
+      delete process.env.PI_MEMORY_DB_PATH;
+    } else {
+      process.env.PI_MEMORY_DB_PATH = previousDbPath;
+    }
+  }
+});

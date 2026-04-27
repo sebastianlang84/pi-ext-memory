@@ -16,7 +16,7 @@ const status: MemoryCoreStatus = {
   embeddingDimensions: 384,
   availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-session-save"],
   availableTools: ["memory_search", "memory_save", "memory_update", "memory_link", "memory_archive"],
-  nextStep: "Validate /memory-review and /memory-session-save flow, then package the extension install path.",
+  nextStep: "Package the extension install path and document migration/upgrade guidance.",
 };
 
 test("getNextStatusWidgetLines shows the status widget when currently hidden", () => {

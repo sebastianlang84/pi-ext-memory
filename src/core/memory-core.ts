@@ -39,7 +39,7 @@ export function createMemoryCore(): MemoryCore {
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-session-save"],
         availableTools: ["memory_search", "memory_save", "memory_update", "memory_link", "memory_archive"],
-        nextStep: "Validate /memory-review and /memory-session-save flow, then package the extension install path.",
+        nextStep: "Package the extension install path and document migration/upgrade guidance.",
       };
     },
     initializeStore(input) {

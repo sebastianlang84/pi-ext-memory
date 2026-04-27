@@ -46,7 +46,7 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 5. Add ADRs, plans, or implementation docs under `docs/` as decisions harden.
 
 ## Current dev checks
-- Run `npm test` to verify fresh-DB initialization, validated memory creation, patch updates, memory linking, archive semantics, lexical retrieval, hybrid retrieval/ranking, session-scoped filtering, explicit session-summary persistence, embedding persistence, adapter injection, persisted readback, global DB path resolution, and compact retrieval-hook injection behavior.
+- Run `npm test` to verify fresh-DB initialization, validated memory creation, patch updates, memory linking, archive semantics, lexical retrieval, hybrid retrieval/ranking, session-scoped filtering, explicit session-summary persistence, save -> search -> review -> session-summary coverage, embedding persistence, adapter injection, persisted readback, global DB path resolution, and compact retrieval-hook injection behavior.
 - Run `npm run smoke:memory-status` to load the extension and invoke `/memory-status` in print mode.
 - Run `pi -e ./.pi/extensions/pi-memory/index.ts -p "/memory-search <query>"` to smoke-test the manual staged retrieval command.
 - Run `pi -e ./.pi/extensions/pi-memory/index.ts -p "/memory-review"` to inspect the read-only review helper in the current session context.
@@ -63,7 +63,7 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 - v0.6 hybrid retrieval is implemented by merging lexical FTS and vector candidates, reranking them in application code, and suppressing near-duplicate matches.
 - v0.7 turn-start retrieval is implemented via a `before_agent_start` hook that derives session/project/repo context, injects a compact top-N memory block, and auto-enriches saved scoped memories with runtime context.
 - v0.8 adds `memory_update`, `memory_link`, `memory_archive`, `/memory-search`, archive-safe retrieval filtering, and tests covering updates, relations, and archive semantics.
-- v0.8.1 now defaults the extension DB to `~/.pi/agent/pi-memory.sqlite` with `PI_MEMORY_DB_PATH` override, the turn hook always injects compact memory-use triggers, `/memory-review` stays read-only, and `/memory-session-save <summary>` persists to `sessions.summary` instead of creating a normal memory record.
+- v0.8.1 is closed: it defaults the extension DB to `~/.pi/agent/pi-memory.sqlite` with `PI_MEMORY_DB_PATH` override, injects compact memory-use triggers, finalizes the manual-first `/memory-review` flow, persists `/memory-session-save <summary>` to `sessions.summary`, and covers save -> search -> review -> session-summary end to end.
 
 ## License
 See `LICENSE`.

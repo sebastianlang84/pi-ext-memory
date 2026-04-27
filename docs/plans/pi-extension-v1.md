@@ -264,6 +264,10 @@ Default store: one global SQLite DB at `~/.pi/agent/pi-memory.sqlite`, overridab
 - explicit `/memory-session-save`
 - suggested candidates via `/memory-review`
 
+### Candidate review flow
+
+`/memory-review` is read-only in V1. It should show the current session/project/repo context, relevant existing memories, the current session summary if present, and suggested explicit follow-up actions. The operator or agent then chooses one of the explicit write tools (`memory_save`, `memory_update`, `memory_link`, `memory_archive`) or `/memory-session-save`; the review command itself must not persist durable memories.
+
 ### Not default in V1
 
 - silent automatic durable writes after every turn
@@ -349,8 +353,6 @@ That keeps V1 easy to run while preserving a later extraction path.
 
 - exact SQLite schema and migration format
 - final hybrid ranking formula
-- exact DB location and project partitioning strategy
-- whether session summaries are one memory or multiple linked memories
 - whether a localhost service remains unnecessary after V1 validation
 
 ## 14. Working Recommendation

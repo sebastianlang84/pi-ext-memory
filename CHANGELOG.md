@@ -50,11 +50,13 @@ This changelog follows the Keep a Changelog format.
 - A read-only `/memory-review` command that shows relevant existing memories plus explicit suggested actions for manual cleanup/save decisions.
 - A `/memory-session-save <summary>` command plus minimal core session-summary persistence using the existing `sessions.summary` column.
 - Core and extension tests covering explicit session-summary persistence plus review/session-save formatter behavior.
+- Command-level end-to-end coverage for the v0.8.1 save -> search -> review -> session-summary flow.
 
 ### Changed
 - Expanded the root `README.md` from a placeholder to a navigable project guide.
 - Updated `README.md` with the current extension/core structure, test entry points, and v0.6 implementation status.
-- Updated the Pi extension status/reporting strings to reflect v0.8.1 review/session-summary readiness and the next packaging-focused step.
+- Updated the Pi extension status/reporting strings to reflect v0.8.1 closure and the next packaging-focused step.
+- Finalized the V1 manual-first write policy and candidate review flow around explicit saves, read-only review, and explicit session summary persistence.
 - Updated `README.md` with the v0.8 status, verification paths, and manual retrieval command smoke check.
 - Changed the Pi extension store resolution from repo-local `.pi/pi-memory.sqlite` to a global store while keeping project/repo/session scopes as metadata filters.
 
