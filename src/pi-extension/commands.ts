@@ -88,6 +88,13 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
   pi.registerCommand("memory-review", {
     description: "Show relevant existing memories and explicit suggested next actions without saving anything",
     handler: async (_args, ctx) => {
+      if (ctx.hasUI && isReviewWidgetVisible) {
+        ctx.ui.setWidget("pi-memory-review", undefined);
+        isReviewWidgetVisible = false;
+        ctx.ui.notify("pi-memory review cleared", "info");
+        return;
+      }
+
       const activeStore = getStoreForCwd(core, store, ctx.cwd);
       store = activeStore;
 
@@ -100,13 +107,6 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
       const output = formatMemoryReview(results, searchPlan, turnContext, activeStore.dbPath, session?.summary);
 
       if (ctx.hasUI) {
-        if (isReviewWidgetVisible) {
-          ctx.ui.setWidget("pi-memory-review", undefined);
-          isReviewWidgetVisible = false;
-          ctx.ui.notify("pi-memory review cleared", "info");
-          return;
-        }
-
         ctx.ui.setWidget("pi-memory-review", output.split("\n"));
         isReviewWidgetVisible = true;
         ctx.ui.notify("pi-memory review shown", "info");

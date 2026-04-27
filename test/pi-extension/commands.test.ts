@@ -199,6 +199,7 @@ test("/memory-review handler toggles review details in the UI", async () => {
     assert.match(widget, /session_summary: Reviewed relevant memories before deciding what to persist\./);
     assert.match(widget, /Keep writes manual-first for next steps/);
 
+    process.env.PI_MEMORY_DB_PATH = createTempDir("pi-memory-command-unreachable-db-");
     await handler("", ctx);
 
     assert.equal(widgets.get("pi-memory-review"), undefined);
