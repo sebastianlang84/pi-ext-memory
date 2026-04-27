@@ -12,8 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
-### Added
-- Nothing yet.
+### Removed
+- Removed the repo-local `.pi/extensions/pi-memory/` dev shim so pi-memory loads only through the global/package install path.
+
+### Changed
+- `npm run smoke:memory-status` now smoke-tests the globally installed extension instead of the removed repo-local shim.
 
 ## [1.1.0] - 2026-04-28
 

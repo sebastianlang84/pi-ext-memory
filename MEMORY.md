@@ -15,7 +15,7 @@ scope: always-loaded bootstrap; keep lean
 - Root living docs and `docs/` baseline were aligned to the `~/agentic-coding` governance structure.
 - Product direction for V1 is documented in `docs/prd-lightweight-local-memory-system.md`.
 - A working Pi integration plan now exists in `docs/plans/pi-extension-v1.md`.
-- A v0.1 project-local Pi extension skeleton now exists under `.pi/extensions/pi-memory/`, backed by a thin local core under `src/core/` and Pi-facing modules under `src/pi-extension/`.
+- The historical project-local Pi extension shim under `.pi/extensions/pi-memory/` has been removed; pi-memory is intended to load once via the global Pi package install, backed by the thin local core under `src/core/` and Pi-facing modules under `src/pi-extension/`.
 - The local core now supports SQLite store initialization, schema migrations via `PRAGMA user_version`, schema v2 FTS5 lexical indexing, schema v3 persisted embeddings, and schema v4 FTS trigger fixes for reliable memory updates/archives.
 - v0.3 implemented validated memory creation: the core normalizes and persists memory records with immediate readback, and the Pi extension registers a `memory_save` tool.
 - v0.4 is now implemented for lexical retrieval: the core supports metadata-filtered FTS5 search with compact result shaping, and the Pi extension now registers a `memory_search` tool.
@@ -33,9 +33,9 @@ scope: always-loaded bootstrap; keep lean
 - v1.0.0 is closed as the first stable local-first Pi extension release after green automated tests and Pi smoke checks; no v0.8.3 debug release was needed.
 - v1.0.1 fixes `/memory-review` UI behavior so running the command a second time clears the review widget instead of leaving it stuck until session shutdown.
 - v1.1.0 closes the post-v1 quality hardening pass: staged retrieval now avoids unscoped fallback injection, reuses a single query embedding across stages, skips blank session IDs, clears `/memory-review` before DB/search work, separates core search and row-mapping helpers from the store, exposes injectable embedding command config with timeout tests, and splits Pi tool registration into a focused module with executor coverage.
-- `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`, with both dev-entry and package-path smoke scripts; the package smoke script disables project-local extension discovery to avoid loading the dev shim twice.
+- `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`; smoke scripts cover the global install path and package manifest path without relying on a project-local dev shim.
 - ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default.
-- Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus `npm run smoke:memory-status`, `npm run smoke:package-status`, and a manual `/memory-search` smoke run for the extension.
+- Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus global/package smoke checks with `npm run smoke:memory-status` and `npm run smoke:package-status`, and a manual `/memory-search` smoke run for the extension.
 - Current V1 direction from the PRD and plan: local-first, single-user, SQLite-based, hybrid retrieval, Pi-first extension surface, thin local core boundary, no heavy server infrastructure.
 
 ## 2) Long-Term Memory
@@ -63,6 +63,7 @@ scope: always-loaded bootstrap; keep lean
 - 2026-04-28 — Closed v1.0.0 after `npm test`, `npm run smoke:memory-status`, and `npm run smoke:package-status` passed; `PI_MEMORY_BGE_M3_COMMAND` was not configured, so validation covered the deterministic fallback path.
 - 2026-04-28 — Closed v1.0.1 by making `/memory-review` toggle/clear its UI widget and rerunning `npm test`, `npm run smoke:memory-status`, and `npm run smoke:package-status`.
 - 2026-04-28 — Closed v1.1.0 for the post-v1 quality hardening pass with worker/reviewer subagents; final verification passed with `npm test` (44/44), `npm run smoke:memory-status`, and `npm run smoke:package-status`.
+- 2026-04-28 — Removed the repo-local `.pi/extensions/pi-memory/` dev shim after installing pi-memory globally, and repointed `npm run smoke:memory-status` at the global extension path.
 
 ## 4) Open Decisions
 - Whether a post-V1 runtime should remain a pure local library or grow into a small localhost service if future evidence requires it.

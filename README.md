@@ -30,7 +30,6 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 - `TODO.md` - active backlog only.
 - `CHANGELOG.md` - user/operator-visible changes.
 - `package.json` - Pi package manifest plus local test/smoke scripts.
-- `.pi/extensions/pi-memory/index.ts` - project-local dev extension entry point.
 - `src/pi-extension/index.ts` - packaged Pi extension entry point referenced by the `pi` manifest.
 - `src/core/` - thin local core boundary, including SQLite store initialization, schema migrations, validated memory persistence, patch updates, memory links, archive semantics, hybrid lexical/vector retrieval with application-layer ranking and dedupe, and embedding generation/storage behind a narrow adapter.
 - `src/pi-extension/` - Pi-facing extension layer, including the `before_agent_start` retrieval hook, explicit memory tools, compact/manual retrieval helpers, read-only review/session-summary commands, memory trigger guidance, and global DB path resolution.
@@ -50,7 +49,7 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 - Install as a normal Pi package from this repo: `pi install /absolute/path/to/pi-memory` or `pi install .`.
 - Upgrade a prior install from the same source with `pi update /absolute/path/to/pi-memory` or by reinstalling the local path after pulling changes.
 - Smoke-test the packaged manifest path with `npm run smoke:package-status`.
-- Keep the existing project-local dev entry point smoke check via `npm run smoke:memory-status`.
+- Smoke-test the globally installed package with `npm run smoke:memory-status`.
 
 ## Embedding configuration
 - Default profile now targets a local BGE-M3 command adapter first via `PI_MEMORY_BGE_M3_COMMAND`.
@@ -68,7 +67,7 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 ## Current dev checks
 - Run `npm test` to verify fresh-DB initialization, validated memory creation, patch updates, memory linking, archive semantics, lexical retrieval, hybrid retrieval/ranking, session-scoped filtering, explicit session-summary persistence, save -> search -> review -> session-summary coverage, embedding persistence, command-adapter fallback/storage, adapter injection, persisted readback, global DB path resolution, and compact retrieval-hook injection behavior.
 - Run `npm run smoke:package-status` to load the package via its Pi manifest and invoke `/memory-status` in print mode.
-- Run `npm run smoke:memory-status` to load the project-local dev extension entry point and invoke `/memory-status` in print mode.
+- Run `npm run smoke:memory-status` to load the globally installed extension and invoke `/memory-status` in print mode.
 - Run `pi -e . -p "/memory-search <query>"` to smoke-test the packaged manual staged retrieval command.
 - Run `pi -e . -p "/memory-review"` to inspect the read-only review helper in the current session context.
 - Run `pi -e . -p "/memory-session-save <summary>"` to persist an explicit compact summary into the current session row.
