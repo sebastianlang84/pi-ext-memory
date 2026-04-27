@@ -83,6 +83,10 @@ export interface SaveSessionSummaryInput {
   startedAt?: string;
 }
 
+export interface SearchMemoriesOptions {
+  queryEmbedding?: GeneratedMemoryEmbedding;
+}
+
 export interface MemoryStore extends MemoryStoreStatus {
   createMemory(input: CreateMemoryInput): MemoryRecord;
   updateMemory(input: UpdateMemoryInput): MemoryRecord;
@@ -93,7 +97,8 @@ export interface MemoryStore extends MemoryStoreStatus {
   saveSessionSummary(input: SaveSessionSummaryInput): SessionRecord;
   linkMemories(input: LinkMemoriesInput): MemoryLinkRecord;
   listMemoryLinks(memoryId: string): MemoryLinkRecord[];
-  searchMemories(input: SearchMemoriesInput): MemorySearchResult[];
+  createSearchQueryEmbedding(query: string): GeneratedMemoryEmbedding;
+  searchMemories(input: SearchMemoriesInput, options?: SearchMemoriesOptions): MemorySearchResult[];
   close(): void;
 }
 
@@ -499,13 +504,19 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
 
         return readMemoryLinksForMemory(db, normalizedId);
       },
-      searchMemories(input) {
+      createSearchQueryEmbedding(query) {
+        assertStoreOpen(isClosed);
+
+        const normalizedInput = normalizeSearchMemoriesInput({ query });
+        return embeddingAdapter.generateEmbedding(createQueryEmbeddingContent(normalizedInput.query));
+      },
+      searchMemories(input, options) {
         assertStoreOpen(isClosed);
 
         const normalizedInput = normalizeSearchMemoriesInput(input);
         const candidateLimit = Math.max(normalizedInput.limit * SEARCH_CANDIDATE_MULTIPLIER, SEARCH_MIN_CANDIDATES);
         const lexicalRows = searchLexicalMemoryRows(db, normalizedInput, candidateLimit);
-        const queryEmbedding = embeddingAdapter.generateEmbedding(createQueryEmbeddingContent(normalizedInput.query));
+        const queryEmbedding = options?.queryEmbedding ?? embeddingAdapter.generateEmbedding(createQueryEmbeddingContent(normalizedInput.query));
         const semanticRows = searchSemanticMemoryRows(db, normalizedInput, queryEmbedding, candidateLimit);
 
         return rankHybridSearchResults(normalizedInput, lexicalRows, semanticRows).slice(0, normalizedInput.limit);

@@ -10,8 +10,10 @@ import {
   buildTurnSearchPlan,
   decorateCreateMemoryInput,
   deriveMemoryTurnContext,
+  retrieveMemoriesForTurn,
 } from "../../src/pi-extension/retrieval.ts";
-import type { MemorySearchResult } from "../../src/core/index.ts";
+import { initializeMemoryStore } from "../../src/core/index.ts";
+import type { GeneratedMemoryEmbedding, MemorySearchResult, SearchMemoriesInput, SearchMemoriesOptions } from "../../src/core/index.ts";
 
 function createTempDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -109,7 +111,7 @@ test("decorateCreateMemoryInput enriches scoped memories with runtime context", 
   assert.equal(sessionMemory.sessionId, "session-456");
 });
 
-test("buildTurnSearchPlan separates session, project, repo, global, and legacy fallback stages", () => {
+test("buildTurnSearchPlan separates session, project, repo, and global stages without unscoped fallback", () => {
   const plan = buildTurnSearchPlan("cache rollout", {
     cwd: "/repo/packages/api",
     sessionId: "session-789",
@@ -125,9 +127,81 @@ test("buildTurnSearchPlan separates session, project, repo, global, and legacy f
       { scope: ["project"], sessionId: undefined, projectId: "@acme/api", repoPath: undefined },
       { scope: ["repo"], sessionId: undefined, projectId: undefined, repoPath: "/repo" },
       { scope: ["global"], sessionId: undefined, projectId: undefined, repoPath: undefined },
-      { scope: undefined, sessionId: undefined, projectId: undefined, repoPath: undefined },
     ],
   );
+});
+
+test("retrieveMemoriesForTurn reuses one query embedding across staged searches", () => {
+  const embedding: GeneratedMemoryEmbedding = {
+    model: "mock-query-embedding",
+    dimensions: 1,
+    vector: [1],
+    contentHash: "mock-query-hash",
+  };
+  const receivedOptions: Array<SearchMemoriesOptions | undefined> = [];
+  let embeddingCalls = 0;
+
+  const result = retrieveMemoriesForTurn(
+    {
+      createSearchQueryEmbedding(query) {
+        embeddingCalls += 1;
+        assert.equal(query, "cache rollout");
+        return embedding;
+      },
+      searchMemories(_input: SearchMemoriesInput, options?: SearchMemoriesOptions) {
+        receivedOptions.push(options);
+        return [];
+      },
+    },
+    "cache rollout",
+    {
+      cwd: "/repo/packages/api",
+      sessionId: "session-789",
+      projectId: "@acme/api",
+      projectPath: "/repo/packages/api",
+      repoPath: "/repo",
+    },
+  );
+
+  assert.equal(embeddingCalls, 1);
+  assert.equal(result.searchPlan.length, 4);
+  assert.equal(receivedOptions.length, 4);
+  assert.ok(receivedOptions.every((options) => options?.queryEmbedding === embedding));
+});
+
+test("retrieveMemoriesForTurn does not inject wrong-context memories through unscoped fallback", () => {
+  const dbPath = join(createTempDir("pi-memory-retrieval-fallback-"), "memory.sqlite");
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    store.createMemory({
+      kind: "fact",
+      scope: "project",
+      projectId: "@other/project",
+      title: "Wrong project memory",
+      summary: "Wrongcontextneedle belongs to a different project and must not be injected by fallback.",
+    });
+    store.createMemory({
+      kind: "fact",
+      scope: "repo",
+      repoPath: "/other/repo",
+      title: "Wrong repo memory",
+      summary: "Wrongcontextneedle belongs to a different repo and must not be injected by fallback.",
+    });
+
+    const result = retrieveMemoriesForTurn(store, "wrongcontextneedle", {
+      cwd: "/repo/packages/api",
+      sessionId: "session-789",
+      projectId: "@acme/api",
+      projectPath: "/repo/packages/api",
+      repoPath: "/repo",
+    });
+
+    assert.deepEqual(result.results, []);
+    assert.ok(result.searchPlan.every((stage) => stage.scope !== undefined));
+  } finally {
+    store.close();
+  }
 });
 
 test("buildTurnMemoryMessage injects memory triggers even when no results match", () => {

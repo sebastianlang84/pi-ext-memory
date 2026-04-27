@@ -1,7 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
-import type { CreateMemoryInput, MemorySearchResult, MemoryStore, SearchMemoriesInput } from "../core/index.ts";
+import type {
+  CreateMemoryInput,
+  GeneratedMemoryEmbedding,
+  MemorySearchResult,
+  MemoryStore,
+  SearchMemoriesInput,
+  SearchMemoriesOptions,
+} from "../core/index.ts";
 
 const PROJECT_MARKER_FILES = [
   "package.json",
@@ -122,16 +129,15 @@ export function buildTurnSearchPlan(
     scope: ["global"],
   });
 
-  stages.push({
-    query: normalizedQuery,
-    limit: stageLimit,
-  });
-
   return dedupeSearchPlan(stages);
 }
 
+type StagedMemorySearchStore = Pick<MemoryStore, "searchMemories"> & {
+  createSearchQueryEmbedding?: (query: string) => GeneratedMemoryEmbedding;
+};
+
 export function retrieveMemoriesForTurn(
-  store: Pick<MemoryStore, "searchMemories">,
+  store: StagedMemorySearchStore,
   query: string,
   context: MemoryTurnContext,
   options: RetrieveTurnMemoriesOptions = {},
@@ -143,9 +149,11 @@ export function retrieveMemoriesForTurn(
   }
 
   const dedupedResults = new Map<string, MemorySearchResult>();
+  const queryEmbedding = store.createSearchQueryEmbedding?.(searchPlan[0]?.query ?? query);
+  const searchOptions: SearchMemoriesOptions | undefined = queryEmbedding ? { queryEmbedding } : undefined;
 
   for (const stage of searchPlan) {
-    const stageResults = store.searchMemories(stage);
+    const stageResults = store.searchMemories(stage, searchOptions);
 
     for (const result of stageResults) {
       if (!dedupedResults.has(result.id)) {

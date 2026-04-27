@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { initializeMemoryStore } from "../../src/core/index.ts";
+import type { MemoryContentForEmbedding, MemoryEmbeddingAdapter } from "../../src/core/index.ts";
 
 function createTempDbPath(): string {
   const tempRoot = mkdtempSync(join(tmpdir(), "pi-memory-search-"));
@@ -118,6 +119,53 @@ test("searchMemories filters session-scoped results by sessionId", () => {
 
     assert.equal(results.length, 1);
     assert.equal(results[0]?.title, "Session A note");
+  } finally {
+    store.close();
+  }
+});
+
+test("searchMemories can reuse a precomputed query embedding", () => {
+  const dbPath = createTempDbPath();
+  let generatedInputs: MemoryContentForEmbedding[] = [];
+  const adapter: MemoryEmbeddingAdapter = {
+    getStatus() {
+      return {
+        strategy: "mock-counting",
+        defaultModel: "mock-1d",
+        fallbackModel: "mock-1d",
+        activeModel: "mock-1d",
+        dimensions: 1,
+      };
+    },
+    generateEmbedding(memory) {
+      generatedInputs.push(memory);
+      return {
+        model: "mock-1d",
+        dimensions: 1,
+        vector: [memory.title.includes("Reusable query") ? 1 : 0.8],
+        contentHash: `mock-${generatedInputs.length}`,
+      };
+    },
+  };
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: adapter });
+
+  try {
+    store.createMemory({
+      kind: "fact",
+      scope: "global",
+      title: "Reusable query embedding",
+      summary: "Reusable query should be found without regenerating the query vector for each staged search.",
+      tags: ["reuse"],
+    });
+
+    generatedInputs = [];
+    const queryEmbedding = store.createSearchQueryEmbedding("Reusable query");
+    assert.equal(generatedInputs.length, 1);
+
+    store.searchMemories({ query: "Reusable query", scope: ["global"] }, { queryEmbedding });
+    store.searchMemories({ query: "Reusable query", scope: ["project"], projectId: "other" }, { queryEmbedding });
+
+    assert.equal(generatedInputs.length, 1);
   } finally {
     store.close();
   }

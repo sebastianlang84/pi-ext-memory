@@ -42,5 +42,6 @@ export type {
   MemoryStore,
   MemoryStoreStatus,
   SaveSessionSummaryInput,
+  SearchMemoriesOptions,
   SessionRecord,
 } from "./store.ts";
