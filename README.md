@@ -29,8 +29,9 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 - `MEMORY.md` - stable current truth for the next session.
 - `TODO.md` - active backlog only.
 - `CHANGELOG.md` - user/operator-visible changes.
-- `package.json` - repo scripts, including the current extension smoke run.
-- `.pi/extensions/pi-memory/index.ts` - project-local Pi extension entry point.
+- `package.json` - Pi package manifest plus local test/smoke scripts.
+- `.pi/extensions/pi-memory/index.ts` - project-local dev extension entry point.
+- `src/pi-extension/index.ts` - packaged Pi extension entry point referenced by the `pi` manifest.
 - `src/core/` - thin local core boundary, including SQLite store initialization, schema migrations, validated memory persistence, patch updates, memory links, archive semantics, hybrid lexical/vector retrieval with application-layer ranking and dedupe, and embedding generation/storage behind a narrow adapter.
 - `src/pi-extension/` - Pi-facing extension layer, including the `before_agent_start` retrieval hook, explicit memory tools, compact/manual retrieval helpers, read-only review/session-summary commands, memory trigger guidance, and global DB path resolution.
 - `test/core/` - core integration tests.
@@ -45,12 +46,32 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 4. Read `docs/plans/pi-extension-v1.md` for the current proposed Pi integration surface.
 5. Add ADRs, plans, or implementation docs under `docs/` as decisions harden.
 
+## Install / upgrade / smoke
+- Install as a normal Pi package from this repo: `pi install /absolute/path/to/pi-memory` or `pi install .`.
+- Upgrade a prior install from the same source with `pi update /absolute/path/to/pi-memory` or by reinstalling the local path after pulling changes.
+- Smoke-test the packaged manifest path with `npm run smoke:package-status`.
+- Keep the existing project-local dev entry point smoke check via `npm run smoke:memory-status`.
+
+## Embedding configuration
+- Default profile now targets a local BGE-M3 command adapter first via `PI_MEMORY_BGE_M3_COMMAND`.
+- The command receives JSON on stdin as `{"input": {"title", "summary", "body", "tags"}}` and must print JSON containing one 1024-dimension embedding vector.
+- Accepted stdout shapes: a raw vector array, `{"embedding": [...]}`, `{"embeddings": [...]}`, or OpenAI-style `{"data":[{"embedding":[...]}]}`.
+- The command has a default synchronous timeout of 15s; override with `PI_MEMORY_BGE_M3_TIMEOUT_MS` if local hardware needs a different bound.
+- If `PI_MEMORY_BGE_M3_COMMAND` is unset, the default path falls back to the built-in deterministic `builtin-hash-384-v1`; the low-footprint profile remains `builtin-hash-64-v1`.
+
+## Migration from old repo-local DBs
+- Older dev setups may still have `.pi/pi-memory.sqlite` inside a repo.
+- The extension now defaults to the global store at `~/.pi/agent/pi-memory.sqlite`.
+- To keep old data, stop Pi first, then copy the DB with a safe SQLite backup/copy flow; if copying files directly, include `.pi/pi-memory.sqlite`, `.pi/pi-memory.sqlite-wal`, and `.pi/pi-memory.sqlite-shm` when present.
+- Place the resulting DB at `~/.pi/agent/pi-memory.sqlite` before first packaged use, or point Pi at the old file explicitly with `PI_MEMORY_DB_PATH=/path/to/.pi/pi-memory.sqlite` during migration.
+
 ## Current dev checks
-- Run `npm test` to verify fresh-DB initialization, validated memory creation, patch updates, memory linking, archive semantics, lexical retrieval, hybrid retrieval/ranking, session-scoped filtering, explicit session-summary persistence, save -> search -> review -> session-summary coverage, embedding persistence, adapter injection, persisted readback, global DB path resolution, and compact retrieval-hook injection behavior.
-- Run `npm run smoke:memory-status` to load the extension and invoke `/memory-status` in print mode.
-- Run `pi -e ./.pi/extensions/pi-memory/index.ts -p "/memory-search <query>"` to smoke-test the manual staged retrieval command.
-- Run `pi -e ./.pi/extensions/pi-memory/index.ts -p "/memory-review"` to inspect the read-only review helper in the current session context.
-- Run `pi -e ./.pi/extensions/pi-memory/index.ts -p "/memory-session-save <summary>"` to persist an explicit compact summary into the current session row.
+- Run `npm test` to verify fresh-DB initialization, validated memory creation, patch updates, memory linking, archive semantics, lexical retrieval, hybrid retrieval/ranking, session-scoped filtering, explicit session-summary persistence, save -> search -> review -> session-summary coverage, embedding persistence, command-adapter fallback/storage, adapter injection, persisted readback, global DB path resolution, and compact retrieval-hook injection behavior.
+- Run `npm run smoke:package-status` to load the package via its Pi manifest and invoke `/memory-status` in print mode.
+- Run `npm run smoke:memory-status` to load the project-local dev extension entry point and invoke `/memory-status` in print mode.
+- Run `pi -e . -p "/memory-search <query>"` to smoke-test the packaged manual staged retrieval command.
+- Run `pi -e . -p "/memory-review"` to inspect the read-only review helper in the current session context.
+- Run `pi -e . -p "/memory-session-save <summary>"` to persist an explicit compact summary into the current session row.
 
 ## Status
 - Repo bootstrap complete.
@@ -63,7 +84,7 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 - v0.6 hybrid retrieval is implemented by merging lexical FTS and vector candidates, reranking them in application code, and suppressing near-duplicate matches.
 - v0.7 turn-start retrieval is implemented via a `before_agent_start` hook that derives session/project/repo context, injects a compact top-N memory block, and auto-enriches saved scoped memories with runtime context.
 - v0.8 adds `memory_update`, `memory_link`, `memory_archive`, `/memory-search`, archive-safe retrieval filtering, and tests covering updates, relations, and archive semantics.
-- v0.8.1 is closed: it defaults the extension DB to `~/.pi/agent/pi-memory.sqlite` with `PI_MEMORY_DB_PATH` override, injects compact memory-use triggers, finalizes the manual-first `/memory-review` flow, persists `/memory-session-save <summary>` to `sessions.summary`, and covers save -> search -> review -> session-summary end to end.
+- v0.8.2 is closed: the default embedding path now targets a local `PI_MEMORY_BGE_M3_COMMAND` adapter first with deterministic fallback, the package exposes a Pi manifest at `src/pi-extension/index.ts`, and the docs now cover install/upgrade/smoke plus repo-local -> global DB migration. The lightweight fallback remains shipped until real-machine BGE-M3 latency/quality observations justify removing or changing it.
 
 ## License
 See `LICENSE`.

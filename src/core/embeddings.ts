@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 import type { MemoryRecord } from "./memories.ts";
 
@@ -41,6 +42,10 @@ export interface MemoryContentForEmbedding {
   tags: string[];
 }
 
+const BGE_M3_COMMAND_ENV = "PI_MEMORY_BGE_M3_COMMAND";
+const BGE_M3_COMMAND_TIMEOUT_ENV = "PI_MEMORY_BGE_M3_TIMEOUT_MS";
+const DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS = 15_000;
+
 export const DEFAULT_EMBEDDING_MODEL = {
   model: "builtin-hash-384-v1",
   dimensions: 384,
@@ -51,31 +56,36 @@ export const FALLBACK_EMBEDDING_MODEL = {
   dimensions: 64,
 } as const;
 
+const BGE_M3_COMMAND_MODEL = {
+  model: "local-bge-m3-command",
+  dimensions: 1024,
+} as const;
+
 export function createDefaultMemoryEmbeddingAdapter(
   profile: BuiltinEmbeddingProfile = "default",
 ): MemoryEmbeddingAdapter {
-  const activeModel = profile === "low-footprint" ? FALLBACK_EMBEDDING_MODEL : DEFAULT_EMBEDDING_MODEL;
+  if (profile === "low-footprint") {
+    return createDeterministicEmbeddingAdapter(FALLBACK_EMBEDDING_MODEL, FALLBACK_EMBEDDING_MODEL.model);
+  }
+
+  const configuredCommand = process.env[BGE_M3_COMMAND_ENV]?.trim();
 
   return {
     getStatus() {
       return {
-        strategy: "deterministic-hash",
-        defaultModel: DEFAULT_EMBEDDING_MODEL.model,
-        fallbackModel: FALLBACK_EMBEDDING_MODEL.model,
-        activeModel: activeModel.model,
-        dimensions: activeModel.dimensions,
+        strategy: configuredCommand ? "local-command" : "deterministic-hash",
+        defaultModel: BGE_M3_COMMAND_MODEL.model,
+        fallbackModel: DEFAULT_EMBEDDING_MODEL.model,
+        activeModel: configuredCommand ? BGE_M3_COMMAND_MODEL.model : DEFAULT_EMBEDDING_MODEL.model,
+        dimensions: configuredCommand ? BGE_M3_COMMAND_MODEL.dimensions : DEFAULT_EMBEDDING_MODEL.dimensions,
       };
     },
     generateEmbedding(memory) {
-      const content = serializeMemoryContent(memory);
-      const vector = createDeterministicVector(content, activeModel.dimensions);
+      if (configuredCommand) {
+        return generateCommandEmbedding(configuredCommand, memory);
+      }
 
-      return {
-        model: activeModel.model,
-        dimensions: activeModel.dimensions,
-        vector,
-        contentHash: createSha256(content),
-      };
+      return generateDeterministicEmbedding(memory, DEFAULT_EMBEDDING_MODEL);
     },
   };
 }
@@ -89,11 +99,138 @@ export function createMemoryContentForEmbedding(memory: Pick<MemoryRecord, "titl
   };
 }
 
+function createDeterministicEmbeddingAdapter(
+  model: typeof DEFAULT_EMBEDDING_MODEL | typeof FALLBACK_EMBEDDING_MODEL,
+  fallbackModel: string,
+): MemoryEmbeddingAdapter {
+  return {
+    getStatus() {
+      return {
+        strategy: "deterministic-hash",
+        defaultModel: model.model,
+        fallbackModel,
+        activeModel: model.model,
+        dimensions: model.dimensions,
+      };
+    },
+    generateEmbedding(memory) {
+      return generateDeterministicEmbedding(memory, model);
+    },
+  };
+}
+
+function generateDeterministicEmbedding(
+  memory: MemoryContentForEmbedding,
+  model: typeof DEFAULT_EMBEDDING_MODEL | typeof FALLBACK_EMBEDDING_MODEL,
+): GeneratedMemoryEmbedding {
+  const content = serializeMemoryContent(memory);
+  const contentHash = createSha256(serializeEmbeddingInput(memory));
+
+  return {
+    model: model.model,
+    dimensions: model.dimensions,
+    vector: createDeterministicVector(content, model.dimensions),
+    contentHash,
+  };
+}
+
+function generateCommandEmbedding(command: string, memory: MemoryContentForEmbedding): GeneratedMemoryEmbedding {
+  const input = serializeEmbeddingInput(memory);
+  const result = spawnSync(command, {
+    shell: true,
+    input,
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+    timeout: getCommandTimeoutMs(),
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (result.status !== 0) {
+    throw new Error(`Embedding command failed with exit code ${result.status}: ${result.stderr.trim()}`.trim());
+  }
+
+  const vector = extractEmbeddingVector(parseEmbeddingOutput(result.stdout));
+
+  if (vector.length !== BGE_M3_COMMAND_MODEL.dimensions) {
+    throw new Error(
+      `BGE-M3 embedding command returned ${vector.length} dimensions; expected ${BGE_M3_COMMAND_MODEL.dimensions}.`,
+    );
+  }
+
+  return {
+    model: BGE_M3_COMMAND_MODEL.model,
+    dimensions: vector.length,
+    vector,
+    contentHash: createSha256(input),
+  };
+}
+
+function getCommandTimeoutMs(): number {
+  const configured = process.env[BGE_M3_COMMAND_TIMEOUT_ENV]?.trim();
+  if (!configured) {
+    return DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS;
+  }
+
+  const timeoutMs = Number(configured);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.floor(timeoutMs) : DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS;
+}
+
+function serializeEmbeddingInput(memory: MemoryContentForEmbedding): string {
+  return JSON.stringify({ input: memory });
+}
+
 function serializeMemoryContent(memory: MemoryContentForEmbedding): string {
   return [memory.title, memory.summary, memory.body ?? "", memory.tags.join(" ")]
     .map((value) => value.trim())
     .filter((value) => value.length > 0)
     .join("\n");
+}
+
+function parseEmbeddingOutput(stdout: string): unknown {
+  const trimmed = stdout.trim();
+
+  if (trimmed.length === 0) {
+    throw new Error("Embedding command returned empty stdout.");
+  }
+
+  return JSON.parse(trimmed) as unknown;
+}
+
+function extractEmbeddingVector(value: unknown): number[] {
+  if (Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry))) {
+    if (value.length === 0) {
+      throw new Error("Embedding command returned an empty vector.");
+    }
+
+    return value;
+  }
+
+  if (isRecord(value)) {
+    if ("embedding" in value) {
+      return extractEmbeddingVector(value.embedding);
+    }
+
+    if ("embeddings" in value) {
+      return extractEmbeddingVector(value.embeddings);
+    }
+
+    if (Array.isArray(value.data) && value.data.length > 0) {
+      return extractEmbeddingVector(value.data[0]);
+    }
+  }
+
+  if (Array.isArray(value) && value.length === 1) {
+    return extractEmbeddingVector(value[0]);
+  }
+
+  throw new Error("Embedding command returned an unsupported JSON shape.");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function createDeterministicVector(content: string, dimensions: number): number[] {

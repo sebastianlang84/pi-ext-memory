@@ -153,7 +153,7 @@ Begründung:
 
 ### 6.4 Embedding-Modell
 
-**Arbeits-Default: BGE-M3**
+**Arbeits-Default: lokaler BGE-M3-Command-Adapter**
 
 Begründung:
 
@@ -162,10 +162,17 @@ Begründung:
 - gut für gemischte Memory-Inhalte
 - besserer Fit für zweisprachiges Retrieval als ein rein englisch optimierter Standard-Default
 
+Konfiguration in der aktuellen Richtung:
+
+- Pi-memory nutzt bevorzugt einen lokalen Command-Adapter über `PI_MEMORY_BGE_M3_COMMAND`
+- Der Command muss einen validen 1024-dimensionalen BGE-M3-Vektor liefern und läuft mit begrenztem Timeout (`PI_MEMORY_BGE_M3_TIMEOUT_MS`, default 15s)
+- Falls kein Command konfiguriert ist, fällt der Default-Pfad deterministisch auf `builtin-hash-384-v1` zurück
+- Ein Low-Footprint-Profil bleibt mit `builtin-hash-64-v1` verfügbar
+
 Offene Validierung:
 
-- prüfen, ob BGE-M3 lokal auf Zielmaschinen schnell genug ist
-- prüfen, ob ein leichteres Fallback-Modell nötig ist
+- vor v1.0 auf Zielmaschinen prüfen, ob der BGE-M3-Command schnell genug ist
+- deterministischen Fallback beibehalten, bis reale Messungen ein anderes leichtes semantisches Fallback-Modell rechtfertigen
 
 ### 6.5 Architekturform
 
@@ -322,6 +329,7 @@ Pi kann:
 - neue Erinnerungen schreiben
 - Session-Summaries persistieren
 - wichtige Entscheidungen/Facts markieren
+- als normales Pi-Paket installiert und per Package-Manifest geladen werden
 
 ### Noch offen
 

@@ -29,8 +29,10 @@ scope: always-loaded bootstrap; keep lean
 - v0.8.1 now adds compact turn-start memory triggers even when no memories match: search before guessing about prior/project/workflow context, and save/update durable corrections, decisions, facts, preferences, and todos.
 - v0.8.1 also adds `/memory-review` as a read-only/manual review helper plus `/memory-session-save <summary>` for explicit session recap persistence into the existing `sessions.summary` column, with the manual-first write policy and candidate review flow finalized.
 - The Pi extension now defaults to a global store at `~/.pi/agent/pi-memory.sqlite` with `PI_MEMORY_DB_PATH` override; project/repo/session scopes remain metadata filters instead of separate repo-local databases.
+- v0.8.2 now targets a real local BGE-M3 command adapter first via `PI_MEMORY_BGE_M3_COMMAND`, synchronously piping JSON on stdin, accepting common embedding JSON stdout shapes, enforcing finite 1024d vectors plus a bounded timeout, and falling back to the built-in deterministic 384d profile when no command is configured; the low-footprint profile remains deterministic 64d.
+- `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`, with both dev-entry and package-path smoke scripts; the package smoke script disables project-local extension discovery to avoid loading the dev shim twice.
 - ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default.
-- Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level review/session-summary checks, and save -> search -> review -> session-summary end-to-end coverage, plus `npm run smoke:memory-status` and a manual `/memory-search` smoke run for the extension.
+- Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus `npm run smoke:memory-status`, `npm run smoke:package-status`, and a manual `/memory-search` smoke run for the extension.
 - Current V1 direction from the PRD and plan: local-first, single-user, SQLite-based, hybrid retrieval, Pi-first extension surface, thin local core boundary, no heavy server infrastructure.
 
 ## 2) Long-Term Memory
@@ -54,16 +56,16 @@ scope: always-loaded bootstrap; keep lean
 - 2026-04-27 — Added explicit turn-start memory triggers and switched the extension default DB to the global Pi-agent memory store.
 - 2026-04-27 — Implemented `/memory-review`, `/memory-session-save`, and explicit session summary persistence via `sessions.summary`.
 - 2026-04-27 — Closed v0.8.1 by finalizing the manual-first review flow, adding save -> search -> review -> session-summary end-to-end coverage, and setting package metadata to `0.8.1`.
+- 2026-04-27 — Closed v0.8.2 by adding the local `PI_MEMORY_BGE_M3_COMMAND` adapter, shipping a Pi package manifest, and documenting install/upgrade/smoke plus repo-local -> global DB migration.
 
 ## 4) Open Decisions
 - Whether V1 should ship as a pure local library or as a small localhost service.
 - How much memory creation should be manual vs assisted in V1.
 
 ## 5) Next Steps
-1. Replace the deterministic built-in default embedding path with a real local semantic embedding adapter, targeting BGE-M3 first.
-2. Package the project as a normal Pi extension and document the install/upgrade/smoke-test path.
-3. Document migration guidance for existing repo-local dev DBs into the global store when packaging/install work lands.
-4. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
+1. Run final real-machine BGE-M3 command-adapter retrieval/latency validation; keep the shipped deterministic fallback unless evidence supports a different lighter semantic fallback.
+2. Close the v1.0 final review/fix/release pass.
+3. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
 
 ## 6) Known Risks / Blockers
 - `sqlite-vec` maturity risk.

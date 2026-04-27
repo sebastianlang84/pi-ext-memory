@@ -1,10 +1,20 @@
 {
   "name": "pi-memory",
-  "private": true,
-  "version": "0.8.1",
+  "version": "0.8.2",
+  "description": "A lightweight local memory system for Pi coding agent.",
+  "keywords": ["pi-package"],
   "type": "module",
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": ["./src/pi-extension/index.ts"]
+  },
   "scripts": {
     "test": "node --experimental-strip-types --test",
-    "smoke:memory-status": "pi -e ./.pi/extensions/pi-memory/index.ts -p \"/memory-status\""
+    "smoke:memory-status": "pi -e ./.pi/extensions/pi-memory/index.ts -p \"/memory-status\"",
+    "smoke:package-status": "pi --no-extensions -e . -p \"/memory-status\""
   }
 }

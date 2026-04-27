@@ -255,7 +255,7 @@ Hard rule:
 
 V1 should be **manual-first, assisted-second, never silent by default**.
 
-Default store: one global SQLite DB at `~/.pi/agent/pi-memory.sqlite`, overridable with `PI_MEMORY_DB_PATH`. Project, repo, and session scopes are metadata filters, not separate DBs.
+Default store: one global SQLite DB at `~/.pi/agent/pi-memory.sqlite`, overridable with `PI_MEMORY_DB_PATH`. Project, repo, and session scopes are metadata filters, not separate DBs. Existing repo-local `.pi/pi-memory.sqlite` dev databases should be migrated or temporarily pinned with `PI_MEMORY_DB_PATH` during upgrade.
 
 ### Allowed in V1
 
@@ -312,6 +312,7 @@ The summary should be compact enough to retrieve later without reloading raw cha
 Recommended packaging for V1:
 
 - build as a normal TypeScript Pi extension package,
+- expose the packaged extension through the `pi.extensions` manifest in `package.json`,
 - keep the extension entry point thin,
 - place the local core in internal modules inside the same repo/package at first.
 
@@ -348,6 +349,11 @@ That keeps V1 easy to run while preserving a later extraction path.
 - `/memory-session-save`
 - session summary persistence
 - archive/TTL behavior
+
+### Slice 4
+- local BGE-M3 command adapter via `PI_MEMORY_BGE_M3_COMMAND`, with bounded timeout and 1024-dimension output validation
+- Pi package manifest/install path
+- upgrade and DB-migration documentation, including WAL-safe repo-local DB migration guidance
 
 ## 13. Open Decisions Still Needing ADRs
 

@@ -13,6 +13,10 @@ This changelog follows the Keep a Changelog format.
 ## [Unreleased]
 
 ### Added
+- A v0.8.2 local BGE-M3 command embedding adapter behind `PI_MEMORY_BGE_M3_COMMAND`, accepting JSON on stdin and common embedding JSON shapes on stdout without adding a new npm dependency.
+- BGE-M3 command safety checks for finite 1024-dimension vectors plus a bounded synchronous timeout configurable with `PI_MEMORY_BGE_M3_TIMEOUT_MS`.
+- A Pi package manifest in `package.json` plus a `npm run smoke:package-status` manifest-path smoke check that disables project-local extension discovery to avoid duplicate dev/package loading.
+- Test coverage proving default deterministic fallback status and command-produced embedding persistence via a temporary local embedding command.
 - Initial repo bootstrap structure aligned with the `agentic-coding` living-doc baseline.
 - Root governance and continuity docs: `AGENTS.md`, `MEMORY.md`, `TODO.md`, and `CHANGELOG.md`.
 - Documentation folders under `docs/` for ADRs, plans, runbooks, policies, audits, and archive material.
@@ -53,6 +57,9 @@ This changelog follows the Keep a Changelog format.
 - Command-level end-to-end coverage for the v0.8.1 save -> search -> review -> session-summary flow.
 
 ### Changed
+- The default embedding target is now `local-bge-m3-command` first, with fallback to `builtin-hash-384-v1` when no command is configured; the low-footprint profile remains `builtin-hash-64-v1`.
+- Updated package metadata and extension status/version strings for v0.8.2 packaging.
+- Documented normal Pi package install/upgrade/smoke flow and WAL-safe migration guidance from repo-local `.pi/pi-memory.sqlite` to `~/.pi/agent/pi-memory.sqlite`.
 - Expanded the root `README.md` from a placeholder to a navigable project guide.
 - Updated `README.md` with the current extension/core structure, test entry points, and v0.6 implementation status.
 - Updated the Pi extension status/reporting strings to reflect v0.8.1 closure and the next packaging-focused step.

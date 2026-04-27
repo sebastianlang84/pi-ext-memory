@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { StringEnum } from "@mariozechner/pi-ai";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import {
   createMemoryCore,
@@ -31,7 +31,7 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
     if (!ctx.hasUI) return;
     ctx.ui.setStatus(
       "pi-memory",
-      "pi-memory v0.8.1 ready — retrieval hook, /memory-status, /memory-search, /memory-review, /memory-session-save, memory_search, memory_save, memory_update, memory_link, memory_archive",
+      "pi-memory v0.8.2 ready — retrieval hook, /memory-status, /memory-search, /memory-review, /memory-session-save, memory_search, memory_save, memory_update, memory_link, memory_archive",
     );
   });
 
