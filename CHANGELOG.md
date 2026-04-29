@@ -12,11 +12,17 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-04-29
+
+### Changed
+- Documented the upgrade flow for local clones that are behind the repo: `git pull`, then `pi update .` or reinstall with `pi install .`.
+
 ### Removed
 - Removed the repo-local `.pi/extensions/pi-memory/` dev shim so pi-memory loads only through the global/package install path.
 
 ### Changed
 - `npm run smoke:memory-status` now smoke-tests the globally installed extension instead of the removed repo-local shim.
+- Updated package metadata and extension status/version strings for v1.1.2.
 
 ## [1.1.1] - 2026-04-28
 

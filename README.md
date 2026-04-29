@@ -47,7 +47,13 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 
 ## Install / upgrade / smoke
 - Install as a normal Pi package from this repo: `pi install /absolute/path/to/pi-memory` or `pi install .`.
-- Upgrade a prior install from the same source with `pi update /absolute/path/to/pi-memory` or by reinstalling the local path after pulling changes.
+- If your local clone is behind the repo, update the clone first, then update Pi's installed package:
+  ```bash
+  cd /absolute/path/to/pi-memory
+  git pull
+  pi update .
+  ```
+- If `pi update .` is not available for the install source, reinstall the local path with `pi install .` after pulling changes.
 - Smoke-test the packaged manifest path with `npm run smoke:package-status`.
 - Smoke-test the globally installed package with `npm run smoke:memory-status`.
 
@@ -84,7 +90,7 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 - v0.7 turn-start retrieval is implemented via a `before_agent_start` hook that derives session/project/repo context, injects a compact top-N memory block, and auto-enriches saved scoped memories with runtime context.
 - v0.8 adds `memory_update`, `memory_link`, `memory_archive`, `/memory-search`, archive-safe retrieval filtering, and tests covering updates, relations, and archive semantics.
 - v1.1.0 is closed: pi-memory now ships the local-first Pi extension surface, SQLite-backed memory store, hybrid retrieval, turn-start context injection, manual review/session-summary commands, package manifest, and local BGE-M3 command adapter with deterministic fallback. The v1.1.0 hardening pass removes unscoped staged retrieval fallback, reuses one query embedding across staged searches, fast-clears `/memory-review`, strengthens embedding config/timeout handling, and splits core/Pi-extension modules for maintainability. The lightweight fallback remains shipped while real-machine BGE-M3 latency/quality observations accumulate.
-- v1.1.1 shortens the Pi status-line text to `pi-memory v1.1.1 ready`.
+- v1.1.2 documents the clone-behind upgrade flow: `git pull`, then `pi update .` or reinstall with `pi install .`.
 
 ## License
 See `LICENSE`.
