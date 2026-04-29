@@ -18,6 +18,11 @@ This changelog follows the Keep a Changelog format.
 ### Changed
 - `npm run smoke:memory-status` now smoke-tests the globally installed extension instead of the removed repo-local shim.
 
+## [1.1.1] - 2026-04-28
+
+### Changed
+- Shortened the Pi status-line text to `pi-memory v1.1.1 ready`.
+
 ## [1.1.0] - 2026-04-28
 
 ### Changed

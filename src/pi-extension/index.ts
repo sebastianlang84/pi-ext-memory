@@ -18,7 +18,7 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
     if (!ctx.hasUI) return;
     ctx.ui.setStatus(
       "pi-memory",
-      "pi-memory v1.1.0 ready — retrieval hook, /memory-status, /memory-search, /memory-review, /memory-session-save, memory_search, memory_save, memory_update, memory_link, memory_archive",
+      "pi-memory v1.1.1 ready",
     );
   });
 

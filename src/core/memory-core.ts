@@ -5,7 +5,7 @@ import { initializeMemoryStore, type InitializeMemoryStoreInput, type MemoryStor
 const embeddingStatus = createDefaultMemoryEmbeddingAdapter().getStatus();
 
 export interface MemoryCoreStatus {
-  version: "v1.1.0";
+  version: "v1.1.1";
   mode: "local-core";
   storage: "sqlite-session-summary-ready";
   latestSchemaVersion: number;
@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v1.1.0",
+        version: "v1.1.1",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,

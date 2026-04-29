@@ -84,6 +84,7 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 - v0.7 turn-start retrieval is implemented via a `before_agent_start` hook that derives session/project/repo context, injects a compact top-N memory block, and auto-enriches saved scoped memories with runtime context.
 - v0.8 adds `memory_update`, `memory_link`, `memory_archive`, `/memory-search`, archive-safe retrieval filtering, and tests covering updates, relations, and archive semantics.
 - v1.1.0 is closed: pi-memory now ships the local-first Pi extension surface, SQLite-backed memory store, hybrid retrieval, turn-start context injection, manual review/session-summary commands, package manifest, and local BGE-M3 command adapter with deterministic fallback. The v1.1.0 hardening pass removes unscoped staged retrieval fallback, reuses one query embedding across staged searches, fast-clears `/memory-review`, strengthens embedding config/timeout handling, and splits core/Pi-extension modules for maintainability. The lightweight fallback remains shipped while real-machine BGE-M3 latency/quality observations accumulate.
+- v1.1.1 shortens the Pi status-line text to `pi-memory v1.1.1 ready`.
 
 ## License
 See `LICENSE`.

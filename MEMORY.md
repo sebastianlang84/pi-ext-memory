@@ -33,6 +33,7 @@ scope: always-loaded bootstrap; keep lean
 - v1.0.0 is closed as the first stable local-first Pi extension release after green automated tests and Pi smoke checks; no v0.8.3 debug release was needed.
 - v1.0.1 fixes `/memory-review` UI behavior so running the command a second time clears the review widget instead of leaving it stuck until session shutdown.
 - v1.1.0 closes the post-v1 quality hardening pass: staged retrieval now avoids unscoped fallback injection, reuses a single query embedding across stages, skips blank session IDs, clears `/memory-review` before DB/search work, separates core search and row-mapping helpers from the store, exposes injectable embedding command config with timeout tests, and splits Pi tool registration into a focused module with executor coverage.
+- v1.1.1 shortens the Pi status-line text to `pi-memory v1.1.1 ready`.
 - `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`; smoke scripts cover the global install path and package manifest path without relying on a project-local dev shim.
 - ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default.
 - Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus global/package smoke checks with `npm run smoke:memory-status` and `npm run smoke:package-status`, and a manual `/memory-search` smoke run for the extension.
@@ -64,6 +65,7 @@ scope: always-loaded bootstrap; keep lean
 - 2026-04-28 — Closed v1.0.1 by making `/memory-review` toggle/clear its UI widget and rerunning `npm test`, `npm run smoke:memory-status`, and `npm run smoke:package-status`.
 - 2026-04-28 — Closed v1.1.0 for the post-v1 quality hardening pass with worker/reviewer subagents; final verification passed with `npm test` (44/44), `npm run smoke:memory-status`, and `npm run smoke:package-status`.
 - 2026-04-28 — Removed the repo-local `.pi/extensions/pi-memory/` dev shim after installing pi-memory globally, and repointed `npm run smoke:memory-status` at the global extension path.
+- 2026-04-28 — Bumped pi-memory to v1.1.1 and shortened the Pi status-line text.
 
 ## 4) Open Decisions
 - Whether a post-V1 runtime should remain a pure local library or grow into a small localhost service if future evidence requires it.
