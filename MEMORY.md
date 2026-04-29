@@ -11,7 +11,7 @@ last_updated: 2026-04-28
 scope: always-loaded bootstrap; keep lean
 
 ## 1) Current State
-- Repo initialized for `pi-memory`, a lightweight local memory system for coding agents.
+- GitHub/local repo identity is `pi-ext-memory`; package/runtime identity remains `pi-memory`, a lightweight local memory system for coding agents.
 - Root living docs and `docs/` baseline were aligned to the `~/agentic-coding` governance structure.
 - Product direction for V1 is documented in `docs/prd-lightweight-local-memory-system.md`.
 - A working Pi integration plan now exists in `docs/plans/pi-extension-v1.md`.
@@ -67,6 +67,7 @@ scope: always-loaded bootstrap; keep lean
 - 2026-04-28 — Removed the repo-local `.pi/extensions/pi-memory/` dev shim after installing pi-memory globally, and repointed `npm run smoke:memory-status` at the global extension path.
 - 2026-04-28 — Bumped pi-memory to v1.1.1 and shortened the Pi status-line text.
 - 2026-04-29 — Bumped pi-memory to v1.1.2 and documented the local clone upgrade flow.
+- 2026-04-30 — Renamed the GitHub/local repository from `pi-memory` to `pi-ext-memory`; package/runtime names remain `pi-memory`.
 
 ## 4) Open Decisions
 - Whether a post-V1 runtime should remain a pure local library or grow into a small localhost service if future evidence requires it.

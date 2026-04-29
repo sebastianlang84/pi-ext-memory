@@ -12,6 +12,9 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+### Changed
+- Renamed the GitHub/local repository to `pi-ext-memory`; the package/runtime identity remains `pi-memory`.
+
 ## [1.1.2] - 2026-04-29
 
 ### Changed

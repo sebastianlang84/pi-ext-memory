@@ -46,10 +46,10 @@ Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.
 5. Add ADRs, plans, or implementation docs under `docs/` as decisions harden.
 
 ## Install / upgrade / smoke
-- Install as a normal Pi package from this repo: `pi install /absolute/path/to/pi-memory` or `pi install .`.
+- Install as a normal Pi package from this repo: `pi install /absolute/path/to/pi-ext-memory` or `pi install .`.
 - If your local clone is behind the repo, update the clone first, then update Pi's installed package:
   ```bash
-  cd /absolute/path/to/pi-memory
+  cd /absolute/path/to/pi-ext-memory
   git pull
   pi update .
   ```
