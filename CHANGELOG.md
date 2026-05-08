@@ -15,6 +15,11 @@ This changelog follows the Keep a Changelog format.
 ### Changed
 - Renamed the GitHub/local repository to `pi-ext-memory`; the package/runtime identity remains `pi-memory`.
 
+## [1.3.1] - 2026-05-09
+
+### Changed
+- Shortened the Pi footer status to `memory ok` and show `memory fehler` when turn-start retrieval fails.
+
 ## [1.3.0] - 2026-05-09
 
 ### Added

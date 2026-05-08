@@ -34,9 +34,10 @@ test("getNextStatusWidgetLines clears the status widget when currently visible",
   assert.equal(lines, undefined);
 });
 
-test("session_start status string stays aligned with the current extension version", () => {
+test("session_start status string stays short", () => {
   const indexSource = readFileSync(new URL("../../src/pi-extension/index.ts", import.meta.url), "utf8");
 
-  assert.match(indexSource, /pi-memory v1\.3\.0 ready/);
-  assert.doesNotMatch(indexSource, /pi-memory v1\.2\.0 ready/);
+  assert.match(indexSource, /memory ok/);
+  assert.match(indexSource, /memory fehler/);
+  assert.doesNotMatch(indexSource, /pi-memory v1\.3\.0 ready/);
 });

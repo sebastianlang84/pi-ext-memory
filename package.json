@@ -1,8 +1,10 @@
 {
   "name": "pi-memory",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "A lightweight local memory system for Pi coding agent.",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "type": "module",
   "peerDependencies": {
     "@mariozechner/pi-ai": "*",
@@ -10,7 +12,9 @@
     "typebox": "*"
   },
   "pi": {
-    "extensions": ["./src/pi-extension/index.ts"]
+    "extensions": [
+      "./src/pi-extension/index.ts"
+    ]
   },
   "scripts": {
     "test": "node --experimental-strip-types --test",

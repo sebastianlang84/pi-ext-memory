@@ -17,26 +17,28 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     if (!ctx.hasUI) return;
-    ctx.ui.setStatus(
-      "pi-memory",
-      "pi-memory v1.3.0 ready",
-    );
+    ctx.ui.setStatus("pi-memory", "memory ok");
   });
 
   pi.on("before_agent_start", async (event, ctx) => {
-    const activeStore = getStoreForCwd(core, store, ctx.cwd);
-    store = activeStore;
+    try {
+      const activeStore = getStoreForCwd(core, store, ctx.cwd);
+      store = activeStore;
 
-    const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
-    const latestHandoff = findLatestHandoffForTurn(activeStore, turnContext);
-    const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, event.prompt, turnContext);
-    const message = buildTurnMemoryMessage(event.prompt, results, turnContext, activeStore.dbPath, searchPlan, latestHandoff);
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const latestHandoff = findLatestHandoffForTurn(activeStore, turnContext);
+      const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, event.prompt, turnContext);
+      const message = buildTurnMemoryMessage(event.prompt, results, turnContext, activeStore.dbPath, searchPlan, latestHandoff);
 
-    if (!message) {
-      return;
+      if (!message) {
+        return;
+      }
+
+      return { message };
+    } catch (error) {
+      if (ctx.hasUI) ctx.ui.setStatus("pi-memory", "memory fehler");
+      throw error;
     }
-
-    return { message };
   });
 
   pi.on("session_shutdown", async (_event, _ctx) => {
