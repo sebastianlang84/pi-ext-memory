@@ -7,7 +7,7 @@ write-when: Stable truth, project state, open decisions, next steps, or durable 
 
 # MEMORY
 
-last_updated: 2026-04-28
+last_updated: 2026-05-09
 scope: always-loaded bootstrap; keep lean
 
 ## 1) Current State
@@ -34,9 +34,11 @@ scope: always-loaded bootstrap; keep lean
 - v1.0.1 fixes `/memory-review` UI behavior so running the command a second time clears the review widget instead of leaving it stuck until session shutdown.
 - v1.1.0 closes the post-v1 quality hardening pass: staged retrieval now avoids unscoped fallback injection, reuses a single query embedding across stages, skips blank session IDs, clears `/memory-review` before DB/search work, separates core search and row-mapping helpers from the store, exposes injectable embedding command config with timeout tests, and splits Pi tool registration into a focused module with executor coverage.
 - v1.1.2 documents the clone-behind upgrade flow for local installs: `git pull`, then `pi update .` or reinstall with `pi install .`.
+- v1.2.0 adds `memory_list` for query-free structured memory listing/filtering; `memory_search` remains content search.
+- v1.3.0 adds Handoff V1: `kind: handoff`, `memory_handoff_save`, `/memory-handoff`, one active handoff per session, session-safe save/update behavior for concurrent Pi instances, and deterministic latest matching active handoff preload ahead of normal turn retrieval.
 - `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`; smoke scripts cover the global install path and package manifest path without relying on a project-local dev shim.
 - ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default.
-- Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus global/package smoke checks with `npm run smoke:memory-status` and `npm run smoke:package-status`, and a manual `/memory-search` smoke run for the extension.
+- Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, handoff save/preload behavior, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level handoff/review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus global/package smoke checks with `npm run smoke:memory-status` and `npm run smoke:package-status`, and manual `/memory-search` and `/memory-handoff` smoke paths for the extension.
 - Current V1 direction from the PRD and plan: local-first, single-user, SQLite-based, hybrid retrieval, Pi-first extension surface, thin local core boundary, no heavy server infrastructure.
 
 ## 2) Long-Term Memory
@@ -67,6 +69,8 @@ scope: always-loaded bootstrap; keep lean
 - 2026-04-28 — Removed the repo-local `.pi/extensions/pi-memory/` dev shim after installing pi-memory globally, and repointed `npm run smoke:memory-status` at the global extension path.
 - 2026-04-28 — Bumped pi-memory to v1.1.1 and shortened the Pi status-line text.
 - 2026-04-29 — Bumped pi-memory to v1.1.2 and documented the local clone upgrade flow.
+- 2026-05-04 — Added `memory_list` so agents can list/filter active todos and other structured memories without relying on full-text query matches; bumped package/status metadata to v1.2.0.
+- 2026-05-09 — Added Handoff V1 with `memory_handoff_save`, `/memory-handoff`, session-isolated active handoff updates, latest handoff turn-start preload, and v1.3.0 status/package metadata.
 - 2026-04-30 — Renamed the GitHub/local repository from `pi-memory` to `pi-ext-memory`; package/runtime names remain `pi-memory`.
 
 ## 4) Open Decisions

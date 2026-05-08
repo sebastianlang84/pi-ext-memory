@@ -13,14 +13,17 @@ import {
   type ArchiveMemoryInput,
   type CreateMemoryInput,
   type LinkMemoriesInput,
+  type ListMemoriesInput,
   type MemoryLinkRecord,
   type MemoryRecord,
   type MemorySearchResult,
+  type NormalizedListMemoriesInput,
   type SearchMemoriesInput,
   type UpdateMemoryInput,
   normalizeArchiveMemoryInput,
   normalizeCreateMemoryInput,
   normalizeLinkMemoriesInput,
+  normalizeListMemoriesInput,
   normalizeSearchMemoriesInput,
   normalizeUpdateMemoryInput,
 } from "./memories.ts";
@@ -80,6 +83,7 @@ export interface MemoryStore extends MemoryStoreStatus {
   updateMemory(input: UpdateMemoryInput): MemoryRecord;
   archiveMemory(input: ArchiveMemoryInput): MemoryRecord;
   getMemory(id: string): MemoryRecord | null;
+  listMemories(input?: ListMemoriesInput): MemoryRecord[];
   getMemoryEmbedding(id: string): MemoryEmbeddingRecord | null;
   getSession(sessionId: string): SessionRecord | null;
   saveSessionSummary(input: SaveSessionSummaryInput): SessionRecord;
@@ -297,6 +301,12 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
 
         return readMemoryById(db, normalizedId);
       },
+      listMemories(input = {}) {
+        assertStoreOpen(isClosed);
+
+        const normalizedInput = normalizeListMemoriesInput(input);
+        return readMemoryList(db, normalizedInput);
+      },
       getMemoryEmbedding(id) {
         assertStoreOpen(isClosed);
 
@@ -489,6 +499,78 @@ function readMemoryById(db: DatabaseSync, id: string): MemoryRecord | null {
     .get(id) as MemoryRow | undefined;
 
   return row ? mapMemoryRow(row) : null;
+}
+
+function readMemoryList(db: DatabaseSync, input: NormalizedListMemoriesInput): MemoryRecord[] {
+  const whereClauses = ["status = ?"];
+  const queryParams: Array<number | string> = [input.status];
+
+  if (input.kind) {
+    whereClauses.push(`kind IN (${input.kind.map(() => "?").join(", ")})`);
+    queryParams.push(...input.kind);
+  }
+
+  if (input.scope) {
+    whereClauses.push(`scope IN (${input.scope.map(() => "?").join(", ")})`);
+    queryParams.push(...input.scope);
+  }
+
+  for (const tag of input.tags) {
+    whereClauses.push("EXISTS (SELECT 1 FROM json_each(memories.tags_json) WHERE value = ?)");
+    queryParams.push(tag);
+  }
+
+  if (input.sessionId) {
+    whereClauses.push("session_id = ?");
+    queryParams.push(input.sessionId);
+  }
+
+  if (input.projectId) {
+    whereClauses.push("project_id = ?");
+    queryParams.push(input.projectId);
+  }
+
+  if (input.repoPath) {
+    whereClauses.push("repo_path = ?");
+    queryParams.push(input.repoPath);
+  }
+
+  const primaryOrderColumn = input.orderBy === "createdAt" ? "created_at" : "updated_at";
+  const secondaryOrderColumn = input.orderBy === "createdAt" ? "updated_at" : "created_at";
+  queryParams.push(input.limit);
+
+  const rows = db
+    .prepare(
+      `SELECT
+        id,
+        kind,
+        scope,
+        session_id,
+        title,
+        summary,
+        body,
+        tags_json,
+        source_agent,
+        project_id,
+        repo_path,
+        branch,
+        importance,
+        confidence,
+        status,
+        pinned,
+        created_at,
+        updated_at,
+        last_accessed_at,
+        expires_at,
+        metadata_json
+      FROM memories
+      WHERE ${whereClauses.join(" AND ")}
+      ORDER BY ${primaryOrderColumn} DESC, ${secondaryOrderColumn} DESC, id DESC
+      LIMIT ?;`,
+    )
+    .all(...queryParams) as MemoryRow[];
+
+  return rows.map(mapMemoryRow);
 }
 
 function readMemoryEmbeddingById(db: DatabaseSync, id: string): MemoryEmbeddingRecord | null {

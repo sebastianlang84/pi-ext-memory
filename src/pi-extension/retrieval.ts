@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import type {
   CreateMemoryInput,
   GeneratedMemoryEmbedding,
+  MemoryRecord,
   MemorySearchResult,
   MemoryStore,
   SearchMemoriesInput,
@@ -48,6 +49,8 @@ export interface MemoryTurnMessageDetails {
   projectId?: string;
   projectPath?: string;
   repoPath?: string;
+  latestHandoffId?: string;
+  latestHandoffIsFallback?: boolean;
   resultIds: string[];
   searchPlan: SearchMemoriesInput[];
 }
@@ -139,6 +142,64 @@ type StagedMemorySearchStore = Pick<MemoryStore, "searchMemories"> & {
   createSearchQueryEmbedding?: (query: string) => GeneratedMemoryEmbedding;
 };
 
+type LatestHandoffStore = Pick<MemoryStore, "listMemories">;
+
+export interface LatestHandoffResult {
+  memory: MemoryRecord;
+  isFallback: boolean;
+}
+
+export function findLatestHandoffForTurn(store: LatestHandoffStore, context: MemoryTurnContext): LatestHandoffResult | undefined {
+  const sessionId = context.sessionId.trim();
+
+  if (sessionId.length > 0) {
+    const [sessionHandoff] = store.listMemories({
+      kind: ["handoff"],
+      scope: ["session"],
+      sessionId,
+      status: "active",
+      orderBy: "updatedAt",
+      limit: 1,
+    });
+
+    if (sessionHandoff) {
+      return { memory: sessionHandoff, isFallback: false };
+    }
+  }
+
+  if (context.repoPath) {
+    const [repoHandoff] = store.listMemories({
+      kind: ["handoff"],
+      scope: ["repo", "session"],
+      repoPath: context.repoPath,
+      status: "active",
+      orderBy: "updatedAt",
+      limit: 1,
+    });
+
+    if (repoHandoff) {
+      return { memory: repoHandoff, isFallback: true };
+    }
+  }
+
+  if (context.projectId) {
+    const [projectHandoff] = store.listMemories({
+      kind: ["handoff"],
+      scope: ["project", "session"],
+      projectId: context.projectId,
+      status: "active",
+      orderBy: "updatedAt",
+      limit: 1,
+    });
+
+    if (projectHandoff) {
+      return { memory: projectHandoff, isFallback: true };
+    }
+  }
+
+  return undefined;
+}
+
 export function retrieveMemoriesForTurn(
   store: StagedMemorySearchStore,
   query: string,
@@ -184,19 +245,20 @@ export function buildTurnMemoryMessage(
   context: MemoryTurnContext,
   dbPath: string,
   searchPlan: SearchMemoriesInput[],
+  latestHandoff?: LatestHandoffResult,
 ): {
   customType: string;
   content: string;
   display: false;
   details: MemoryTurnMessageDetails;
 } | null {
-  if (query.trim().length < 2) {
+  if (query.trim().length < 2 && !latestHandoff) {
     return null;
   }
 
   return {
     customType: MEMORY_CONTEXT_CUSTOM_TYPE,
-    content: formatTurnMemoryContext(results),
+    content: formatTurnMemoryContext(results, latestHandoff),
     display: false,
     details: {
       dbPath,
@@ -205,25 +267,53 @@ export function buildTurnMemoryMessage(
       projectId: context.projectId,
       projectPath: context.projectPath,
       repoPath: context.repoPath,
+      latestHandoffId: latestHandoff?.memory.id,
+      latestHandoffIsFallback: latestHandoff?.isFallback,
       resultIds: results.map((result) => result.id),
       searchPlan,
     },
   };
 }
 
-export function formatTurnMemoryContext(results: MemorySearchResult[]): string {
+export function formatTurnMemoryContext(results: MemorySearchResult[], latestHandoff?: LatestHandoffResult): string {
   const topResults = results.slice(0, TURN_MEMORY_RESULT_LIMIT);
   const contextLines =
     topResults.length > 0
       ? ["Relevant memory context:", ...topResults.map((result, index) => formatTurnMemoryLine(index + 1, result))]
       : ["Relevant memory context: none found."];
 
+  const handoffLines = latestHandoff ? formatLatestHandoffLines(latestHandoff) : [];
+
   return [
+    ...handoffLines,
     ...contextLines,
     "Memory triggers: search before guessing about prior/project/workflow context.",
     "Save or update durable user corrections, decisions, facts, preferences, and todos.",
     "Prefer current user instructions if they conflict with older memory.",
   ].join("\n");
+}
+
+function formatLatestHandoffLines(latestHandoff: LatestHandoffResult): string[] {
+  const { memory, isFallback } = latestHandoff;
+  const metadata = [`${memory.scope}`, `updated=${memory.updatedAt}`];
+
+  if (memory.sessionId) {
+    metadata.push(`session=${memory.sessionId}`);
+  }
+
+  if (memory.projectId) {
+    metadata.push(`project=${memory.projectId}`);
+  }
+
+  if (memory.repoPath) {
+    metadata.push(`repo=${memory.repoPath}`);
+  }
+
+  return [
+    `Latest active handoff${isFallback ? " (from another matching session/repo/project; do not overwrite unless explicit)" : ""}:`,
+    `- [${metadata.join(" | ")}] ${memory.title} — ${memory.summary}`,
+    ...(memory.body ? [memory.body] : []),
+  ];
 }
 
 function formatTurnMemoryLine(index: number, result: MemorySearchResult): string {

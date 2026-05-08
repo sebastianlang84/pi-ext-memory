@@ -10,6 +10,7 @@ import {
   buildTurnSearchPlan,
   decorateCreateMemoryInput,
   deriveMemoryTurnContext,
+  findLatestHandoffForTurn,
   retrieveMemoriesForTurn,
 } from "../../src/pi-extension/retrieval.ts";
 import { initializeMemoryStore } from "../../src/core/index.ts";
@@ -246,6 +247,80 @@ test("retrieveMemoriesForTurn does not inject wrong-context memories through uns
   } finally {
     store.close();
   }
+});
+
+test("findLatestHandoffForTurn prefers exact session handoff before repo fallback", () => {
+  const dbPath = join(createTempDir("pi-memory-handoff-retrieval-"), "memory.sqlite");
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    const fallback = store.createMemory({
+      kind: "handoff",
+      scope: "session",
+      sessionId: "other-session",
+      repoPath: "/repo",
+      title: "Other session handoff",
+      summary: "Fallback handoff for same repo.",
+    });
+    const current = store.createMemory({
+      kind: "handoff",
+      scope: "session",
+      sessionId: "session-789",
+      repoPath: "/repo",
+      title: "Current session handoff",
+      summary: "Current session handoff should win.",
+    });
+
+    const exact = findLatestHandoffForTurn(store, { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" });
+    assert.equal(exact?.memory.id, current.id);
+    assert.equal(exact?.isFallback, false);
+
+    store.archiveMemory({ id: current.id });
+    const repoFallback = findLatestHandoffForTurn(store, { cwd: "/repo", sessionId: "missing-session", repoPath: "/repo" });
+    assert.equal(repoFallback?.memory.id, fallback.id);
+    assert.equal(repoFallback?.isFallback, true);
+  } finally {
+    store.close();
+  }
+});
+
+test("buildTurnMemoryMessage injects latest handoff before normal memories", () => {
+  const handoff = {
+    memory: {
+      id: "handoff-1",
+      kind: "handoff" as const,
+      scope: "session" as const,
+      sessionId: "session-789",
+      title: "Context reset handoff",
+      summary: "Resume handoff design after context reset.",
+      body: "## Next steps\n- Implement command UX",
+      tags: ["handoff"],
+      importance: 0.9,
+      confidence: 0.9,
+      status: "active" as const,
+      pinned: false,
+      createdAt: "2026-05-08T12:00:00.000Z",
+      updatedAt: "2026-05-08T12:30:00.000Z",
+      metadata: {},
+    },
+    isFallback: false,
+  };
+
+  const message = buildTurnMemoryMessage(
+    "continue",
+    [],
+    { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" },
+    "/db.sqlite",
+    [],
+    handoff,
+  );
+
+  assert.ok(message);
+  assert.match(message.content, /Latest active handoff:/);
+  assert.match(message.content, /Context reset handoff/);
+  assert.match(message.content, /## Next steps/);
+  assert.equal(message.details.latestHandoffId, "handoff-1");
+  assert.equal(message.details.latestHandoffIsFallback, false);
 });
 
 test("buildTurnMemoryMessage injects memory triggers even when no results match", () => {

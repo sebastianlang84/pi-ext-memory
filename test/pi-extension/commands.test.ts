@@ -216,6 +216,55 @@ test("/memory-review handler toggles review details in the UI", async () => {
   }
 });
 
+test("/memory-handoff shows latest current-session handoff", async () => {
+  const { cwd, repoRoot } = createProjectContext();
+  const dbPath = join(createTempDir("pi-memory-handoff-command-db-"), "memory.sqlite");
+  const setupStore = initializeMemoryStore({ dbPath });
+
+  try {
+    setupStore.createMemory({
+      kind: "handoff",
+      scope: "session",
+      sessionId: "session-handoff-123",
+      projectId: "@acme/api",
+      repoPath: repoRoot,
+      title: "Context reset handoff",
+      summary: "Resume command test handoff.",
+      body: "## Next steps\n- Continue after context reset",
+      sourceAgent: "test",
+    });
+  } finally {
+    setupStore.close();
+  }
+
+  const previousDbPath = process.env.PI_MEMORY_DB_PATH;
+  process.env.PI_MEMORY_DB_PATH = dbPath;
+
+  try {
+    const { pi, commands } = createMockPi();
+    registerMemoryCommands(pi as never, createMemoryCore());
+
+    const handler = commands.get("memory-handoff");
+    assert.ok(handler, "expected memory-handoff command to be registered");
+
+    const { ctx, widgets, notifications } = createMockCommandContext(cwd, "session-handoff-123");
+    await handler("", ctx);
+
+    assert.deepEqual(notifications, [{ message: "pi-memory handoff shown", level: "info" }]);
+    const widget = widgets.get("pi-memory-handoff")?.join("\n") ?? "";
+    assert.match(widget, /Latest active handoff\./);
+    assert.match(widget, /Context reset handoff/);
+    assert.match(widget, /Continue after context reset/);
+    assert.match(widget, new RegExp(`repo_path: ${repoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  } finally {
+    if (previousDbPath === undefined) {
+      delete process.env.PI_MEMORY_DB_PATH;
+    } else {
+      process.env.PI_MEMORY_DB_PATH = previousDbPath;
+    }
+  }
+});
+
 test("/memory-session-save handler persists the current session and shows detailed UI confirmation", async () => {
   const { cwd, repoRoot } = createProjectContext();
   const dbPath = join(createTempDir("pi-memory-command-db-"), "memory.sqlite");

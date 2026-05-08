@@ -5,7 +5,7 @@ import { initializeMemoryStore, type InitializeMemoryStoreInput, type MemoryStor
 const embeddingStatus = createDefaultMemoryEmbeddingAdapter().getStatus();
 
 export interface MemoryCoreStatus {
-  version: "v1.1.2";
+  version: "v1.3.0";
   mode: "local-core";
   storage: "sqlite-session-summary-ready";
   latestSchemaVersion: number;
@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v1.1.2",
+        version: "v1.3.0",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
@@ -37,9 +37,9 @@ export function createMemoryCore(): MemoryCore {
         fallbackEmbeddingModel: embeddingStatus.fallbackModel,
         activeEmbeddingModel: embeddingStatus.activeModel,
         embeddingDimensions: embeddingStatus.dimensions,
-        availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-session-save"],
-        availableTools: ["memory_search", "memory_save", "memory_update", "memory_link", "memory_archive"],
-        nextStep: "V1 release is complete; monitor local embedding quality and latency in normal use.",
+        availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save"],
+        availableTools: ["memory_search", "memory_list", "memory_save", "memory_handoff_save", "memory_update", "memory_link", "memory_archive"],
+        nextStep: "V1 release is complete; use memory_list for structured listing and monitor local embedding quality in normal use.",
       };
     },
     initializeStore(input) {

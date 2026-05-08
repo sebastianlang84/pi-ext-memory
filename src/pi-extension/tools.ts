@@ -1,3 +1,5 @@
+import { hostname } from "node:os";
+
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { Type } from "typebox";
@@ -5,6 +7,7 @@ import { Type } from "typebox";
 import {
   MEMORY_KINDS,
   MEMORY_LINK_RELATIONS,
+  MEMORY_LIST_ORDER_BY,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
   type MemoryLinkRecord,
@@ -19,7 +22,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_search",
     label: "Memory Search",
-    description: "Search the local pi-memory store using hybrid lexical + semantic retrieval and compact filters.",
+    description: "Search memory content in the local pi-memory store using hybrid lexical + semantic retrieval and compact filters.",
     promptSnippet: "Search local durable memory before guessing when prior decisions, facts, or todos may matter.",
     promptGuidelines: [
       "Keep queries compact and concrete.",
@@ -27,7 +30,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       "Prefer small limits to protect context quality.",
     ],
     parameters: Type.Object({
-      query: Type.String({ description: "Search query" }),
+      query: Type.String({ description: "Content search query" }),
       kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS, { description: "Memory kind" }))),
       scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope" }))),
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
@@ -45,6 +48,42 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         details: {
           dbPath: activeStore.dbPath,
           results,
+        },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "memory_list",
+    label: "Memory List",
+    description: "List structured memories from the local pi-memory store using filters without full-text content search.",
+    promptSnippet: "List structured memories when kind, scope, tags, project, repo, or status are known and no content query is needed.",
+    promptGuidelines: [
+      "Use memory_list for structured filtering, especially active todos with kind: [\"todo\"].",
+      "Do not provide a content query; use memory_search when searching memory text.",
+      "Default status is active and default ordering is newest updated first.",
+    ],
+    parameters: Type.Object({
+      kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS, { description: "Memory kind" }))),
+      scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope" }))),
+      tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
+      sessionId: Type.Optional(Type.String({ description: "Optional session identifier filter" })),
+      projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
+      repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
+      status: Type.Optional(StringEnum(MEMORY_STATUSES, { description: "Memory lifecycle status; defaults to active" })),
+      limit: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Max result count" })),
+      orderBy: Type.Optional(StringEnum(MEMORY_LIST_ORDER_BY, { description: "Newest-first ordering field" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const activeStore = getActiveStore(ctx.cwd);
+
+      const memories = activeStore.listMemories(params);
+
+      return {
+        content: [{ type: "text", text: formatMemoryListResults(memories, activeStore.dbPath) }],
+        details: {
+          dbPath: activeStore.dbPath,
+          memories,
         },
       };
     },
@@ -73,11 +112,92 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
 
+      if (params.kind === "handoff") {
+        return {
+          content: [{ type: "text", text: `Use memory_handoff_save for handoffs so the active session handoff is updated instead of duplicated.\ndb_path: ${activeStore.dbPath}` }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
+
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const memory = activeStore.createMemory({
         ...decorateCreateMemoryInput(params, turnContext),
         sourceAgent: "pi",
       });
+
+      return {
+        content: [{ type: "text", text: formatMemorySaved(memory, activeStore) }],
+        details: {
+          dbPath: activeStore.dbPath,
+          memory,
+        },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "memory_handoff_save",
+    label: "Memory Handoff Save",
+    description: "Create or update the active structured handoff for the current Pi session.",
+    promptSnippet:
+      "Save a compact handoff before context reset, compaction, wrap-up, or agent transfer so the next agent can resume safely.",
+    promptGuidelines: [
+      "Use this for mid-task handoff state, not general long-term facts.",
+      "Include goal, current state, and concrete next steps.",
+      "Mention changed files, decisions, blockers, verification, and avoid-repeating notes when relevant.",
+    ],
+    parameters: Type.Object({
+      title: Type.Optional(Type.String({ description: "Short handoff title" })),
+      reason: Type.Optional(
+        StringEnum(["manual", "before_context_reset", "wrap_up", "task_pause", "task_complete", "blocker"] as const, {
+          description: "Why the handoff is being saved",
+        }),
+      ),
+      goal: Type.String({ description: "Current task goal" }),
+      currentState: Type.String({ description: "Where the task stands right now" }),
+      nextSteps: Type.Array(Type.String({ description: "Concrete next step" })),
+      done: Type.Optional(Type.Array(Type.String({ description: "Completed step" }))),
+      changedFiles: Type.Optional(Type.Array(Type.String({ description: "Changed or especially relevant file path" }))),
+      decisions: Type.Optional(Type.Array(Type.String({ description: "Decision made during this task" }))),
+      blockers: Type.Optional(Type.Array(Type.String({ description: "Blocker" }))),
+      openQuestions: Type.Optional(Type.Array(Type.String({ description: "Open question" }))),
+      verification: Type.Optional(Type.Array(Type.String({ description: "Verification already run or still missing" }))),
+      risks: Type.Optional(Type.Array(Type.String({ description: "Risk or caveat" }))),
+      avoidRepeating: Type.Optional(Type.Array(Type.String({ description: "Work the next agent should not repeat" }))),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const activeStore = getActiveStore(ctx.cwd);
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const sessionId = turnContext.sessionId.trim();
+
+      if (sessionId.length === 0) {
+        return {
+          content: [{ type: "text", text: `Cannot save handoff without a stable Pi session id.\ndb_path: ${activeStore.dbPath}` }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
+
+      const handoffInput = buildHandoffMemoryInput(params, turnContext);
+      const [existingHandoff] = activeStore.listMemories({
+        kind: ["handoff"],
+        scope: ["session"],
+        sessionId,
+        status: "active",
+        orderBy: "updatedAt",
+        limit: 1,
+      });
+
+      const memory = existingHandoff
+        ? activeStore.updateMemory({
+            id: existingHandoff.id,
+            title: handoffInput.title,
+            summary: handoffInput.summary,
+            body: handoffInput.body,
+            tags: handoffInput.tags,
+            importance: handoffInput.importance,
+            confidence: handoffInput.confidence,
+          })
+        : activeStore.createMemory({ ...handoffInput, sourceAgent: "pi" });
 
       return {
         content: [{ type: "text", text: formatMemorySaved(memory, activeStore) }],
@@ -114,6 +234,14 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
+
+      const existingMemory = activeStore.getMemory(params.id);
+      if (existingMemory?.kind === "handoff") {
+        return {
+          content: [{ type: "text", text: `Use memory_handoff_save or /memory-handoff archive for handoff lifecycle changes.\ndb_path: ${activeStore.dbPath}` }],
+          details: { dbPath: activeStore.dbPath, memory: existingMemory },
+        };
+      }
 
       const memory = activeStore.updateMemory(params);
 
@@ -172,6 +300,14 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
 
+      const existingMemory = activeStore.getMemory(params.id);
+      if (existingMemory?.kind === "handoff") {
+        return {
+          content: [{ type: "text", text: `Use /memory-handoff archive from the owning session to archive handoffs.\ndb_path: ${activeStore.dbPath}` }],
+          details: { dbPath: activeStore.dbPath, memory: existingMemory },
+        };
+      }
+
       const memory = activeStore.archiveMemory(params);
 
       return {
@@ -183,6 +319,92 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       };
     },
   });
+}
+
+type HandoffSaveParams = {
+  title?: string;
+  reason?: string;
+  goal: string;
+  currentState: string;
+  nextSteps: string[];
+  done?: string[];
+  changedFiles?: string[];
+  decisions?: string[];
+  blockers?: string[];
+  openQuestions?: string[];
+  verification?: string[];
+  risks?: string[];
+  avoidRepeating?: string[];
+};
+
+type HandoffTurnContext = ReturnType<typeof deriveMemoryTurnContext>;
+
+function buildHandoffMemoryInput(params: HandoffSaveParams, context: HandoffTurnContext) {
+  const reason = params.reason?.trim() || "manual";
+  const title = params.title?.trim() || `Handoff: ${params.goal.trim().slice(0, 80)}`;
+  const body = renderHandoffMarkdown(params, context, reason);
+
+  return decorateCreateMemoryInput(
+    {
+      kind: "handoff",
+      scope: "session",
+      title,
+      summary: params.currentState.trim(),
+      body,
+      tags: ["handoff", reason],
+      importance: 0.9,
+      confidence: 0.9,
+      metadata: {
+        handoff: {
+          reason,
+          pid: process.pid,
+          hostname: hostname(),
+          cwd: context.cwd,
+          savedAt: new Date().toISOString(),
+        },
+      },
+    },
+    context,
+  );
+}
+
+function renderHandoffMarkdown(params: HandoffSaveParams, context: HandoffTurnContext, reason: string): string {
+  const lines = [
+    `# ${params.title?.trim() || "Handoff"}`,
+    "",
+    `Reason: ${reason}`,
+    `Session: ${context.sessionId}`,
+    `Project: ${context.projectId ?? "none"}`,
+    `Repo: ${context.repoPath ?? "none"}`,
+    `CWD: ${context.cwd}`,
+    `PID: ${process.pid}`,
+    `Host: ${hostname()}`,
+    "",
+    "## Goal",
+    params.goal.trim(),
+    "",
+    "## Current state",
+    params.currentState.trim(),
+  ];
+
+  appendMarkdownList(lines, "Done", params.done);
+  appendMarkdownList(lines, "Changed files", params.changedFiles);
+  appendMarkdownList(lines, "Decisions", params.decisions);
+  appendMarkdownList(lines, "Blockers", params.blockers);
+  appendMarkdownList(lines, "Open questions", params.openQuestions);
+  appendMarkdownList(lines, "Next steps", params.nextSteps);
+  appendMarkdownList(lines, "Verification", params.verification);
+  appendMarkdownList(lines, "Risks", params.risks);
+  appendMarkdownList(lines, "Avoid repeating", params.avoidRepeating);
+
+  return lines.join("\n");
+}
+
+function appendMarkdownList(lines: string[], heading: string, values?: string[]): void {
+  const cleaned = values?.map((value) => value.trim()).filter(Boolean) ?? [];
+  if (cleaned.length === 0) return;
+
+  lines.push("", `## ${heading}`, ...cleaned.map((value) => `- ${value}`));
 }
 
 function formatMemorySaved(memory: MemoryRecord, store: MemoryStore): string {
@@ -264,6 +486,23 @@ function formatMemoryArchived(memory: MemoryRecord, dbPath: string): string {
 
   lines.push(`db_path: ${dbPath}`);
   return lines.join("\n");
+}
+
+function formatMemoryListResults(memories: MemoryRecord[], dbPath: string): string {
+  if (memories.length === 0) {
+    return [`No memories matched the list filters.`, `db_path: ${dbPath}`].join("\n");
+  }
+
+  return [
+    `Found ${memories.length} memor${memories.length === 1 ? "y" : "ies"}.`,
+    ...memories.map((memory, index) => formatMemoryListResultLine(index + 1, memory)),
+    `db_path: ${dbPath}`,
+  ].join("\n");
+}
+
+function formatMemoryListResultLine(index: number, memory: MemoryRecord): string {
+  const tags = memory.tags.length > 0 ? ` tags=${memory.tags.join(",")}` : "";
+  return `${index}. [${memory.kind}/${memory.scope}/${memory.status}] ${memory.title} (${memory.id}) — ${memory.summary}${tags} updated=${memory.updatedAt}`;
 }
 
 function formatMemorySearchResults(query: string, results: MemorySearchResult[], dbPath: string): string {

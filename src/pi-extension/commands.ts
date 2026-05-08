@@ -1,8 +1,8 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
-import { type MemoryCore, type MemorySearchResult, type MemoryStore, type SearchMemoriesInput } from "../core/index.ts";
+import { type MemoryCore, type MemoryRecord, type MemorySearchResult, type MemoryStore, type SearchMemoriesInput } from "../core/index.ts";
 import { resolveMemoryDbPath } from "./config.ts";
-import { deriveMemoryTurnContext, retrieveMemoriesForTurn } from "./retrieval.ts";
+import { deriveMemoryTurnContext, findLatestHandoffForTurn, retrieveMemoriesForTurn } from "./retrieval.ts";
 import {
   formatMemoryReview,
   formatMemorySearchResultLine,
@@ -29,6 +29,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
       ctx.ui.setWidget("pi-memory-search", undefined);
       ctx.ui.setWidget("pi-memory-review", undefined);
       ctx.ui.setWidget("pi-memory-session-save", undefined);
+      ctx.ui.setWidget("pi-memory-handoff", undefined);
     }
 
     isStatusWidgetVisible = false;
@@ -117,6 +118,51 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
     },
   });
 
+  pi.registerCommand("memory-handoff", {
+    description: "Show or archive the active handoff for the current Pi session",
+    handler: async (args, ctx) => {
+      const action = args.trim() || "show";
+      const activeStore = getStoreForCwd(core, store, ctx.cwd);
+      store = activeStore;
+
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+
+      if (action === "archive") {
+        const sessionId = turnContext.sessionId.trim();
+        if (sessionId.length === 0) {
+          writeCommandOutput("Cannot archive handoff without a stable Pi session id.", ctx);
+          return;
+        }
+
+        const current = findLatestSessionHandoff(activeStore, sessionId);
+        if (!current) {
+          writeCommandOutput("No active handoff found for the current session.", ctx);
+          return;
+        }
+
+        const archived = activeStore.archiveMemory({ id: current.id, reason: "handoff archived from /memory-handoff" });
+        writeCommandOutput(formatMemoryHandoffArchived(archived, activeStore.dbPath), ctx);
+        return;
+      }
+
+      if (action !== "show") {
+        writeCommandOutput("Usage: /memory-handoff [show|archive]\nUse memory_handoff_save to create or update a handoff.", ctx);
+        return;
+      }
+
+      const latestHandoff = findLatestHandoffForTurn(activeStore, turnContext);
+      const output = formatMemoryHandoff(latestHandoff?.memory, activeStore.dbPath, latestHandoff?.isFallback ?? false);
+
+      if (ctx.hasUI) {
+        ctx.ui.setWidget("pi-memory-handoff", output.split("\n"));
+        ctx.ui.notify("pi-memory handoff shown", "info");
+        return;
+      }
+
+      process.stdout.write(`${output}\n`);
+    },
+  });
+
   pi.registerCommand("memory-session-save", {
     description: "Persist a compact summary for the current Pi session",
     handler: async (args, ctx) => {
@@ -158,6 +204,45 @@ function getStoreForCwd(core: MemoryCore, currentStore: MemoryStore | undefined,
 
   currentStore?.close();
   return core.initializeStore({ dbPath });
+}
+
+function findLatestSessionHandoff(store: MemoryStore, sessionId: string): MemoryRecord | undefined {
+  return store.listMemories({
+    kind: ["handoff"],
+    scope: ["session"],
+    sessionId,
+    status: "active",
+    orderBy: "updatedAt",
+    limit: 1,
+  })[0];
+}
+
+function formatMemoryHandoff(memory: MemoryRecord | undefined, dbPath: string, isFallback: boolean): string {
+  if (!memory) {
+    return [
+      "No active handoff found for this session/repo/project.",
+      "Use memory_handoff_save before context reset, compaction, wrap-up, or agent transfer.",
+      `db_path: ${dbPath}`,
+    ].join("\n");
+  }
+
+  return [
+    `Latest active handoff${isFallback ? " (fallback from another matching session/repo/project)" : ""}.`,
+    `id: ${memory.id}`,
+    `title: ${memory.title}`,
+    `summary: ${memory.summary}`,
+    `scope: ${memory.scope}`,
+    `session_id: ${memory.sessionId ?? "none"}`,
+    `project_id: ${memory.projectId ?? "none"}`,
+    `repo_path: ${memory.repoPath ?? "none"}`,
+    `updated_at: ${memory.updatedAt}`,
+    memory.body ?? "body: none",
+    `db_path: ${dbPath}`,
+  ].join("\n");
+}
+
+function formatMemoryHandoffArchived(memory: MemoryRecord, dbPath: string): string {
+  return [`Archived handoff ${memory.id}.`, `title: ${memory.title}`, `updated_at: ${memory.updatedAt}`, `db_path: ${dbPath}`].join("\n");
 }
 
 function writeCommandOutput(output: string, ctx: ExtensionCommandContext): void {

@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 
-export const MEMORY_KINDS = ["fact", "preference", "decision", "episode", "artifact_ref", "todo"] as const;
+export const MEMORY_KINDS = ["fact", "preference", "decision", "episode", "artifact_ref", "todo", "handoff"] as const;
 export const MEMORY_SCOPES = ["global", "project", "repo", "session"] as const;
 export const MEMORY_STATUSES = ["active", "archived"] as const;
 export const MEMORY_LINK_RELATIONS = ["related_to", "supersedes", "caused_by", "implements", "blocks"] as const;
+export const MEMORY_LIST_ORDER_BY = ["updatedAt", "createdAt"] as const;
 
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 export type MemoryScope = (typeof MEMORY_SCOPES)[number];
 export type MemoryStatus = (typeof MEMORY_STATUSES)[number];
 export type MemoryLinkRelation = (typeof MEMORY_LINK_RELATIONS)[number];
+export type MemoryListOrderBy = (typeof MEMORY_LIST_ORDER_BY)[number];
 
 export interface CreateMemoryInput {
   kind: MemoryKind;
@@ -62,6 +64,30 @@ export interface SearchMemoriesInput {
   projectId?: string;
   repoPath?: string;
   limit?: number;
+}
+
+export interface ListMemoriesInput {
+  kind?: MemoryKind[];
+  scope?: MemoryScope[];
+  tags?: string[];
+  sessionId?: string;
+  projectId?: string;
+  repoPath?: string;
+  status?: MemoryStatus;
+  limit?: number;
+  orderBy?: MemoryListOrderBy;
+}
+
+export interface NormalizedListMemoriesInput {
+  kind?: MemoryKind[];
+  scope?: MemoryScope[];
+  tags: string[];
+  sessionId?: string;
+  projectId?: string;
+  repoPath?: string;
+  status: MemoryStatus;
+  limit: number;
+  orderBy: MemoryListOrderBy;
 }
 
 export interface NormalizedSearchMemoriesInput {
@@ -288,6 +314,36 @@ export function normalizeLinkMemoriesInput(input: LinkMemoriesInput): { fromId: 
   }
 
   return { fromId, toId, relation };
+}
+
+export function normalizeListMemoriesInput(input: ListMemoriesInput): NormalizedListMemoriesInput {
+  const issues: string[] = [];
+
+  const kind = normalizeEnumList("kind", input.kind, MEMORY_KINDS, issues);
+  const scope = normalizeEnumList("scope", input.scope, MEMORY_SCOPES, issues);
+  const tags = normalizeTags(input.tags, issues);
+  const sessionId = normalizeOptionalText(input.sessionId);
+  const projectId = normalizeOptionalText(input.projectId);
+  const repoPath = normalizeOptionalText(input.repoPath);
+  const status = input.status === undefined ? "active" : normalizeEnum("status", input.status, MEMORY_STATUSES, issues);
+  const limit = normalizeLimit(input.limit, issues);
+  const orderBy = input.orderBy === undefined ? "updatedAt" : normalizeEnum("orderBy", input.orderBy, MEMORY_LIST_ORDER_BY, issues);
+
+  if (issues.length > 0 || !status || !orderBy) {
+    throw new MemoryValidationError(issues);
+  }
+
+  return {
+    kind,
+    scope,
+    tags,
+    sessionId,
+    projectId,
+    repoPath,
+    status,
+    limit,
+    orderBy,
+  };
 }
 
 export function normalizeSearchMemoriesInput(input: SearchMemoriesInput): NormalizedSearchMemoriesInput {

@@ -15,6 +15,23 @@ This changelog follows the Keep a Changelog format.
 ### Changed
 - Renamed the GitHub/local repository to `pi-ext-memory`; the package/runtime identity remains `pi-memory`.
 
+## [1.3.0] - 2026-05-09
+
+### Added
+- Added Handoff V1: `kind: handoff`, `memory_handoff_save`, `/memory-handoff`, and deterministic turn-start preload of the latest matching active handoff before normal retrieval.
+- Added session-id filtering to `memory_list` so handoff save/update and retrieval can isolate concurrent Pi instances safely.
+
+### Changed
+- `memory_save` now refuses direct `kind: handoff` writes and directs agents to `memory_handoff_save`, preserving one active handoff per session.
+
+## [1.2.0] - 2026-05-04
+
+### Added
+- Added `memory_list`, a query-free structured listing tool/API for filtering memories by kind, scope, tags, project, repo, status, limit, and ordering; active memories are the default so active todos can be listed without full-text search terms.
+
+### Changed
+- Clarified `memory_search` as content search and updated status/version metadata for v1.2.0.
+
 ## [1.1.2] - 2026-04-29
 
 ### Changed

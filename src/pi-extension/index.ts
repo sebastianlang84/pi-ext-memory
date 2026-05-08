@@ -5,6 +5,7 @@ import { resolveMemoryDbPath } from "./config.ts";
 import {
   buildTurnMemoryMessage,
   deriveMemoryTurnContext,
+  findLatestHandoffForTurn,
   retrieveMemoriesForTurn,
 } from "./retrieval.ts";
 import { registerMemoryCommands } from "./commands.ts";
@@ -18,7 +19,7 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
     if (!ctx.hasUI) return;
     ctx.ui.setStatus(
       "pi-memory",
-      "pi-memory v1.1.2 ready",
+      "pi-memory v1.3.0 ready",
     );
   });
 
@@ -27,8 +28,9 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
     store = activeStore;
 
     const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+    const latestHandoff = findLatestHandoffForTurn(activeStore, turnContext);
     const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, event.prompt, turnContext);
-    const message = buildTurnMemoryMessage(event.prompt, results, turnContext, activeStore.dbPath, searchPlan);
+    const message = buildTurnMemoryMessage(event.prompt, results, turnContext, activeStore.dbPath, searchPlan, latestHandoff);
 
     if (!message) {
       return;
