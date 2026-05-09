@@ -12,7 +12,10 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-05-09
+
 ### Changed
+- Improved the README for faster human overview, tool discovery, install/upgrade, and configuration guidance.
 - Renamed the GitHub/local repository to `pi-ext-memory`; the package/runtime identity remains `pi-memory`.
 
 ## [1.3.1] - 2026-05-09

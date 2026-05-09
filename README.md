@@ -1,99 +1,73 @@
----
-role: Project guide
-contains: What the repo is, why it exists, navigation, setup expectations, and current direction
-not-contains: Detailed decision history, durable agent memory, or active task tracking
-write-when: Project orientation, setup, usage, or repo structure changes
----
-
 # pi-memory
 
-A lightweight local memory system for coding agents.
+Local, SQLite-backed memory for Pi coding agents. It stores structured facts, decisions, preferences, todos, and handoffs, then retrieves relevant context at the start of a turn so agents do not have to rely on chat history.
 
-Navigation: `AGENTS.md` (rules and routing), `MEMORY.md` (current state), `TODO.md` (active work), `docs/prd-lightweight-local-memory-system.md` (product direction), `docs/plans/pi-extension-v1.md` (working Pi extension plan).
+## What it can do
 
-## Why this repo exists
-- Build a super-light local memory layer for coding agents.
-- Prioritize local persistence, portability, and low operational overhead.
-- Support structured memory objects plus hybrid retrieval instead of raw chat archival.
-- Start with Pi integration and keep future MCP/OpenAPI exposure possible.
+- Save durable structured memories with kind, scope, tags, importance, and confidence.
+- Search memories with hybrid lexical + semantic retrieval.
+- List memories by structured filters without a search query.
+- Update, link, and archive memories instead of duplicating or deleting context.
+- Maintain one active structured handoff per Pi session.
+- Preload the latest relevant handoff before normal memory retrieval.
+- Store data locally in SQLite, by default at `~/.pi/agent/pi-memory.sqlite`.
 
-## Current V1 direction
-- Local-first, single-user architecture.
-- SQLite as the default storage layer.
-- Hybrid retrieval with lexical and semantic search.
-- German and English retrieval support.
-- Pi-first integration via a Pi extension with a thin local core boundary.
+## Tools
 
-## Repo structure
-- `AGENTS.md` - normative agent workflow and routing.
-- `MEMORY.md` - stable current truth for the next session.
-- `TODO.md` - active backlog only.
-- `CHANGELOG.md` - user/operator-visible changes.
-- `package.json` - Pi package manifest plus local test/smoke scripts.
-- `src/pi-extension/index.ts` - packaged Pi extension entry point referenced by the `pi` manifest.
-- `src/core/` - thin local core boundary, including SQLite store initialization, schema migrations, validated memory persistence, query-free structured listing, patch updates, memory links, archive semantics, hybrid lexical/vector retrieval with application-layer ranking and dedupe, and embedding generation/storage behind a narrow adapter.
-- `src/pi-extension/` - Pi-facing extension layer, including the `before_agent_start` retrieval hook with deterministic latest-handoff preload, explicit memory tools, compact/manual retrieval helpers, handoff/review/session-summary commands, memory trigger guidance, and global DB path resolution.
-- `test/core/` - core integration tests.
-- `test/pi-extension/` - extension-focused tests for context mapping and compact turn injection.
-- `docs/` - PRD, ADRs, plans, runbooks, policies, audits, and archive material.
-- `.agents/skills/` - optional repo-local skills.
+| Tool | Use it for |
+| --- | --- |
+| `memory_search` | Search memory text with optional kind/scope/tag/project/repo filters. |
+| `memory_list` | List known structured memories, especially active todos or handoffs, without full-text search. |
+| `memory_save` | Create a durable fact, decision, preference, todo, episode, or artifact reference. |
+| `memory_handoff_save` | Create or update the active handoff for the current Pi session. |
+| `memory_update` | Correct or refine an existing memory. |
+| `memory_link` | Link related memories with relations such as `related_to`, `supersedes`, or `blocks`. |
+| `memory_archive` | Archive stale or completed memories so they stop influencing active retrieval. |
 
-## Getting started
-1. Read `MEMORY.md` for the current state.
-2. Read `TODO.md` for active priorities.
-3. Read `docs/prd-lightweight-local-memory-system.md` for the V1 product direction.
-4. Read `docs/plans/pi-extension-v1.md` for the current proposed Pi integration surface.
-5. Add ADRs, plans, or implementation docs under `docs/` as decisions harden.
+## Commands
 
-## Install / upgrade / smoke
-- Install as a normal Pi package from this repo: `pi install /absolute/path/to/pi-ext-memory` or `pi install .`.
-- If your local clone is behind the repo, update the clone first, then update Pi's installed package:
-  ```bash
-  cd /absolute/path/to/pi-ext-memory
-  git pull
-  pi update .
-  ```
-- If `pi update .` is not available for the install source, reinstall the local path with `pi install .` after pulling changes.
-- Smoke-test the packaged manifest path with `npm run smoke:package-status`.
-- Smoke-test the globally installed package with `npm run smoke:memory-status`.
+| Command | Use it for |
+| --- | --- |
+| `/memory-status` | Show pi-memory bootstrap/status information. |
+| `/memory-search <query>` | Run a manual staged memory search. |
+| `/memory-review` | Show relevant memories and suggested memory actions without saving anything. |
+| `/memory-handoff` | Show the latest relevant active handoff. |
+| `/memory-handoff archive` | Archive the active handoff for the current session. |
+| `/memory-session-save <summary>` | Save a compact summary for the current Pi session. |
 
-## Embedding configuration
-- Default profile now targets a local BGE-M3 command adapter first via `PI_MEMORY_BGE_M3_COMMAND`.
-- The command receives JSON on stdin as `{"input": {"title", "summary", "body", "tags"}}` and must print JSON containing one 1024-dimension embedding vector.
-- Accepted stdout shapes: a raw vector array, `{"embedding": [...]}`, `{"embeddings": [...]}`, or OpenAI-style `{"data":[{"embedding":[...]}]}`.
-- The command has a default synchronous timeout of 15s; override with `PI_MEMORY_BGE_M3_TIMEOUT_MS` if local hardware needs a different bound.
-- If `PI_MEMORY_BGE_M3_COMMAND` is unset, the default path falls back to the built-in deterministic `builtin-hash-384-v1`; the low-footprint profile remains `builtin-hash-64-v1`.
+## Install
 
-## Migration from old repo-local DBs
-- Older dev setups may still have `.pi/pi-memory.sqlite` inside a repo.
-- The extension now defaults to the global store at `~/.pi/agent/pi-memory.sqlite`.
-- To keep old data, stop Pi first, then copy the DB with a safe SQLite backup/copy flow; if copying files directly, include `.pi/pi-memory.sqlite`, `.pi/pi-memory.sqlite-wal`, and `.pi/pi-memory.sqlite-shm` when present.
-- Place the resulting DB at `~/.pi/agent/pi-memory.sqlite` before first packaged use, or point Pi at the old file explicitly with `PI_MEMORY_DB_PATH=/path/to/.pi/pi-memory.sqlite` during migration.
+From a local clone:
 
-## Current dev checks
-- Run `npm test` to verify fresh-DB initialization, validated memory creation, query-free structured memory listing, handoff save/preload behavior, patch updates, memory linking, archive semantics, lexical retrieval, hybrid retrieval/ranking, session-scoped filtering, explicit session-summary persistence, save -> search -> review -> session-summary coverage, embedding persistence, command-adapter fallback/storage, adapter injection, persisted readback, global DB path resolution, and compact retrieval-hook injection behavior.
-- Run `npm run smoke:package-status` to load the package via its Pi manifest and invoke `/memory-status` in print mode.
-- Run `npm run smoke:memory-status` to load the globally installed extension and invoke `/memory-status` in print mode.
-- Run `pi -e . -p "/memory-search <query>"` to smoke-test the packaged manual staged retrieval command.
-- Run `pi -e . -p "/memory-review"` to inspect the read-only review helper in the current session context.
-- Run `pi -e . -p "/memory-session-save <summary>"` to persist an explicit compact summary into the current session row.
-- Use `memory_handoff_save` before context reset, compaction, wrap-up, or agent transfer; run `pi -e . -p "/memory-handoff"` to show the latest matching active handoff.
+```bash
+cd /absolute/path/to/pi-ext-memory
+pi install .
+```
 
-## Status
-- Repo bootstrap complete.
-- Product direction documented.
-- v0.1 extension/core skeleton implemented.
-- v0.2 SQLite store initialization and schema v1 migration are implemented.
-- v0.3 validated `memory_save` persistence is implemented in the local core and exposed through the Pi extension.
-- v0.4 lexical retrieval is implemented via SQLite FTS5 with metadata filters and exposed through the Pi extension as `memory_search`.
-- v0.5 embedding generation/storage is implemented behind a narrow adapter with deterministic built-in default and low-footprint profiles.
-- v0.6 hybrid retrieval is implemented by merging lexical FTS and vector candidates, reranking them in application code, and suppressing near-duplicate matches.
-- v0.7 turn-start retrieval is implemented via a `before_agent_start` hook that derives session/project/repo context, injects a compact top-N memory block, and auto-enriches saved scoped memories with runtime context.
-- v0.8 adds `memory_update`, `memory_link`, `memory_archive`, `/memory-search`, archive-safe retrieval filtering, and tests covering updates, relations, and archive semantics.
-- v1.1.0 is closed: pi-memory now ships the local-first Pi extension surface, SQLite-backed memory store, hybrid retrieval, turn-start context injection, manual review/session-summary commands, package manifest, and local BGE-M3 command adapter with deterministic fallback. The v1.1.0 hardening pass removes unscoped staged retrieval fallback, reuses one query embedding across staged searches, fast-clears `/memory-review`, strengthens embedding config/timeout handling, and splits core/Pi-extension modules for maintainability. The lightweight fallback remains shipped while real-machine BGE-M3 latency/quality observations accumulate.
-- v1.1.2 documents the clone-behind upgrade flow: `git pull`, then `pi update .` or reinstall with `pi install .`.
-- v1.2.0 adds `memory_list` for query-free structured listing/filtering, so agents can list active todos without relying on full-text search terms.
-- v1.3.0 adds Handoff V1: `memory_handoff_save`, `/memory-handoff`, one active handoff per session, session-safe updates for concurrent Pi instances, and deterministic latest-handoff preload before normal turn retrieval.
+Upgrade an existing local install:
+
+```bash
+cd /absolute/path/to/pi-ext-memory
+git pull
+pi update .
+```
+
+If `pi update .` is not available for your install source, run `pi install .` again after pulling.
+
+## Configuration
+
+- `PI_MEMORY_DB_PATH` overrides the SQLite database path.
+- `PI_MEMORY_BGE_M3_COMMAND` enables a local BGE-M3 embedding command adapter.
+- Without a BGE-M3 command, pi-memory uses a deterministic built-in embedding fallback.
+
+## Quick checks
+
+```bash
+npm test
+npm run smoke:package-status
+npm run smoke:memory-status
+```
 
 ## License
-See `LICENSE`.
+
+MIT. See `LICENSE`.

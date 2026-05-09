@@ -12,4 +12,4 @@ Rule: Completed items are removed, not checked off.
 
 ## Versioned delivery plan
 
-No active release tasks. v1.3.0 is closed; add new tasks here only when fresh work is accepted.
+No active release tasks; add new tasks here only when fresh work is accepted.
