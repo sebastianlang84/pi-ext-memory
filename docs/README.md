@@ -1,10 +1,3 @@
----
-role: Catalog of documentation files under `docs/`
-contains: Active documentation sets and their boundaries
-not-contains: Root policy text, project state, or agent memory
-write-when: The structure or scope of `docs/` changes
----
-
 # docs/README
 
 ## Active Sets
@@ -25,4 +18,3 @@ write-when: The structure or scope of `docs/` changes
 - Root living docs stay at repo root.
 - Durable decisions belong in `docs/adr/`.
 - Work breakdowns belong in `docs/plans/`.
-- Repo-local skills, if added, belong in `.agents/skills/`.
