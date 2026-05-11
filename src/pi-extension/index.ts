@@ -17,7 +17,7 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     if (!ctx.hasUI) return;
-    ctx.ui.setStatus("pi-memory", "memory ✓");
+    ctx.ui.setStatus("pi-memory", "Memory ✓");
   });
 
   pi.on("before_agent_start", async (event, ctx) => {
@@ -48,7 +48,7 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
 
       return { message };
     } catch (error) {
-      if (ctx.hasUI) ctx.ui.setStatus("pi-memory", "memory ✗");
+      if (ctx.hasUI) ctx.ui.setStatus("pi-memory", "Memory ✗");
       throw error;
     }
   });
