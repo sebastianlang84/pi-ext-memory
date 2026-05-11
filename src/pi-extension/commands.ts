@@ -146,7 +146,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
       }
 
       if (action !== "show") {
-        writeCommandOutput("Usage: /memory-handoff [show|archive]\nUse memory_handoff_save to create or update a handoff.", ctx);
+        writeCommandOutput("Usage: /memory-handoff [show|archive]\nUse memory_save_handoff to create or update a handoff.", ctx);
         return;
       }
 
@@ -221,7 +221,7 @@ function formatMemoryHandoff(memory: MemoryRecord | undefined, dbPath: string, i
   if (!memory) {
     return [
       "No active handoff found for this session/repo/project.",
-      "Use memory_handoff_save before context reset, compaction, wrap-up, or agent transfer.",
+      "Use memory_save_handoff before context reset, compaction, wrap-up, or agent transfer.",
       `db_path: ${dbPath}`,
     ].join("\n");
   }

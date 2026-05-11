@@ -16,7 +16,7 @@ const status: MemoryCoreStatus = {
   activeEmbeddingModel: "builtin-hash-384-v1",
   embeddingDimensions: 384,
   availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save"],
-  availableTools: ["memory_search", "memory_list", "memory_save", "memory_handoff_save", "memory_update", "memory_link", "memory_archive"],
+  availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_handoff", "memory_update", "memory_link", "memory_archive"],
   nextStep: "V1 release is complete; use memory_list for structured listing and monitor local embedding quality in normal use.",
 };
 
@@ -37,7 +37,7 @@ test("getNextStatusWidgetLines clears the status widget when currently visible",
 test("session_start status string stays short", () => {
   const indexSource = readFileSync(new URL("../../src/pi-extension/index.ts", import.meta.url), "utf8");
 
-  assert.match(indexSource, /memory ok/);
-  assert.match(indexSource, /memory fehler/);
+  assert.match(indexSource, /memory ✓/);
+  assert.match(indexSource, /memory ✗/);
   assert.doesNotMatch(indexSource, /pi-memory v1\.3\.0 ready/);
 });

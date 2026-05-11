@@ -38,7 +38,7 @@ export function createMemoryCore(): MemoryCore {
         activeEmbeddingModel: embeddingStatus.activeModel,
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save"],
-        availableTools: ["memory_search", "memory_list", "memory_save", "memory_handoff_save", "memory_update", "memory_link", "memory_archive"],
+        availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_handoff", "memory_update", "memory_link", "memory_archive"],
         nextStep: "V1 release is complete; use memory_list for structured listing and monitor local embedding quality in normal use.",
       };
     },

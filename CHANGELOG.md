@@ -12,6 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-05-11
+
+### Changed
+- Renamed `memory_handoff_save` → `memory_save_handoff` to align with `memory_<verb>_<object>` naming convention.
+
 ## [1.3.3] - 2026-05-11
 
 ### Fixed

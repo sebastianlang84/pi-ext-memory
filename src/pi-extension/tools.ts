@@ -114,7 +114,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
 
       if (params.kind === "handoff") {
         return {
-          content: [{ type: "text", text: `Use memory_handoff_save for handoffs so the active session handoff is updated instead of duplicated.\ndb_path: ${activeStore.dbPath}` }],
+          content: [{ type: "text", text: `Use memory_save_handoff for handoffs so the active session handoff is updated instead of duplicated.\ndb_path: ${activeStore.dbPath}` }],
           details: { dbPath: activeStore.dbPath },
         };
       }
@@ -136,7 +136,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   });
 
   pi.registerTool({
-    name: "memory_handoff_save",
+    name: "memory_save_handoff",
     label: "Memory Handoff Save",
     description: "Create or update the active structured handoff for the current Pi session.",
     promptSnippet:
@@ -238,7 +238,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       const existingMemory = activeStore.getMemory(params.id);
       if (existingMemory?.kind === "handoff") {
         return {
-          content: [{ type: "text", text: `Use memory_handoff_save or /memory-handoff archive for handoff lifecycle changes.\ndb_path: ${activeStore.dbPath}` }],
+          content: [{ type: "text", text: `Use memory_save_handoff or /memory-handoff archive for handoff lifecycle changes.\ndb_path: ${activeStore.dbPath}` }],
           details: { dbPath: activeStore.dbPath, memory: existingMemory },
         };
       }
