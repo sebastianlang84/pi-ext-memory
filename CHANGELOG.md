@@ -10,7 +10,13 @@ write-when: A user/operator-relevant repo change is introduced
 All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
 
-## [Unreleased]
+## [2.0.1] - 2026-05-11
+
+### Fixed
+- `memory_update`: `scope`, `repoPath`, and `projectId` were silently ignored — they are now patchable via the tool and core `UpdateMemoryInput`.
+- `memory_update`: missing not-found guard now returns a clean error instead of a thrown exception when the memory id does not exist.
+- `memory_update`: `priority` and `nextAction` parameters added for `kind=todo` memories; passing them on non-todo memories returns a clear error.
+- `memory_update` (todo): updating `priority` now rebuilds the summary prefix (`[P0]`/`[P1]`/`[P2]`) and replaces the priority tag consistently, including when an explicit `summary` is also provided.
 
 ## [2.0.0] - 2026-05-11
 

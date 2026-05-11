@@ -34,6 +34,9 @@ export interface CreateMemoryInput {
 
 export interface UpdateMemoryInput {
   id: string;
+  scope?: MemoryScope;
+  repoPath?: string;
+  projectId?: string;
   title?: string;
   summary?: string;
   body?: string | null;
@@ -107,6 +110,9 @@ export interface NormalizedSearchMemoriesInput {
 
 export interface NormalizedUpdateMemoryInput {
   id: string;
+  scope?: MemoryScope;
+  repoPath?: string;
+  projectId?: string;
   title?: string;
   summary?: string;
   body?: string | null;
@@ -244,6 +250,17 @@ export function normalizeUpdateMemoryInput(input: UpdateMemoryInput): Normalized
 
   let changedFieldCount = 0;
 
+  const scope =
+    input.scope === undefined ? undefined : normalizeEnum("scope", input.scope, MEMORY_SCOPES, issues, () => changedFieldCount++);
+  const repoPath =
+    input.repoPath === undefined
+      ? undefined
+      : (() => { changedFieldCount++; return normalizeOptionalText(input.repoPath); })();
+  const projectId =
+    input.projectId === undefined
+      ? undefined
+      : (() => { changedFieldCount++; return normalizeOptionalText(input.projectId); })();
+
   const title =
     input.title === undefined ? undefined : normalizeRequiredText("title", input.title, issues, 3, () => changedFieldCount++);
   const summary =
@@ -285,6 +302,9 @@ export function normalizeUpdateMemoryInput(input: UpdateMemoryInput): Normalized
 
   return {
     id,
+    scope,
+    repoPath,
+    projectId,
     title,
     summary,
     body,

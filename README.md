@@ -34,7 +34,7 @@ memory_stats                 — per-kind counts, cap utilisation, and warnings 
 memory_save                  — save facts, decisions, notes, progress snapshots (kind=progress_snapshot)
 memory_save_todo             — save actionable open tasks (priority, status, scope)
 memory_save_handoff          — save/refresh resumable agent handoff state
-memory_update                — patch an existing memory by id
+memory_update                — patch an existing memory by id (scope, repoPath, projectId, title, summary, body, tags, status, pinned, importance, confidence, expiresAt; priority+nextAction for kind=todo)
 memory_archive               — archive obsolete memories
 memory_audit                 — report stale todos and old handoffs (report-only, no auto-archive)
 memory_link                  — link related memories (optional)

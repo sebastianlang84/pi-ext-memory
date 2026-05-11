@@ -101,6 +101,25 @@ test("linkMemories persists simple V1 relations idempotently", () => {
   }
 });
 
+test("updateMemory patches scope", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+  try {
+    const memory = store.createMemory({
+      kind: "fact",
+      scope: "session",
+      title: "Temporary session fact",
+      summary: "This fact was captured during a session and should be promoted to project scope.",
+    });
+    assert.equal(memory.scope, "session");
+
+    const updated = store.updateMemory({ id: memory.id, scope: "project" });
+    assert.equal(updated.scope, "project");
+  } finally {
+    store.close();
+  }
+});
+
 test("archiveMemory keeps the record but removes it from active search results", () => {
   const dbPath = createTempDbPath();
   const store = initializeMemoryStore({ dbPath });

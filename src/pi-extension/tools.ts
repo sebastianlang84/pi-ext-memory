@@ -285,19 +285,64 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       ),
       status: Type.Optional(StringEnum(MEMORY_STATUSES, { description: "Memory lifecycle status" })),
       pinned: Type.Optional(Type.Boolean({ description: "Whether the memory should stay pinned" })),
+      scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Updated scope — use with caution, changes retrieval context" })),
+      repoPath: Type.Optional(Type.String({ description: "Updated repoPath" })),
+      projectId: Type.Optional(Type.String({ description: "Updated projectId" })),
+      priority: Type.Optional(StringEnum(["P0", "P1", "P2"] as const, { description: "Todo priority — only applies when kind=todo" })),
+      nextAction: Type.Optional(Type.String({ description: "Next concrete action — only applies when kind=todo" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
 
       const existingMemory = activeStore.getMemory(params.id);
-      if (existingMemory?.kind === "handoff") {
+      if (!existingMemory) {
+        return {
+          content: [{ type: "text", text: `Memory ${params.id} was not found.\ndb_path: ${activeStore.dbPath}` }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
+      if (existingMemory.kind === "handoff") {
         return {
           content: [{ type: "text", text: `Use memory_save_handoff or /memory-handoff archive for handoff lifecycle changes.\ndb_path: ${activeStore.dbPath}` }],
           details: { dbPath: activeStore.dbPath, memory: existingMemory },
         };
       }
 
-      const memory = activeStore.updateMemory(params);
+      // Validate todo-specific fields
+      if ((params.priority !== undefined || params.nextAction !== undefined) && existingMemory.kind !== "todo") {
+        return {
+          content: [{ type: "text", text: `priority and nextAction are only valid for kind=todo memories.\ndb_path: ${activeStore.dbPath}` }],
+          details: { dbPath: activeStore.dbPath, memory: existingMemory },
+        };
+      }
+
+      // Build updated params for todo-specific fields
+      let updateParams = { ...params } as typeof params & { summary?: string; tags?: string[] };
+      if (existingMemory.kind === "todo" && (params.priority !== undefined || params.nextAction !== undefined)) {
+        const baseSummary = existingMemory.summary
+          .replace(/^\[P[012]\]\s*/, "")
+          .replace(/\s*→\s*.+$/, "");
+        const currentNextAction = existingMemory.summary.match(/→\s*(.+)$/)?.[1];
+        const newPriority = params.priority ?? (existingMemory.tags.find((t) => t === "P0" || t === "P1" || t === "P2") as "P0" | "P1" | "P2" | undefined);
+        const newNextAction = params.nextAction ?? currentNextAction;
+        const updatedSummary = buildTodoSummary({ title: existingMemory.title, priority: newPriority, nextAction: newNextAction, description: baseSummary });
+
+        // Replace priority tag
+        const tagsWithoutPriority = (params.tags ?? existingMemory.tags).filter((t) => t !== "P0" && t !== "P1" && t !== "P2");
+        const updatedTags = newPriority ? [...tagsWithoutPriority, newPriority] : tagsWithoutPriority;
+
+        let effectiveSummary: string;
+        if (updateParams.summary !== undefined) {
+          // Caller provided explicit summary — ensure it has the correct priority prefix
+          const strippedCallerSummary = updateParams.summary.replace(/^\[P[012]\]\s*/, "");
+          effectiveSummary = newPriority ? `[${newPriority}] ${strippedCallerSummary}` : strippedCallerSummary;
+        } else {
+          effectiveSummary = updatedSummary;
+        }
+        updateParams = { ...updateParams, summary: effectiveSummary, tags: updatedTags };
+      }
+
+      const memory = activeStore.updateMemory(updateParams);
 
       return {
         content: [{ type: "text", text: formatMemoryUpdated(memory, activeStore) }],

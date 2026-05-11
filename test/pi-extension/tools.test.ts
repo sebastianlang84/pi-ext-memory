@@ -136,6 +136,33 @@ async function createTempPiToolContext() {
   return { cwd, projectId, sessionId: "session-123" };
 }
 
+function createMinimalStore(overrides: Partial<{
+  getMemory: (id: string) => MemoryRecord | null;
+  updateMemory: (input: UpdateMemoryInput) => MemoryRecord;
+}> = {}) {
+  const base = createMemory();
+  return {
+    dbPath: "/tmp/pi-memory-test.sqlite",
+    embeddingModel: "builtin-hash-384-v1",
+    embeddingDimensions: 384,
+    getMemory(_id: string): MemoryRecord | null { return null; },
+    updateMemory(_input: UpdateMemoryInput): MemoryRecord { return base; },
+    searchMemories(_input: SearchMemoriesInput) { return []; },
+    listMemories(_input: ListMemoriesInput) { return []; },
+    listForTool(_filter: Partial<NormalizedListMemoriesInput> & { offset?: number }): ListForToolResult {
+      return { items: [], totalCount: 0, hasMore: false, nextOffset: null };
+    },
+    listAllInternal() { return []; },
+    count() { return 0; },
+    createMemory(_input: CreateMemoryInput) { return base; },
+    linkMemories(_input: LinkMemoriesInput): MemoryLinkRecord {
+      return { id: 1, fromId: "a", toId: "b", relation: "related_to", createdAt: "" };
+    },
+    archiveMemory(_input: ArchiveMemoryInput) { return base; },
+    ...overrides,
+  };
+}
+
 test("registerMemoryTools registers expected tools and wires their executors", async (t) => {
   const tools: RegisteredTool[] = [];
   const requestedCwds: string[] = [];
@@ -203,6 +230,8 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     },
     getMemory(id: string) {
       calls.get.push(id);
+      // Return a valid non-handoff memory for memory_update; null for archive (id differs)
+      if (id === "memory-saved") return savedMemory;
       return null;
     },
     updateMemory(input: UpdateMemoryInput) {
@@ -377,4 +406,142 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.deepEqual(updateOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
   assert.deepEqual(linkOutput.details, { dbPath: store.dbPath, link });
   assert.deepEqual(archiveOutput.details, { dbPath: store.dbPath, memory: archivedMemory });
+});
+
+test("memory_update returns not-found for unknown id", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const store = createMinimalStore({ getMemory: (_id) => null });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools(
+    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
+    () => store as never,
+  );
+
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  const output = await toolByName(tools, "memory_update").execute(
+    "call-update",
+    { id: "unknown-id", title: "Something" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.match(output.content[0].text, /was not found/);
+});
+
+test("memory_update rejects priority/nextAction on non-todo", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const factMemory = createMemory({ kind: "fact", id: "fact-1" });
+  const store = createMinimalStore({ getMemory: (_id) => factMemory });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools(
+    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
+    () => store as never,
+  );
+
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  const output = await toolByName(tools, "memory_update").execute(
+    "call-update",
+    { id: "fact-1", priority: "P1" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.match(output.content[0].text, /only valid for kind=todo/);
+});
+
+test("memory_update updates todo priority and rebuilds summary", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const todoMemory = createMemory({
+    kind: "todo",
+    id: "todo-1",
+    summary: "[P2] Fix the thing \u2192 old action",
+    tags: ["todo", "P2"],
+  });
+  const capturedUpdates: UpdateMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory: (_id) => todoMemory,
+    updateMemory: (input) => {
+      capturedUpdates.push(input);
+      return { ...todoMemory, ...input, tags: (input.tags ?? todoMemory.tags) as string[] };
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools(
+    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
+    () => store as never,
+  );
+
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  await toolByName(tools, "memory_update").execute(
+    "call-update",
+    { id: "todo-1", priority: "P1" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.equal(capturedUpdates.length, 1);
+  const update = capturedUpdates[0]!;
+  assert.ok(update.summary?.startsWith("[P1]"), `expected summary to start with [P1], got: ${update.summary}`);
+  assert.ok(update.tags?.includes("P1"), `expected tags to include P1, got: ${JSON.stringify(update.tags)}`);
+  assert.ok(!update.tags?.includes("P2"), `expected tags not to include P2, got: ${JSON.stringify(update.tags)}`);
+});
+
+test("memory_update with explicit summary + priority keeps prefix consistent", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const todoMemory = createMemory({
+    kind: "todo",
+    id: "todo-2",
+    summary: "[P2] Fix the thing \u2192 old action",
+    tags: ["todo", "P2"],
+  });
+  const capturedUpdates: UpdateMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory: (_id) => todoMemory,
+    updateMemory: (input) => {
+      capturedUpdates.push(input);
+      return { ...todoMemory, ...input, tags: (input.tags ?? todoMemory.tags) as string[] };
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools(
+    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
+    () => store as never,
+  );
+
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  await toolByName(tools, "memory_update").execute(
+    "call-update",
+    { id: "todo-2", priority: "P0", summary: "Completely new summary" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.equal(capturedUpdates.length, 1);
+  const update = capturedUpdates[0]!;
+  assert.ok(update.summary?.startsWith("[P0]"), `expected summary to start with [P0], got: ${update.summary}`);
+  assert.ok(update.tags?.includes("P0"), `expected tags to include P0, got: ${JSON.stringify(update.tags)}`);
 });
