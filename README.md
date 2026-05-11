@@ -26,20 +26,33 @@ Check extension status:
 Common tools and commands:
 
 ```text
-memory_search          — search durable memory (semantic + lexical)
-memory_list            — filter memories by kind, scope, tags, status
-memory_save            — save facts, preferences, decisions, notes, progress snapshots (kind=progress_snapshot)
-memory_save_todo       — save actionable open tasks (priority, status, scope)
-memory_save_handoff    — save/refresh resumable agent handoff state
-memory_update          — patch an existing memory by id
-memory_archive         — archive obsolete memories
-memory_audit           — report stale todos and old handoffs (report-only, no auto-archive)
-memory_link            — link related memories (optional, V2)
-/memory-status         — show extension status and config
-/memory-search <query> — manual memory search
-/memory-handoff        — show or archive the active session handoff
-/memory-audit          — same as memory_audit tool, output to terminal
+memory_search                — search durable memory (semantic + lexical)
+memory_list                  — filter memories by kind+scope (required), paginated; returns total_count, has_more, next_offset
+memory_list_active_todos     — list active todos for a scope (bounded by caps, no pagination)
+memory_list_active_handoffs  — list active handoffs for a scope (bounded by caps, no pagination)
+memory_stats                 — per-kind counts, cap utilisation, and warnings for a scope
+memory_save                  — save facts, decisions, notes, progress snapshots (kind=progress_snapshot)
+memory_save_todo             — save actionable open tasks (priority, status, scope)
+memory_save_handoff          — save/refresh resumable agent handoff state
+memory_update                — patch an existing memory by id
+memory_archive               — archive obsolete memories
+memory_audit                 — report stale todos and old handoffs (report-only, no auto-archive)
+memory_link                  — link related memories (optional)
+/memory-status               — show extension status and config
+/memory-search <query>       — manual memory search
+/memory-handoff              — show or archive the active session handoff
+/memory-audit                — same as memory_audit tool, output to terminal
 ```
+
+### Active caps
+
+| Scope | Todo hard cap | Handoff hard cap | Todo stale after | Handoff expires after |
+|---|---|---|---|---|
+| repo / session | 50 | 10 | 30 days | 14 days |
+| project | 50 | 10 | 30 days | 14 days |
+| global | 20 | 5 | 30 days | 14 days |
+
+Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup suggestions. Archive or complete existing todos/handoffs first.
 
 Optional configuration:
 

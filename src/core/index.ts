@@ -52,9 +52,17 @@ export type {
 export type { MemoryCore, MemoryCoreStatus } from "./memory-core.ts";
 export type {
   InitializeMemoryStoreInput,
+  ListForToolResult,
   MemoryStore,
   MemoryStoreStatus,
   SaveSessionSummaryInput,
   SearchMemoriesOptions,
   SessionRecord,
 } from "./store.ts";
+export {
+  MEMORY_POLICY,
+  computeDefaultExpiresAt,
+  computeDefaultStaleAfter,
+  getCapForKindScope,
+} from "./policy.ts";
+export type { CapPolicy } from "./policy.ts";

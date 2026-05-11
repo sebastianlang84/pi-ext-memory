@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { initializeMemoryStore } from "../../src/core/index.ts";
 
-test("initializeMemoryStore creates a fresh database and applies schema v5", () => {
+test("initializeMemoryStore creates a fresh database and applies schema v6", () => {
   const tempRoot = mkdtempSync(join(tmpdir(), "pi-memory-store-"));
   const dbPath = join(tempRoot, "memory.sqlite");
 
@@ -16,8 +16,8 @@ test("initializeMemoryStore creates a fresh database and applies schema v5", () 
 
   assert.equal(existsSync(dbPath), true);
   assert.equal(store.dbPath, dbPath);
-  assert.equal(store.schemaVersion, 5);
-  assert.equal(store.latestSchemaVersion, 5);
+  assert.equal(store.schemaVersion, 6);
+  assert.equal(store.latestSchemaVersion, 6);
   assert.equal(store.embeddingModel, "builtin-hash-384-v1");
   assert.equal(store.fallbackEmbeddingModel, "builtin-hash-384-v1");
   assert.equal(store.embeddingDimensions, 384);
@@ -27,7 +27,7 @@ test("initializeMemoryStore creates a fresh database and applies schema v5", () 
 
   try {
     const schemaVersion = db.prepare("PRAGMA user_version;").get() as { user_version: number };
-    assert.equal(schemaVersion.user_version, 5);
+    assert.equal(schemaVersion.user_version, 6);
 
     const coreTables = db
       .prepare(
@@ -86,6 +86,7 @@ test("initializeMemoryStore creates a fresh database and applies schema v5", () 
         "last_accessed_at",
         "expires_at",
         "metadata_json",
+        "stale_after",
       ],
     );
 
@@ -109,8 +110,8 @@ test("initializeMemoryStore is idempotent for an already-migrated database", () 
   const secondStore = initializeMemoryStore({ dbPath, preferLowFootprintEmbeddings: true });
 
   try {
-    assert.equal(secondStore.schemaVersion, 5);
-    assert.equal(secondStore.latestSchemaVersion, 5);
+    assert.equal(secondStore.schemaVersion, 6);
+    assert.equal(secondStore.latestSchemaVersion, 6);
     assert.equal(secondStore.embeddingModel, "builtin-hash-64-v1");
     assert.equal(secondStore.fallbackEmbeddingModel, "builtin-hash-64-v1");
     assert.equal(secondStore.embeddingDimensions, 64);

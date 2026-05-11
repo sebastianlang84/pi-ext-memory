@@ -20,6 +20,7 @@ import {
   type NormalizedListMemoriesInput,
   type SearchMemoriesInput,
   type UpdateMemoryInput,
+  MemoryValidationError,
   normalizeArchiveMemoryInput,
   normalizeCreateMemoryInput,
   normalizeLinkMemoriesInput,
@@ -27,6 +28,7 @@ import {
   normalizeSearchMemoriesInput,
   normalizeUpdateMemoryInput,
 } from "./memories.ts";
+import { computeDefaultExpiresAt, computeDefaultStaleAfter, getCapForKindScope } from "./policy.ts";
 import {
   type MemoryEmbeddingRow,
   type MemoryRow,
@@ -78,12 +80,22 @@ export interface SearchMemoriesOptions {
   queryEmbedding?: GeneratedMemoryEmbedding;
 }
 
+export interface ListForToolResult {
+  items: MemoryRecord[];
+  totalCount: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+}
+
 export interface MemoryStore extends MemoryStoreStatus {
   createMemory(input: CreateMemoryInput): MemoryRecord;
   updateMemory(input: UpdateMemoryInput): MemoryRecord;
   archiveMemory(input: ArchiveMemoryInput): MemoryRecord;
   getMemory(id: string): MemoryRecord | null;
   listMemories(input?: ListMemoriesInput): MemoryRecord[];
+  listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[];
+  listForTool(filter: Partial<NormalizedListMemoriesInput> & { offset?: number }): ListForToolResult;
+  count(filter?: Pick<NormalizedListMemoriesInput, "kind" | "scope" | "status" | "repoPath" | "projectId" | "sessionId">): number;
   getMemoryEmbedding(id: string): MemoryEmbeddingRecord | null;
   getSession(sessionId: string): SessionRecord | null;
   saveSessionSummary(input: SaveSessionSummaryInput): SessionRecord;
@@ -133,6 +145,38 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
         assertStoreOpen(isClosed);
 
         const memory = normalizeCreateMemoryInput(input);
+
+        // Save pipeline: apply defaults for todo/handoff
+        if (memory.kind === "todo" && !memory.staleAfter) {
+          memory.staleAfter = computeDefaultStaleAfter(memory.scope);
+        }
+        if (memory.kind === "handoff" && !memory.expiresAt) {
+          memory.expiresAt = computeDefaultExpiresAt(memory.scope);
+        }
+
+        // Cap check for todo/handoff
+        const cap = getCapForKindScope(memory.kind, memory.scope);
+        if (cap) {
+          const activeCount = readMemoryCount(db, {
+            kind: [memory.kind],
+            scope: [memory.scope],
+            status: "active",
+            ...(memory.repoPath ? { repoPath: memory.repoPath } : {}),
+            ...(memory.projectId ? { projectId: memory.projectId } : {}),
+          });
+          if (activeCount >= cap.activeHardMax) {
+            throw new MemoryValidationError([
+              `active_${memory.kind}_cap_exceeded: ${activeCount} active ${memory.kind}s (hard cap: ${cap.activeHardMax}) for scope=${memory.scope}. Archive or complete existing ${memory.kind}s first.`,
+            ]);
+          }
+        }
+
+        // Exact duplicate check
+        const duplicate = findExactDuplicate(db, memory);
+        if (duplicate) {
+          return duplicate;
+        }
+
         const embedding = embeddingAdapter.generateEmbedding(createMemoryContentForEmbedding(memory));
         const timestamp = new Date().toISOString();
 
@@ -164,8 +208,9 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
               created_at,
               updated_at,
               expires_at,
+              stale_after,
               metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `).run(
             memory.id,
             memory.kind,
@@ -186,6 +231,7 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
             memory.createdAt,
             memory.updatedAt,
             memory.expiresAt ?? null,
+            memory.staleAfter ?? null,
             JSON.stringify(memory.metadata),
           );
 
@@ -226,6 +272,7 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
           pinned: patch.pinned ?? existingMemory.pinned,
           updatedAt: timestamp,
           expiresAt: patch.expiresAt === undefined ? existingMemory.expiresAt : (patch.expiresAt ?? undefined),
+          staleAfter: patch.staleAfter === undefined ? existingMemory.staleAfter : (patch.staleAfter ?? undefined),
         };
 
         const shouldRefreshEmbedding =
@@ -308,6 +355,60 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
 
         const normalizedInput = normalizeListMemoriesInput(input);
         return readMemoryList(db, normalizedInput);
+      },
+      listAllInternal(filter = {}) {
+        assertStoreOpen(isClosed);
+
+        return readMemoryList(db, {
+          kind: filter.kind,
+          scope: filter.scope,
+          tags: filter.tags ?? [],
+          sessionId: filter.sessionId,
+          projectId: filter.projectId,
+          repoPath: filter.repoPath,
+          status: filter.status ?? "active",
+          limit: 0, // 0 means uncapped
+          offset: 0,
+          orderBy: filter.orderBy ?? "updatedAt",
+        }, true);
+      },
+      listForTool(filter) {
+        assertStoreOpen(isClosed);
+
+        const limit = filter.limit ?? 20;
+        const offset = filter.offset ?? 0;
+
+        const normalizedFilter: NormalizedListMemoriesInput = {
+          kind: filter.kind,
+          scope: filter.scope,
+          tags: filter.tags ?? [],
+          sessionId: filter.sessionId,
+          projectId: filter.projectId,
+          repoPath: filter.repoPath,
+          status: filter.status ?? "active",
+          limit,
+          offset,
+          orderBy: filter.orderBy ?? "updatedAt",
+        };
+
+        const totalCount = readMemoryCount(db, normalizedFilter);
+        const items = readMemoryList(db, normalizedFilter);
+        const hasMore = offset + items.length < totalCount;
+        const nextOffset = hasMore ? offset + items.length : null;
+
+        return { items, totalCount, hasMore, nextOffset };
+      },
+      count(filter = {}) {
+        assertStoreOpen(isClosed);
+
+        return readMemoryCount(db, {
+          kind: filter.kind,
+          scope: filter.scope,
+          status: filter.status ?? "active",
+          repoPath: filter.repoPath,
+          projectId: filter.projectId,
+          sessionId: filter.sessionId,
+        });
       },
       getMemoryEmbedding(id) {
         assertStoreOpen(isClosed);
@@ -503,6 +604,7 @@ function readMemoryById(db: DatabaseSync, id: string): MemoryRecord | null {
         updated_at,
         last_accessed_at,
         expires_at,
+        stale_after,
         metadata_json
       FROM memories
       WHERE id = ?;`,
@@ -512,21 +614,52 @@ function readMemoryById(db: DatabaseSync, id: string): MemoryRecord | null {
   return row ? mapMemoryRow(row) : null;
 }
 
-function readMemoryList(db: DatabaseSync, input: NormalizedListMemoriesInput): MemoryRecord[] {
-  const whereClauses = ["status = ?"];
-  const queryParams: Array<number | string> = [input.status];
+const MEMORY_SELECT_COLUMNS = `
+  id,
+  kind,
+  scope,
+  session_id,
+  title,
+  summary,
+  body,
+  tags_json,
+  source_agent,
+  project_id,
+  repo_path,
+  branch,
+  importance,
+  confidence,
+  status,
+  pinned,
+  created_at,
+  updated_at,
+  last_accessed_at,
+  expires_at,
+  stale_after,
+  metadata_json`;
 
-  if (input.kind) {
+function buildMemoryWhere(
+  input: Partial<NormalizedListMemoriesInput> & { status?: string },
+): { whereClauses: string[]; queryParams: Array<number | string> } {
+  const whereClauses: string[] = [];
+  const queryParams: Array<number | string> = [];
+
+  if (input.status) {
+    whereClauses.push("status = ?");
+    queryParams.push(input.status);
+  }
+
+  if (input.kind && input.kind.length > 0) {
     whereClauses.push(`kind IN (${input.kind.map(() => "?").join(", ")})`);
     queryParams.push(...input.kind);
   }
 
-  if (input.scope) {
+  if (input.scope && input.scope.length > 0) {
     whereClauses.push(`scope IN (${input.scope.map(() => "?").join(", ")})`);
     queryParams.push(...input.scope);
   }
 
-  for (const tag of input.tags) {
+  for (const tag of (input.tags ?? [])) {
     whereClauses.push("EXISTS (SELECT 1 FROM json_each(memories.tags_json) WHERE value = ?)");
     queryParams.push(tag);
   }
@@ -546,42 +679,66 @@ function readMemoryList(db: DatabaseSync, input: NormalizedListMemoriesInput): M
     queryParams.push(input.repoPath);
   }
 
+  return { whereClauses, queryParams };
+}
+
+function readMemoryCount(
+  db: DatabaseSync,
+  input: Partial<NormalizedListMemoriesInput> & { status?: string },
+): number {
+  const { whereClauses, queryParams } = buildMemoryWhere(input);
+  const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+  const row = db.prepare(`SELECT COUNT(*) as cnt FROM memories ${where};`).get(...queryParams) as { cnt: number };
+  return row.cnt;
+}
+
+function readMemoryList(db: DatabaseSync, input: NormalizedListMemoriesInput, uncapped = false): MemoryRecord[] {
+  const { whereClauses, queryParams } = buildMemoryWhere(input);
+  const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
   const primaryOrderColumn = input.orderBy === "createdAt" ? "created_at" : "updated_at";
   const secondaryOrderColumn = input.orderBy === "createdAt" ? "updated_at" : "created_at";
-  queryParams.push(input.limit);
+
+  let limitClause = "";
+  if (!uncapped && input.limit > 0) {
+    queryParams.push(input.limit);
+    const offset = input.offset ?? 0;
+    queryParams.push(offset);
+    limitClause = "LIMIT ? OFFSET ?";
+  }
 
   const rows = db
     .prepare(
-      `SELECT
-        id,
-        kind,
-        scope,
-        session_id,
-        title,
-        summary,
-        body,
-        tags_json,
-        source_agent,
-        project_id,
-        repo_path,
-        branch,
-        importance,
-        confidence,
-        status,
-        pinned,
-        created_at,
-        updated_at,
-        last_accessed_at,
-        expires_at,
-        metadata_json
+      `SELECT ${MEMORY_SELECT_COLUMNS}
       FROM memories
-      WHERE ${whereClauses.join(" AND ")}
+      ${where}
       ORDER BY ${primaryOrderColumn} DESC, ${secondaryOrderColumn} DESC, id DESC
-      LIMIT ?;`,
+      ${limitClause};`,
     )
     .all(...queryParams) as MemoryRow[];
 
   return rows.map(mapMemoryRow);
+}
+
+function findExactDuplicate(db: DatabaseSync, memory: MemoryRecord): MemoryRecord | null {
+  const { whereClauses, queryParams } = buildMemoryWhere({
+    kind: [memory.kind],
+    scope: [memory.scope],
+    status: "active",
+    ...(memory.repoPath ? { repoPath: memory.repoPath } : {}),
+    ...(memory.projectId ? { projectId: memory.projectId } : {}),
+    ...(memory.sessionId ? { sessionId: memory.sessionId } : {}),
+  });
+
+  whereClauses.push("title = ?", "summary = ?");
+  queryParams.push(memory.title, memory.summary);
+
+  const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+  const row = db
+    .prepare(`SELECT ${MEMORY_SELECT_COLUMNS} FROM memories ${where} LIMIT 1;`)
+    .get(...queryParams) as MemoryRow | undefined;
+
+  return row ? mapMemoryRow(row) : null;
 }
 
 function readMemoryEmbeddingById(db: DatabaseSync, id: string): MemoryEmbeddingRecord | null {
@@ -684,6 +841,7 @@ function writeMemoryRow(db: DatabaseSync, memory: MemoryRecord): void {
       pinned = ?,
       updated_at = ?,
       expires_at = ?,
+      stale_after = ?,
       metadata_json = ?
     WHERE id = ?;
   `).run(
@@ -704,6 +862,7 @@ function writeMemoryRow(db: DatabaseSync, memory: MemoryRecord): void {
     memory.pinned ? 1 : 0,
     memory.updatedAt,
     memory.expiresAt ?? null,
+    memory.staleAfter ?? null,
     JSON.stringify(memory.metadata),
     memory.id,
   );

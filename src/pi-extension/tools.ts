@@ -10,10 +10,16 @@ import {
   MEMORY_LIST_ORDER_BY,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
+  type ListForToolResult,
+  type MemoryKind,
   type MemoryLinkRecord,
   type MemoryRecord,
+  type MemoryScope,
   type MemorySearchResult,
   type MemoryStore,
+  computeDefaultExpiresAt,
+  computeDefaultStaleAfter,
+  getCapForKindScope,
 } from "../core/index.ts";
 import { formatMemorySearchResultLine } from "./formatters.ts";
 import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
@@ -70,26 +76,42 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       "Default status is active and default ordering is newest updated first.",
     ],
     parameters: Type.Object({
-      kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS, { description: "Memory kind" }))),
-      scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope" }))),
+      kind: StringEnum(MEMORY_KINDS, { description: "Memory kind" }),
+      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
       sessionId: Type.Optional(Type.String({ description: "Optional session identifier filter" })),
       projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
       status: Type.Optional(StringEnum(MEMORY_STATUSES, { description: "Memory lifecycle status; defaults to active" })),
-      limit: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Max result count" })),
       orderBy: Type.Optional(StringEnum(MEMORY_LIST_ORDER_BY, { description: "Newest-first ordering field" })),
+      limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50, default: 20 })),
+      offset: Type.Optional(Type.Number({ minimum: 0, default: 0 })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
 
-      const memories = activeStore.listMemories(params);
+      const result = activeStore.listForTool({
+        kind: [params.kind as MemoryKind],
+        scope: [params.scope as MemoryScope],
+        tags: params.tags,
+        sessionId: params.sessionId,
+        projectId: params.projectId,
+        repoPath: params.repoPath,
+        status: params.status,
+        orderBy: params.orderBy,
+        limit: params.limit ?? 20,
+        offset: params.offset ?? 0,
+      });
 
       return {
-        content: [{ type: "text", text: formatMemoryListResults(memories, activeStore.dbPath) }],
+        content: [{ type: "text", text: formatListResult(result, activeStore.dbPath) }],
         details: {
           dbPath: activeStore.dbPath,
-          memories,
+          total_count: result.totalCount,
+          count: result.items.length,
+          has_more: result.hasMore,
+          next_offset: result.nextOffset,
+          items: result.items,
         },
       };
     },
@@ -210,14 +232,13 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       }
 
       const handoffInput = buildHandoffMemoryInput(params, turnContext);
-      const [existingHandoff] = activeStore.listMemories({
+      const [existingHandoff] = activeStore.listAllInternal({
         kind: ["handoff"],
         scope: ["session"],
         sessionId,
         status: "active",
         orderBy: "updatedAt",
-        limit: 1,
-      });
+      }).slice(0, 1);
 
       const memory = existingHandoff
         ? activeStore.updateMemory({
@@ -437,6 +458,140 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       };
     },
   });
+
+  pi.registerTool({
+    name: "memory_list_active_todos",
+    label: "Memory Active Todos",
+    description: "List all active todos for the given scope. Bounded by active caps — no pagination needed.",
+    promptSnippet: "Use to inspect the current todo working-set for a scope.",
+    promptGuidelines: [
+      "Use scope/project/repo to avoid global todo noise.",
+      "Use memory_search for content-based todo search.",
+    ],
+    parameters: Type.Object({
+      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
+      repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
+      projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const activeStore = getActiveStore(ctx.cwd);
+      const result = activeStore.listForTool({
+        kind: ["todo"],
+        scope: [params.scope as MemoryScope],
+        status: "active",
+        repoPath: params.repoPath,
+        projectId: params.projectId,
+        limit: 50,
+        offset: 0,
+      });
+      return {
+        content: [{ type: "text", text: formatActiveList("todos", result.items, result.totalCount, activeStore.dbPath) }],
+        details: { dbPath: activeStore.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "memory_list_active_handoffs",
+    label: "Memory Active Handoffs",
+    description: "List all active handoffs for the given scope. Bounded by active caps — no pagination needed.",
+    promptSnippet: "Use to inspect current session or repo handoff state.",
+    promptGuidelines: [
+      "Use memory_search for content-based handoff search.",
+    ],
+    parameters: Type.Object({
+      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
+      repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
+      projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const activeStore = getActiveStore(ctx.cwd);
+      const result = activeStore.listForTool({
+        kind: ["handoff"],
+        scope: [params.scope as MemoryScope],
+        status: "active",
+        repoPath: params.repoPath,
+        projectId: params.projectId,
+        limit: 10,
+        offset: 0,
+      });
+      return {
+        content: [{ type: "text", text: formatActiveList("handoffs", result.items, result.totalCount, activeStore.dbPath) }],
+        details: { dbPath: activeStore.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "memory_stats",
+    label: "Memory Stats",
+    description: "Summarize active/archived/done counts per kind and scope with cap warnings.",
+    promptSnippet: "Use for a health overview of the memory store — counts, caps, and warnings.",
+    promptGuidelines: [
+      "Not for listing memory content — use memory_list or memory_search for that.",
+    ],
+    parameters: Type.Object({
+      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
+      repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
+      projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const activeStore = getActiveStore(ctx.cwd);
+      const scope = params.scope as MemoryScope;
+      const scopeFilter = { scope: [scope], repoPath: params.repoPath, projectId: params.projectId };
+
+      const kindStatuses: Array<{ kind: string; statuses: string[] }> = [
+        { kind: "todo", statuses: ["active", "done", "archived"] },
+        { kind: "handoff", statuses: ["active", "archived"] },
+        { kind: "decision", statuses: ["active", "archived", "superseded"] },
+        { kind: "fact", statuses: ["active", "archived", "superseded"] },
+        { kind: "episode", statuses: ["active", "archived"] },
+        { kind: "progress_snapshot", statuses: ["active", "archived"] },
+      ];
+
+      const counts: Record<string, Record<string, number>> = {};
+      for (const { kind, statuses } of kindStatuses) {
+        counts[kind] = {};
+        for (const status of statuses) {
+          counts[kind][status] = activeStore.count({ kind: [kind as MemoryKind], status: status as never, ...scopeFilter });
+        }
+      }
+
+      const warnings: string[] = [];
+      for (const kind of ["todo", "handoff"] as const) {
+        const cap = getCapForKindScope(kind, scope);
+        if (cap) {
+          const active = counts[kind]?.active ?? 0;
+          if (active >= cap.activeWarnAt) {
+            warnings.push(`${kind} active: ${active} active, warn at ${cap.activeWarnAt}, hard cap ${cap.activeHardMax}`);
+          }
+        }
+      }
+
+      const todoActive = counts.todo?.active ?? 0;
+      const todoCapPolicy = getCapForKindScope("todo", scope);
+      const handoffActive = counts.handoff?.active ?? 0;
+      const handoffCapPolicy = getCapForKindScope("handoff", scope);
+
+      const output = [
+        `Memory stats (scope=${scope}${params.repoPath ? ` repo=${params.repoPath}` : ""}${params.projectId ? ` project=${params.projectId}` : ""}):`,
+        ...Object.entries(counts).map(([kind, statusCounts]) => {
+          const parts = Object.entries(statusCounts).map(([s, n]) => `${s}=${n}`).join(" ");
+          return `  ${kind}: ${parts}`;
+        }),
+        `caps:`,
+        `  active_todos: ${todoActive}/${todoCapPolicy?.activeHardMax ?? "n/a"}`,
+        `  active_handoffs: ${handoffActive}/${handoffCapPolicy?.activeHardMax ?? "n/a"}`,
+        ...(warnings.length > 0 ? [`warnings:`, ...warnings.map((w) => `  ${w}`)] : []),
+        `db_path: ${activeStore.dbPath}`,
+      ].join("\n");
+
+      return {
+        content: [{ type: "text", text: output }],
+        details: { dbPath: activeStore.dbPath, scope, counts, warnings },
+      };
+    },
+  });
 }
 
 type TodoSaveParams = {
@@ -629,6 +784,25 @@ function formatMemoryArchived(memory: MemoryRecord, dbPath: string): string {
   return lines.join("\n");
 }
 
+function formatListResult(result: ListForToolResult, dbPath: string): string {
+  const { items, totalCount, hasMore, nextOffset } = result;
+  if (items.length === 0) {
+    return [`No memories matched the list filters.`, `total_count: ${totalCount}`, `db_path: ${dbPath}`].join("\n");
+  }
+
+  const lines = [
+    `Found ${items.length} of ${totalCount} memor${totalCount === 1 ? "y" : "ies"}.`,
+    ...items.map((memory, index) => formatMemoryListResultLine(index + 1, memory)),
+  ];
+
+  if (hasMore) {
+    lines.push(`has_more: true — use offset=${nextOffset} to continue`);
+  }
+
+  lines.push(`db_path: ${dbPath}`);
+  return lines.join("\n");
+}
+
 function formatMemoryListResults(memories: MemoryRecord[], dbPath: string): string {
   if (memories.length === 0) {
     return [`No memories matched the list filters.`, `db_path: ${dbPath}`].join("\n");
@@ -644,6 +818,17 @@ function formatMemoryListResults(memories: MemoryRecord[], dbPath: string): stri
 function formatMemoryListResultLine(index: number, memory: MemoryRecord): string {
   const tags = memory.tags.length > 0 ? ` tags=${memory.tags.join(",")}` : "";
   return `${index}. [${memory.kind}/${memory.scope}/${memory.status}] ${memory.title} (${memory.id}) — ${memory.summary}${tags} updated=${memory.updatedAt}`;
+}
+
+function formatActiveList(kind: string, items: MemoryRecord[], totalCount: number, dbPath: string): string {
+  if (items.length === 0) {
+    return [`No active ${kind}.`, `db_path: ${dbPath}`].join("\n");
+  }
+  return [
+    `Active ${kind}: ${totalCount}`,
+    ...items.map((memory, index) => formatMemoryListResultLine(index + 1, memory)),
+    `db_path: ${dbPath}`,
+  ].join("\n");
 }
 
 function formatMemorySearchResults(query: string, results: MemorySearchResult[], dbPath: string): string {

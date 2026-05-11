@@ -1,10 +1,6 @@
-import { type MemoryScope, type MemoryStore } from "../core/index.ts";
+import { getCapForKindScope, type MemoryRecord, type MemoryScope, type MemoryStore } from "../core/index.ts";
 
 // ─── Memory Audit ────────────────────────────────────────────────────────────
-
-const STALE_TODO_IN_PROGRESS_DAYS = 14;
-const STALE_TODO_OPEN_DAYS = 30;
-const OLD_HANDOFF_DAYS = 7;
 
 export interface AuditCandidate {
   id: string;
@@ -17,51 +13,44 @@ export interface AuditCandidate {
   suggestedAction: string;
 }
 
+export interface AuditSummary {
+  staleTodos: AuditCandidate[];
+  oldHandoffs: AuditCandidate[];
+  activeTodosCount: number;
+  activeHandoffsCount: number;
+  staleTodosCount: number;
+  expiredHandoffsCount: number;
+  warnings: string[];
+  suggestedActions: string[];
+}
+
 export function runMemoryAudit(
   store: MemoryStore,
   scopeFilter?: string[],
   repoPathFilter?: string,
 ): { staleTodos: AuditCandidate[]; oldHandoffs: AuditCandidate[] } {
-  const now = Date.now();
-  const inProgressCutoff = new Date(now - STALE_TODO_IN_PROGRESS_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const openCutoff = new Date(now - STALE_TODO_OPEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const handoffCutoff = new Date(now - OLD_HANDOFF_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const summary = runMemoryAuditFull(store, scopeFilter, repoPathFilter);
+  return { staleTodos: summary.staleTodos, oldHandoffs: summary.oldHandoffs };
+}
 
-  const listInput = {
+export function runMemoryAuditFull(
+  store: MemoryStore,
+  scopeFilter?: string[],
+  repoPathFilter?: string,
+): AuditSummary {
+  const now = new Date();
+
+  const internalFilter = {
     status: "active" as const,
-    limit: 200,
     ...(scopeFilter ? { scope: scopeFilter as MemoryScope[] } : {}),
     ...(repoPathFilter ? { repoPath: repoPathFilter } : {}),
   };
 
-  const todos = store.listMemories({ ...listInput, kind: ["todo"] });
-  const handoffs = store.listMemories({ ...listInput, kind: ["handoff"] });
+  const todos = store.listAllInternal({ ...internalFilter, kind: ["todo"] });
+  const handoffs = store.listAllInternal({ ...internalFilter, kind: ["handoff"] });
 
   const staleTodos: AuditCandidate[] = todos
-    .filter((m) => {
-      const isInProgress = m.tags.includes("in_progress");
-      const isOpen = !isInProgress;
-      if (isInProgress && m.updatedAt < inProgressCutoff) return true;
-      if (isOpen && m.updatedAt < openCutoff) return true;
-      return false;
-    })
-    .map((m) => {
-      const isInProgress = m.tags.includes("in_progress");
-      const days = isInProgress ? STALE_TODO_IN_PROGRESS_DAYS : STALE_TODO_OPEN_DAYS;
-      return {
-        id: m.id,
-        title: m.title,
-        kind: m.kind,
-        tags: m.tags,
-        updatedAt: m.updatedAt,
-        scope: m.scope,
-        reason: `Todo ${isInProgress ? "(in_progress)" : "(open)"} not updated in >${days} days`,
-        suggestedAction: "Archive if done, or update status/tags to reflect current state",
-      };
-    });
-
-  const oldHandoffs: AuditCandidate[] = handoffs
-    .filter((m) => m.updatedAt < handoffCutoff)
+    .filter((m) => isTodoStale(m, now))
     .map((m) => ({
       id: m.id,
       title: m.title,
@@ -69,11 +58,73 @@ export function runMemoryAudit(
       tags: m.tags,
       updatedAt: m.updatedAt,
       scope: m.scope,
-      reason: `Handoff not updated in >${OLD_HANDOFF_DAYS} days`,
-      suggestedAction: "Archive if the task is complete or no longer relevant",
+      reason: `Todo stale: stale_after=${m.staleAfter ?? "not set"} passed`,
+      suggestedAction: "Archive if done, or update status/tags to reflect current state",
     }));
 
-  return { staleTodos, oldHandoffs };
+  const expiredHandoffs = handoffs.filter((m) => isHandoffExpired(m, now));
+  const oldHandoffs: AuditCandidate[] = expiredHandoffs.map((m) => ({
+    id: m.id,
+    title: m.title,
+    kind: m.kind,
+    tags: m.tags,
+    updatedAt: m.updatedAt,
+    scope: m.scope,
+    reason: `Handoff expired: expires_at=${m.expiresAt ?? "not set"} passed`,
+    suggestedAction: "Archive if the task is complete or no longer relevant",
+  }));
+
+  const warnings: string[] = [];
+  const suggestedActions: string[] = [];
+
+  // Cap warnings per scope
+  const scopesToCheck = scopeFilter ?? ["repo", "project", "global"];
+  for (const scope of scopesToCheck as MemoryScope[]) {
+    const todoCapPolicy = getCapForKindScope("todo", scope);
+    if (todoCapPolicy) {
+      const scopeTodos = todos.filter((m) => m.scope === scope);
+      if (scopeTodos.length >= todoCapPolicy.activeWarnAt) {
+        warnings.push(`Active todo count above warning threshold (scope=${scope}): ${scopeTodos.length} active, warn at ${todoCapPolicy.activeWarnAt}, hard cap ${todoCapPolicy.activeHardMax}`);
+      }
+    }
+    const handoffCapPolicy = getCapForKindScope("handoff", scope);
+    if (handoffCapPolicy) {
+      const scopeHandoffs = handoffs.filter((m) => m.scope === scope);
+      if (scopeHandoffs.length >= handoffCapPolicy.activeWarnAt) {
+        warnings.push(`Active handoff count above warning threshold (scope=${scope}): ${scopeHandoffs.length} active, warn at ${handoffCapPolicy.activeWarnAt}, hard cap ${handoffCapPolicy.activeHardMax}`);
+      }
+    }
+  }
+
+  if (expiredHandoffs.length > 0) {
+    warnings.push(`${expiredHandoffs.length} handoff${expiredHandoffs.length !== 1 ? "s" : ""} expired`);
+    suggestedActions.push("Archive expired handoffs");
+  }
+
+  if (staleTodos.length > 0) {
+    suggestedActions.push("Review stale todos");
+  }
+
+  return {
+    staleTodos,
+    oldHandoffs,
+    activeTodosCount: todos.length,
+    activeHandoffsCount: handoffs.length,
+    staleTodosCount: staleTodos.length,
+    expiredHandoffsCount: expiredHandoffs.length,
+    warnings,
+    suggestedActions,
+  };
+}
+
+function isTodoStale(m: MemoryRecord, now: Date): boolean {
+  if (!m.staleAfter) return false;
+  return new Date(m.staleAfter) < now;
+}
+
+function isHandoffExpired(m: MemoryRecord, now: Date): boolean {
+  if (!m.expiresAt) return false;
+  return new Date(m.expiresAt) < now;
 }
 
 export function buildHygieneLine(staleTodoCount: number, oldHandoffCount: number): string | null {

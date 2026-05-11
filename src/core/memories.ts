@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 export const MEMORY_KINDS = ["fact", "preference", "decision", "episode", "artifact_ref", "todo", "progress_snapshot", "handoff"] as const;
 export const MEMORY_SCOPES = ["global", "project", "repo", "session"] as const;
-export const MEMORY_STATUSES = ["active", "archived"] as const;
+export const MEMORY_STATUSES = ["active", "archived", "done", "superseded"] as const;
 export const MEMORY_LINK_RELATIONS = ["related_to", "supersedes", "caused_by", "implements", "blocks"] as const;
 export const MEMORY_LIST_ORDER_BY = ["updatedAt", "createdAt"] as const;
 
@@ -28,6 +28,7 @@ export interface CreateMemoryInput {
   sessionId?: string;
   pinned?: boolean;
   expiresAt?: string;
+  staleAfter?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -40,6 +41,7 @@ export interface UpdateMemoryInput {
   importance?: number;
   confidence?: number;
   expiresAt?: string | null;
+  staleAfter?: string | null;
   status?: MemoryStatus;
   pinned?: boolean;
 }
@@ -87,6 +89,7 @@ export interface NormalizedListMemoriesInput {
   repoPath?: string;
   status: MemoryStatus;
   limit: number;
+  offset?: number;
   orderBy: MemoryListOrderBy;
 }
 
@@ -111,6 +114,7 @@ export interface NormalizedUpdateMemoryInput {
   importance?: number;
   confidence?: number;
   expiresAt?: string | null;
+  staleAfter?: string | null;
   status?: MemoryStatus;
   pinned?: boolean;
 }
@@ -136,6 +140,7 @@ export interface MemoryRecord {
   updatedAt: string;
   lastAccessedAt?: string;
   expiresAt?: string;
+  staleAfter?: string;
   metadata: Record<string, unknown>;
 }
 
@@ -196,6 +201,7 @@ export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryReco
   const branch = normalizeOptionalText(input.branch);
   const sessionId = normalizeOptionalText(input.sessionId);
   const expiresAt = normalizeOptionalTimestamp(input.expiresAt, "expiresAt", issues);
+  const staleAfter = normalizeOptionalTimestamp(input.staleAfter, "staleAfter", issues);
   const importance = normalizeScore("importance", input.importance, issues);
   const confidence = normalizeScore("confidence", input.confidence, issues);
   const tags = normalizeTags(input.tags, issues);
@@ -227,6 +233,7 @@ export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryReco
     createdAt: timestamp,
     updatedAt: timestamp,
     expiresAt,
+    staleAfter,
     metadata,
   };
 }
@@ -259,6 +266,10 @@ export function normalizeUpdateMemoryInput(input: UpdateMemoryInput): Normalized
     input.expiresAt === undefined
       ? undefined
       : normalizeNullableOptionalTimestamp(input.expiresAt, "expiresAt", issues, () => changedFieldCount++);
+  const staleAfter =
+    input.staleAfter === undefined
+      ? undefined
+      : normalizeNullableOptionalTimestamp(input.staleAfter, "staleAfter", issues, () => changedFieldCount++);
   const status =
     input.status === undefined ? undefined : normalizeEnum("status", input.status, MEMORY_STATUSES, issues, () => changedFieldCount++);
   const pinned =
@@ -281,6 +292,7 @@ export function normalizeUpdateMemoryInput(input: UpdateMemoryInput): Normalized
     importance,
     confidence,
     expiresAt,
+    staleAfter,
     status,
     pinned,
   };
@@ -530,11 +542,11 @@ function normalizeBoolean(fieldName: string, value: boolean, issues: string[], o
 }
 
 function normalizeLimit(value: number | undefined, issues: string[]): number {
-  if (value === undefined) return 5;
+  if (value === undefined) return 100;
 
-  if (!Number.isInteger(value) || value < 1 || value > 20) {
-    issues.push("limit must be an integer between 1 and 20");
-    return 5;
+  if (!Number.isInteger(value) || value < 1) {
+    issues.push("limit must be a positive integer");
+    return 100;
   }
 
   return value;

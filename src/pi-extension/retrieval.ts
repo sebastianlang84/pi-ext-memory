@@ -142,7 +142,7 @@ type StagedMemorySearchStore = Pick<MemoryStore, "searchMemories"> & {
   createSearchQueryEmbedding?: (query: string) => GeneratedMemoryEmbedding;
 };
 
-type LatestHandoffStore = Pick<MemoryStore, "listMemories">;
+type LatestHandoffStore = Pick<MemoryStore, "listAllInternal">;
 
 export interface LatestHandoffResult {
   memory: MemoryRecord;
@@ -153,7 +153,7 @@ export function findLatestHandoffForTurn(store: LatestHandoffStore, context: Mem
   const sessionId = context.sessionId.trim();
 
   if (sessionId.length > 0) {
-    const [sessionHandoff] = store.listMemories({
+    const sessionHandoffs = store.listAllInternal({
       kind: ["handoff"],
       scope: ["session"],
       sessionId,
@@ -161,6 +161,7 @@ export function findLatestHandoffForTurn(store: LatestHandoffStore, context: Mem
       orderBy: "updatedAt",
       limit: 1,
     });
+    const sessionHandoff = sessionHandoffs[0];
 
     if (sessionHandoff) {
       return { memory: sessionHandoff, isFallback: false };
@@ -168,7 +169,7 @@ export function findLatestHandoffForTurn(store: LatestHandoffStore, context: Mem
   }
 
   if (context.repoPath) {
-    const [repoHandoff] = store.listMemories({
+    const repoHandoffs = store.listAllInternal({
       kind: ["handoff"],
       scope: ["repo", "session"],
       repoPath: context.repoPath,
@@ -176,6 +177,7 @@ export function findLatestHandoffForTurn(store: LatestHandoffStore, context: Mem
       orderBy: "updatedAt",
       limit: 1,
     });
+    const repoHandoff = repoHandoffs[0];
 
     if (repoHandoff) {
       return { memory: repoHandoff, isFallback: true };
@@ -183,7 +185,7 @@ export function findLatestHandoffForTurn(store: LatestHandoffStore, context: Mem
   }
 
   if (context.projectId) {
-    const [projectHandoff] = store.listMemories({
+    const projectHandoffs = store.listAllInternal({
       kind: ["handoff"],
       scope: ["project", "session"],
       projectId: context.projectId,
@@ -191,6 +193,7 @@ export function findLatestHandoffForTurn(store: LatestHandoffStore, context: Mem
       orderBy: "updatedAt",
       limit: 1,
     });
+    const projectHandoff = projectHandoffs[0];
 
     if (projectHandoff) {
       return { memory: projectHandoff, isFallback: true };

@@ -156,6 +156,14 @@ export const memoryMigrations: MemoryMigration[] = [
       );
     `,
   },
+  {
+    version: 6,
+    name: "stale_after_column",
+    sql: `
+      ALTER TABLE memories ADD COLUMN stale_after TEXT;
+      CREATE INDEX IF NOT EXISTS idx_memories_stale_after ON memories(stale_after);
+    `,
+  },
 ];
 
 export const LATEST_MEMORY_SCHEMA_VERSION = memoryMigrations.at(-1)?.version ?? 0;

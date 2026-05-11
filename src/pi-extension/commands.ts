@@ -222,7 +222,7 @@ function getStoreForCwd(core: MemoryCore, currentStore: MemoryStore | undefined,
 }
 
 function findLatestSessionHandoff(store: MemoryStore, sessionId: string): MemoryRecord | undefined {
-  return store.listMemories({
+  return store.listAllInternal({
     kind: ["handoff"],
     scope: ["session"],
     sessionId,

@@ -10,9 +10,11 @@ import type {
   CreateMemoryInput,
   LinkMemoriesInput,
   ListMemoriesInput,
+  ListForToolResult,
   MemoryLinkRecord,
   MemoryRecord,
   MemorySearchResult,
+  NormalizedListMemoriesInput,
   SearchMemoriesInput,
   UpdateMemoryInput,
 } from "../../src/core/index.ts";
@@ -140,12 +142,13 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   const calls: {
     search: SearchMemoriesInput[];
     list: ListMemoriesInput[];
+    listForTool: Array<Partial<NormalizedListMemoriesInput> & { offset?: number }>;
     create: CreateMemoryInput[];
     get: string[];
     update: UpdateMemoryInput[];
     link: LinkMemoriesInput[];
     archive: ArchiveMemoryInput[];
-  } = { search: [], list: [], create: [], get: [], update: [], link: [], archive: [] };
+  } = { search: [], list: [], listForTool: [], create: [], get: [], update: [], link: [], archive: [] };
   const projectContext = await createTempPiToolContext();
   t.after(async () => {
     await rm(projectContext.cwd, { recursive: true, force: true });
@@ -184,6 +187,16 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       calls.list.push(input);
       return [savedMemory];
     },
+    listForTool(filter: Partial<NormalizedListMemoriesInput> & { offset?: number }): ListForToolResult {
+      calls.listForTool.push(filter);
+      return { items: [savedMemory], totalCount: 1, hasMore: false, nextOffset: null };
+    },
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>) {
+      return [savedMemory];
+    },
+    count() {
+      return 0;
+    },
     createMemory(input: CreateMemoryInput) {
       calls.create.push(input);
       return savedMemory;
@@ -220,7 +233,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     },
   );
 
-  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit"];
+  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit", "memory_list_active_todos", "memory_list_active_handoffs", "memory_stats"];
   assert.equal(tools.length, expectedToolNames.length);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)), new Set(expectedToolNames));
   assert.ok(tools.every((tool) => tool.parameters), "expected all registered tools to expose parameters");
@@ -230,7 +243,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   const onUpdate = () => undefined;
 
   const searchOutput = await toolByName(tools, "memory_search").execute("call-search", { query: "manual policy", limit: 3 }, signal, onUpdate, ctx);
-  const listOutput = await toolByName(tools, "memory_list").execute("call-list", { kind: ["todo"], limit: 3 }, signal, onUpdate, ctx);
+  const listOutput = await toolByName(tools, "memory_list").execute("call-list", { kind: "todo", scope: "project", limit: 3 }, signal, onUpdate, ctx);
   const saveOutput = await toolByName(tools, "memory_save").execute(
     "call-save",
     { kind: "decision", scope: "session", title: "Remember workflow", summary: "Keep durable writes explicit.", tags: ["policy"] },
@@ -290,10 +303,10 @@ test("registerMemoryTools registers expected tools and wires their executors", a
 
   assert.deepEqual(requestedCwds, [ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd]);
   assert.deepEqual(calls.search, [{ query: "manual policy", limit: 3 }]);
-  assert.deepEqual(calls.list, [
-    { kind: ["todo"], limit: 3 },
-    { kind: ["handoff"], scope: ["session"], sessionId: projectContext.sessionId, status: "active", orderBy: "updatedAt", limit: 1 },
+  assert.deepEqual(calls.listForTool, [
+    { kind: ["todo"], scope: ["project"], tags: undefined, sessionId: undefined, projectId: undefined, repoPath: undefined, status: undefined, orderBy: undefined, limit: 3, offset: 0 },
   ]);
+  assert.deepEqual(calls.list, []);
   assert.deepEqual(calls.create, [
     {
       kind: "decision",
@@ -338,7 +351,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
 
   assert.match(searchOutput.content[0].text, /Found 1 memory result for "manual policy"\./);
   assert.match(searchOutput.content[0].text, /Keep writes manual-first/);
-  assert.match(listOutput.content[0].text, /Found 1 memory\./);
+  assert.match(listOutput.content[0].text, /Found 1 of 1 memor/);
   assert.match(listOutput.content[0].text, /Keep writes manual-first/);
   assert.match(listOutput.content[0].text, /Use explicit review and save tools for durable memory updates/);
   assert.match(todoOutput.content[0].text, /Saved memory memory-saved\./);
@@ -358,7 +371,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.match(archiveOutput.content[0].text, /status: archived/);
   assert.match(archiveOutput.content[0].text, /reason: superseded/);
   assert.deepEqual(searchOutput.details, { dbPath: store.dbPath, results: [result] });
-  assert.deepEqual(listOutput.details, { dbPath: store.dbPath, memories: [savedMemory] });
+  assert.deepEqual(listOutput.details, { dbPath: store.dbPath, total_count: 1, count: 1, has_more: false, next_offset: null, items: [savedMemory] });
   assert.deepEqual(saveOutput.details, { dbPath: store.dbPath, memory: savedMemory });
   assert.deepEqual(handoffOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
   assert.deepEqual(updateOutput.details, { dbPath: store.dbPath, memory: updatedMemory });

@@ -12,6 +12,32 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-05-11
+
+### Added
+- New `memory_list_active_todos` tool: lists active todos for a scope (bounded by caps, no pagination needed).
+- New `memory_list_active_handoffs` tool: lists active handoffs for a scope (bounded by caps, no pagination needed).
+- New `memory_stats` tool: health overview with per-kind counts, cap utilisation, and warnings.
+- New `src/core/policy.ts` module: `MEMORY_POLICY` constants with per-scope caps (`activeWarnAt`, `activeHardMax`, `defaultStaleAfterDays`, `defaultTtlDays`).
+- `stale_after` column on `memories` table (DB migration v6) with index — enables precise staleness calculation.
+- `store.listAllInternal()`: uncapped DB query for internal jobs (audit, handoff lookup). No tool-output limit applies.
+- `store.listForTool()`: capped, paginated query returning `{ items, totalCount, hasMore, nextOffset }` for LLM tool outputs.
+- `store.count()`: count-only query for cap enforcement and `memory_stats`.
+- Cap enforcement in `store.createMemory()`: `todo` and `handoff` saves are rejected when the active hard cap for their scope is reached. Error includes cleanup suggestions.
+- Exact-duplicate check in `store.createMemory()`: returns the existing record instead of creating a duplicate when title + summary + kind + scope + context match.
+- Default `stale_after` set automatically on `todo` save (scope-specific, default 30 days).
+- Default `expires_at` set automatically on `handoff` save (scope-specific, default 14 days).
+
+### Changed
+- **Breaking:** `memory_list` now requires `kind` and `scope` as mandatory scalar fields (not optional arrays). Free `memory_list({})` is rejected.
+- **Breaking:** `memory_list` response format changed to `{ items, count, total_count, has_more, next_offset }` with pagination metadata. `offset` parameter added (default 0), max `limit` increased from 20 to 50.
+- `memory_save_handoff` internal handoff lookup migrated from `listMemories` to `listAllInternal` — no longer subject to tool-output cap.
+- Audit (`runMemoryAudit`, `/memory-audit`) migrated to `listAllInternal` — the previous `limit: 1000` workaround is removed; audit is fully uncapped.
+- Audit stale-todo detection now uses `stale_after` column (data-driven) instead of hardcoded `updatedAt`-age heuristic.
+- Audit expired-handoff detection now uses `expires_at` column instead of hardcoded age.
+- Audit output extended with `activeTodosCount`, `activeHandoffsCount`, cap-threshold warnings, and `suggestedActions`.
+- `MEMORY_STATUSES` expanded from `["active", "archived"]` to `["active", "archived", "done", "superseded"]`.
+
 ## [1.5.0] - 2026-05-11
 
 ### Added
