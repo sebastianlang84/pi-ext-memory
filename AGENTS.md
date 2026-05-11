@@ -73,4 +73,5 @@ Before the first write, briefly state:
 - Verify after every change.
 - Without verification, the task is not complete.
 - Review `MEMORY.md`, `TODO.md`, `README.md`, and `CHANGELOG.md` when affected.
+- Bump `version` in `package.json` per Semantic Versioning 2.0.0 and add a `CHANGELOG.md` entry for every commit.
 - Create a commit unless the user explicitly says otherwise.

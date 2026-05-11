@@ -12,6 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-05-11
+
+### Fixed
+- Replaced `memory ok` / `memory fehler` footer status with `memory ✓` / `memory ✗`.
+
 ## [1.3.2] - 2026-05-09
 
 ### Changed
