@@ -12,6 +12,16 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-11
+
+### Added
+- New tool `memory_save_todo` for actionable open tasks with priority (P0/P1/P2), status, scope, and nextAction fields.
+
+### Changed
+- Sharpened tool prompts: `memory_save` restricted to facts/preferences/decisions/notes; `memory_search` trigger weakened to avoid double-retrieval; `memory_update` requires known id; `memory_link` restricted to retrieval-relevant relations.
+- `memory_save` now redirects `kind: todo` to `memory_save_todo`.
+- `memory_save_handoff` label updated to "Memory Save Handoff".
+
 ## [1.3.4] - 2026-05-11
 
 ### Changed

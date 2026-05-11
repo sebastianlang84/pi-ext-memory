@@ -23,7 +23,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     name: "memory_search",
     label: "Memory Search",
     description: "Search memory content in the local pi-memory store using hybrid lexical + semantic retrieval and compact filters.",
-    promptSnippet: "Search local durable memory before guessing when prior decisions, facts, or todos may matter.",
+    promptSnippet: "Search local durable memory when automatic retrieved context is insufficient and prior decisions, facts, or todos may matter.",
     promptGuidelines: [
       "Keep queries compact and concrete.",
       "Use filters to narrow the result set when kind, scope, project, repo, or tags are known.",
@@ -94,9 +94,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Save",
     description: "Create a structured memory in the local pi-memory store.",
     promptSnippet:
-      "Save a durable structured memory when the user explicitly wants something remembered or when a stable decision/fact/todo should be preserved.",
+      "Save durable facts, preferences, decisions, and notes when the user explicitly wants something remembered or when a stable reusable fact should persist.",
     promptGuidelines: [
-      "Use this tool for explicit durable memory writes, not for low-information scratch notes.",
+      "Use for durable facts, preferences, decisions, and notes.",
+      "Do not use for actionable open work; use memory_save_todo for todos.",
+      "Do not use for handoff state; use memory_save_handoff.",
+      "Avoid low-information scratch notes.",
       "Always provide a compact but informative summary.",
     ],
     parameters: Type.Object({
@@ -119,6 +122,13 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         };
       }
 
+      if (params.kind === "todo") {
+        return {
+          content: [{ type: "text", text: `Use memory_save_todo for actionable open tasks so they get the correct schema and priority/scope fields.\ndb_path: ${activeStore.dbPath}` }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
+
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const memory = activeStore.createMemory({
         ...decorateCreateMemoryInput(params, turnContext),
@@ -137,10 +147,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
 
   pi.registerTool({
     name: "memory_save_handoff",
-    label: "Memory Handoff Save",
+    label: "Memory Save Handoff",
     description: "Create or update the active structured handoff for the current Pi session.",
     promptSnippet:
-      "Save a compact handoff before context reset, compaction, wrap-up, or agent transfer so the next agent can resume safely.",
+      "Save or refresh a compact handoff before context reset, compaction, wrap-up, or agent transfer so the next agent can resume safely.",
     promptGuidelines: [
       "Use this for mid-task handoff state, not general long-term facts.",
       "Include goal, current state, and concrete next steps.",
@@ -217,6 +227,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     promptGuidelines: [
       "Patch only the fields that actually changed.",
       "Prefer updating an existing memory over writing a weaker duplicate.",
+      "Use only when the target memory id is known from memory_search, memory_list, or retrieved context.",
     ],
     parameters: Type.Object({
       id: Type.String({ description: "Memory id to update" }),
@@ -263,6 +274,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     promptGuidelines: [
       "Use simple V1 relations like related_to, supersedes, caused_by, implements, and blocks.",
       "Link existing memories instead of copying the same context into multiple records.",
+      "Use memory_link only when the relation changes future retrieval or prevents duplicated context.",
     ],
     parameters: Type.Object({
       fromId: Type.String({ description: "Source memory id" }),
@@ -280,6 +292,65 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
           dbPath: activeStore.dbPath,
           link,
         },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "memory_save_todo",
+    label: "Memory Save Todo",
+    description: "Save or refresh an actionable open task that should persist across sessions.",
+    promptSnippet: "Save or refresh an actionable open task that should persist across sessions.",
+    promptGuidelines: [
+      "Use for actionable open work, not passive facts or decisions.",
+      "Include the next concrete action whenever possible.",
+      "Use scope/project/repo to avoid global todo noise.",
+      "Prefer updating an existing active todo over creating a duplicate.",
+      "Do not compete with TODO.md: repo-canonical backlog belongs in TODO.md when appropriate.",
+    ],
+    parameters: Type.Object({
+      title: Type.String({ description: "Short title for the todo" }),
+      description: Type.Optional(Type.String({ description: "Longer description of the task" })),
+      priority: Type.Optional(StringEnum(["P0", "P1", "P2"] as const, { description: "Priority: P0=critical, P1=important, P2=nice-to-have" })),
+      status: Type.Optional(StringEnum(["open", "in_progress", "blocked"] as const, { description: "Current status of the todo" })),
+      scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Memory scope" })),
+      projectId: Type.Optional(Type.String({ description: "Optional project identifier" })),
+      repoPath: Type.Optional(Type.String({ description: "Optional repository path" })),
+      nextAction: Type.Optional(Type.String({ description: "The immediate next concrete action to take" })),
+      tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const activeStore = getActiveStore(ctx.cwd);
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+
+      const tags = [...(params.tags ?? []), "todo"];
+      if (params.priority) tags.push(params.priority);
+      if (params.status && params.status !== "open") tags.push(params.status);
+
+      const summary = buildTodoSummary(params);
+
+      const memory = activeStore.createMemory({
+        ...decorateCreateMemoryInput(
+          {
+            kind: "todo",
+            scope: params.scope ?? "global",
+            title: params.title,
+            summary,
+            body: params.description,
+            tags,
+            importance: params.priority === "P0" ? 0.95 : params.priority === "P1" ? 0.75 : 0.5,
+            confidence: 1,
+            projectId: params.projectId,
+            repoPath: params.repoPath,
+          },
+          turnContext,
+        ),
+        sourceAgent: "pi",
+      });
+
+      return {
+        content: [{ type: "text", text: formatMemorySaved(memory, activeStore) }],
+        details: { dbPath: activeStore.dbPath, memory },
       };
     },
   });
@@ -319,6 +390,23 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       };
     },
   });
+}
+
+type TodoSaveParams = {
+  title: string;
+  description?: string;
+  priority?: "P0" | "P1" | "P2";
+  status?: "open" | "in_progress" | "blocked";
+  nextAction?: string;
+};
+
+function buildTodoSummary(params: TodoSaveParams): string {
+  const parts: string[] = [];
+  if (params.priority) parts.push(`[${params.priority}]`);
+  if (params.status && params.status !== "open") parts.push(`[${params.status}]`);
+  parts.push(params.description?.trim() || params.title.trim());
+  if (params.nextAction) parts.push(`→ ${params.nextAction.trim()}`);
+  return parts.join(" ");
 }
 
 type HandoffSaveParams = {

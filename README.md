@@ -26,11 +26,17 @@ Check extension status:
 Common tools and commands:
 
 ```text
-memory_search
-memory_save
-memory_handoff_save
-/memory-search <query>
-/memory-handoff
+memory_search          — search durable memory (semantic + lexical)
+memory_list            — filter memories by kind, scope, tags, status
+memory_save            — save facts, preferences, decisions, notes
+memory_save_todo       — save actionable open tasks (priority, status, scope)
+memory_save_handoff    — save/refresh resumable agent handoff state
+memory_update          — patch an existing memory by id
+memory_archive         — archive obsolete memories
+memory_link            — link related memories (optional, V2)
+/memory-status         — show extension status and config
+/memory-search <query> — manual memory search
+/memory-handoff        — show or archive the active session handoff
 ```
 
 Optional configuration:

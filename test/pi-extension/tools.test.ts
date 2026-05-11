@@ -220,7 +220,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     },
   );
 
-  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_handoff", "memory_update", "memory_link", "memory_archive"];
+  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive"];
   assert.equal(tools.length, expectedToolNames.length);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)), new Set(expectedToolNames));
   assert.ok(tools.every((tool) => tool.parameters), "expected all registered tools to expose parameters");
@@ -234,6 +234,19 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   const saveOutput = await toolByName(tools, "memory_save").execute(
     "call-save",
     { kind: "decision", scope: "session", title: "Remember workflow", summary: "Keep durable writes explicit.", tags: ["policy"] },
+    signal,
+    onUpdate,
+    ctx,
+  );
+  const todoOutput = await toolByName(tools, "memory_save_todo").execute(
+    "call-todo",
+    {
+      title: "Implement memory_save_todo",
+      description: "Add dedicated todo tool with priority and scope",
+      priority: "P1",
+      status: "in_progress",
+      nextAction: "Write tests",
+    },
     signal,
     onUpdate,
     ctx,
@@ -273,7 +286,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     ctx,
   );
 
-  assert.deepEqual(requestedCwds, [ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd]);
+  assert.deepEqual(requestedCwds, [ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd]);
   assert.deepEqual(calls.search, [{ query: "manual policy", limit: 3 }]);
   assert.deepEqual(calls.list, [
     { kind: ["todo"], limit: 3 },
@@ -290,6 +303,19 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       projectId: projectContext.projectId,
       repoPath: projectContext.cwd,
       sessionId: projectContext.sessionId,
+    },
+    {
+      kind: "todo",
+      scope: "global",
+      title: "Implement memory_save_todo",
+      summary: "[P1] [in_progress] Add dedicated todo tool with priority and scope \u2192 Write tests",
+      body: "Add dedicated todo tool with priority and scope",
+      tags: ["todo", "P1", "in_progress"],
+      importance: 0.75,
+      confidence: 1,
+      sourceAgent: "pi",
+      projectId: undefined,
+      repoPath: undefined,
     },
   ]);
   assert.deepEqual(calls.get, ["memory-saved", "memory-updated"]);
@@ -313,6 +339,8 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.match(listOutput.content[0].text, /Found 1 memory\./);
   assert.match(listOutput.content[0].text, /Keep writes manual-first/);
   assert.match(listOutput.content[0].text, /Use explicit review and save tools for durable memory updates/);
+  assert.match(todoOutput.content[0].text, /Saved memory memory-saved\./);
+  assert.ok(todoOutput.details !== undefined, "expected todo output to have details");
   assert.match(saveOutput.content[0].text, /Saved memory memory-saved\./);
   assert.match(saveOutput.content[0].text, /title: Keep writes manual-first/);
   assert.ok(saveOutput.content[0].text.includes(`project_id: ${projectContext.projectId}`));
