@@ -2,7 +2,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 
 import { type MemoryCore, type MemoryRecord, type MemorySearchResult, type MemoryStore, type SearchMemoriesInput } from "../core/index.ts";
 import { formatAuditResults, runMemoryAudit } from "./audit.ts";
-import { resolveMemoryDbPath } from "./config.ts";
+import { ensureDefaultMemoryDbPath } from "./config.ts";
 import { deriveMemoryTurnContext, findLatestHandoffForTurn, retrieveMemoriesForTurn } from "./retrieval.ts";
 import {
   formatMemoryReview,
@@ -211,7 +211,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
 }
 
 function getStoreForCwd(core: MemoryCore, currentStore: MemoryStore | undefined, _cwd: string): MemoryStore {
-  const dbPath = resolveMemoryDbPath();
+  const { dbPath } = ensureDefaultMemoryDbPath();
 
   if (currentStore?.dbPath === dbPath) {
     return currentStore;

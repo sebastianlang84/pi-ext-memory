@@ -5,7 +5,7 @@ import { initializeMemoryStore, type InitializeMemoryStoreInput, type MemoryStor
 const embeddingStatus = createDefaultMemoryEmbeddingAdapter().getStatus();
 
 export interface MemoryCoreStatus {
-  version: "v1.5.0";
+  version: "v2.0.2";
   mode: "local-core";
   storage: "sqlite-session-summary-ready";
   latestSchemaVersion: number;
@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v1.5.0",
+        version: "v2.0.2",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
@@ -39,7 +39,7 @@ export function createMemoryCore(): MemoryCore {
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save", "/memory-audit"],
         availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit"],
-        nextStep: "V1.5 adds memory hygiene audit. Use memory_audit or /memory-audit to inspect stale todos and old handoffs.",
+        nextStep: "V2.0.2 uses the namespaced Pi state path and auto-copies the legacy default DB on first default-path startup.",
       };
     },
     initializeStore(input) {

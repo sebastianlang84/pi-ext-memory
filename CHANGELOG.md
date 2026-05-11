@@ -10,6 +10,13 @@ write-when: A user/operator-relevant repo change is introduced
 All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
 
+## [2.0.2] - 2026-05-11
+
+### Changed
+- Default SQLite database path moved from `~/.pi/agent/pi-memory.sqlite` to the namespaced state path `~/.pi/agent/state/pi-memory/memory.sqlite`; `PI_MEMORY_DB_PATH` still overrides it.
+- First startup with the default path now copies an existing legacy default DB plus SQLite `-wal`/`-shm` sidecars into the new state path when the new DB does not already exist.
+- Runtime status metadata now reports `v2.0.2`.
+
 ## [2.0.1] - 2026-05-11
 
 ### Fixed

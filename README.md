@@ -56,7 +56,9 @@ Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup s
 
 Optional configuration:
 
-- `PI_MEMORY_DB_PATH` overrides the SQLite database path.
+- By default, pi-memory stores SQLite state at `~/.pi/agent/state/pi-memory/memory.sqlite`.
+- On first startup with the default path, if the new DB does not exist but the legacy `~/.pi/agent/pi-memory.sqlite` file does, pi-memory copies the legacy DB plus SQLite `-wal`/`-shm` sidecars into the new state path.
+- `PI_MEMORY_DB_PATH` overrides the SQLite database path and disables the legacy default-path copy.
 - `PI_MEMORY_BGE_M3_COMMAND` enables a local BGE-M3 embedding command adapter.
 
 ## License

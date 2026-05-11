@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 import { createMemoryCore, type MemoryStore } from "../core/index.ts";
-import { resolveMemoryDbPath } from "./config.ts";
+import { ensureDefaultMemoryDbPath } from "./config.ts";
 import {
   buildTurnMemoryMessage,
   deriveMemoryTurnContext,
@@ -72,7 +72,7 @@ function getStoreForCwd(
   currentStore: MemoryStore | undefined,
   _cwd: string,
 ): MemoryStore {
-  const dbPath = resolveMemoryDbPath();
+  const { dbPath } = ensureDefaultMemoryDbPath();
 
   if (currentStore?.dbPath === dbPath) {
     return currentStore;
