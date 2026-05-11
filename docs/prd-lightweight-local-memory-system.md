@@ -128,19 +128,19 @@ Begründung:
 
 ### 6.2 Vektor-Layer
 
-**Default: sqlite-vec**
+**V1-Stand: persistierte JSON-Vektoren plus Application-Layer-Ranking**
 
 Begründung:
 
 - sehr leichtgewichtig
-- passt gut zu SQLite
-- local-first
-- pre-v1 ist akzeptabel
+- passt gut zu SQLite ohne zusätzliche native Extension
+- local-first und portabel
+- ausreichend für den aktuellen V1-Kandidatenumfang
 
 Risiko:
 
-- unreifer als etabliertere Alternativen
-- Breaking Changes möglich
+- bei sehr großen Stores kann ein spezialisierter Vektorindex später nötig werden
+- Ranking-Performance muss mit wachsender Memory-Menge beobachtet werden
 
 ### 6.3 Lexikalische Suche
 
@@ -153,7 +153,7 @@ Begründung:
 
 ### 6.4 Embedding-Modell
 
-**Arbeits-Default: BGE-M3**
+**Arbeits-Default: lokaler BGE-M3-Command-Adapter**
 
 Begründung:
 
@@ -162,25 +162,34 @@ Begründung:
 - gut für gemischte Memory-Inhalte
 - besserer Fit für zweisprachiges Retrieval als ein rein englisch optimierter Standard-Default
 
-Offene Validierung:
+Konfiguration in der aktuellen Richtung:
 
-- prüfen, ob BGE-M3 lokal auf Zielmaschinen schnell genug ist
-- prüfen, ob ein leichteres Fallback-Modell nötig ist
+- Pi-memory nutzt bevorzugt einen lokalen Command-Adapter über `PI_MEMORY_BGE_M3_COMMAND`
+- Der Command muss einen validen 1024-dimensionalen BGE-M3-Vektor liefern und läuft mit begrenztem Timeout (`PI_MEMORY_BGE_M3_TIMEOUT_MS`, default 15s)
+- Falls kein Command konfiguriert ist, fällt der Default-Pfad deterministisch auf `builtin-hash-384-v1` zurück
+- Ein Low-Footprint-Profil bleibt mit `builtin-hash-64-v1` verfügbar
+
+Nachlaufende Validierung:
+
+- v1.0.0 wurde mit grünen automatisierten Tests und Pi-Smokes geschlossen; `PI_MEMORY_BGE_M3_COMMAND` war dabei nicht konfiguriert, daher validierte der Release-Gate den deterministischen Fallback-Pfad.
+- Auf Zielmaschinen weiter beobachten, ob der BGE-M3-Command schnell genug ist.
+- Deterministischen Fallback beibehalten, bis reale Messungen ein anderes leichtes semantisches Fallback-Modell rechtfertigen.
 
 ### 6.5 Architekturform
 
-**V1 bevorzugt als lokale Library oder kleiner lokaler Service**
+**V1 läuft als lokale In-Process-Pi-Extension mit eigenständigem Core**
 
 Ziel:
 
 - Pi kann lokal zugreifen
 - Kernlogik bleibt von Pi-spezifischer Integration getrennt
-- spätere Öffnung über MCP/OpenAPI wird einfacher
+- spätere Öffnung über MCP/OpenAPI bleibt möglich
 
-Aktuelle Tendenz:
+Aktueller Stand:
 
 - Core als eigenständige Komponente mit klarer API-Grenze
 - Pi-Extension als Adapter
+- kein localhost-Service für V1
 
 ---
 
@@ -322,6 +331,7 @@ Pi kann:
 - neue Erinnerungen schreiben
 - Session-Summaries persistieren
 - wichtige Entscheidungen/Facts markieren
+- als normales Pi-Paket installiert und per Package-Manifest geladen werden
 
 ### Noch offen
 
@@ -348,7 +358,7 @@ Pi kann:
 
 ### Technisch
 
-- sqlite-vec ist pre-v1
+- Application-Layer-Vektorsuche könnte bei sehr großen Stores an Grenzen kommen
 - Embedding-Latenz lokal könnte auf schwachen Maschinen stören
 - BGE-M3 könnte für manche Zielrechner zu schwer sein
 
@@ -360,20 +370,17 @@ Pi kann:
 
 ---
 
-## 14. Offene Fragen
+## 14. Post-v1 offene Fragen
 
-1. **Welcher Runtime-Ansatz für V1?**
-   - reine lokale Library
-   - kleiner localhost-Service
+1. **Soll ein späterer Runtime-Ansatz über die In-Process-Pi-Extension hinausgehen?**
+   - nur wenn Evidenz einen kleinen localhost-Service oder eine andere Integrationsgrenze rechtfertigt
 
-2. **Welches Embedding-Fallback für schwächere PCs?**
-   - kleineres multilinguales Modell?
-   - optional externer Embedder?
+2. **Soll der deterministische Fallback ersetzt werden?**
+   - nur wenn reale Messungen ein anderes leichtes semantisches Fallback-Modell rechtfertigen
 
-3. **Wie erfolgt Memory-Erzeugung?**
-   - manuell
-   - heuristisch halbautomatisch
-   - automatisch mit Review
+3. **Wie weit soll Memory-Erzeugung nach V1 automatisiert werden?**
+   - aktueller Stand bleibt manual-first mit expliziten Tools/Commands
+   - spätere Optionen: heuristisch halbautomatisch oder automatisch mit Review
 
 4. **Welche Einträge dürfen verfallen?**
    - episodes / todos / temporäre Hinweise
@@ -394,7 +401,7 @@ Pi kann:
 ### Enthalten
 
 - SQLite
-- sqlite-vec
+- persistierte Vektoren mit Application-Layer-Ranking
 - FTS5
 - DE+EN Embeddings
 - lokale Persistenz
@@ -426,12 +433,9 @@ Pi kann:
 
 ---
 
-## 17. Nächste sinnvolle Arbeitspakete
+## 17. Post-v1 Nachlauf
 
-1. finale Entscheidung: **Library vs localhost-Service**
-2. finale Entscheidung: **BGE-M3 vs kleineres Fallback-Modell**
-3. konkretes SQL-Schema definieren
-4. Search-/Ranking-Strategie definieren
-5. Write-Policy definieren
-6. Pi-Integrationsgrenze definieren
-7. später MCP/OpenAPI-Zielbild festhalten
+1. Real-machine BGE-M3-Command-Adapter-Qualität und Latenz im normalen Einsatz beobachten.
+2. Deterministischen Fallback beibehalten, bis Messungen ein anderes leichtes semantisches Fallback-Modell rechtfertigen.
+3. Runtime-Grenze erneut als ADR bewerten, falls Evidenz später gegen die aktuelle In-Process-Pi-Extension spricht.
+4. Späteres MCP/OpenAPI-Zielbild festhalten, wenn eine zweite Integrationsoberfläche konkret wird.

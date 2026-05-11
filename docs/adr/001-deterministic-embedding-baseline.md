@@ -43,3 +43,4 @@ The store initialization path may also accept a custom embedding adapter for tes
 
 - Revisit the default semantic model choice when v0.6 hybrid ranking is implemented.
 - Keep the adapter boundary narrow so a better local model can replace the deterministic baseline without broad refactors.
+- In v0.8.2, the default path is intentionally superseded by a local BGE-M3 command adapter while this deterministic baseline remains the built-in fallback.

@@ -61,7 +61,7 @@ The extension should depend on a small internal interface such as:
 - `updateMemory(input)`
 - `linkMemories(input)`
 - `archiveMemory(input)`
-- `summarizeSession(input)`
+- `saveSessionSummary(input)`
 
 The extension should **not** contain SQL or ranking logic directly.
 
@@ -177,10 +177,10 @@ Show:
 Manual search for debugging retrieval quality.
 
 ### `/memory-review`
-Show candidate memories from the current session that are worth saving, but do not save automatically.
+Show relevant existing memories for the current session/project/repo context plus explicit suggested actions, but do not save automatically.
 
 ### `/memory-session-save`
-Create or update a session summary explicitly.
+Create or update a session summary explicitly from user-provided text.
 
 V1 can ship with these four commands only.
 
@@ -199,6 +199,7 @@ Use for:
 Use for:
 - retrieving relevant memories for the incoming user prompt,
 - injecting a compact memory-context message into the turn,
+- injecting terse memory-use triggers even when no memories match,
 - constraining retrieval by current cwd/project/repo/session.
 
 This is the main retrieval hook for V1.
@@ -232,7 +233,7 @@ Use for:
    - current session identifier
 3. Extension calls `searchMemories(...)` with those filters.
 4. Core returns hybrid-ranked results.
-5. Extension injects a compact memory context block into the turn.
+5. Extension injects a compact memory context block plus memory-use triggers into the turn.
 6. Agent can still call `memory_search` explicitly if it needs more detail.
 
 ### Injection shape
@@ -247,11 +248,14 @@ The injected block should be short and structured, for example:
 Hard rule:
 - inject only the top few results,
 - prefer summaries over bodies,
+- keep trigger text terse,
 - avoid flooding every turn with low-confidence memories.
 
 ## 7. Proposed V1 Write Policy
 
 V1 should be **manual-first, assisted-second, never silent by default**.
+
+Default store: one global SQLite DB at `~/.pi/agent/pi-memory.sqlite`, overridable with `PI_MEMORY_DB_PATH`. Project, repo, and session scopes are metadata filters, not separate DBs. Existing repo-local `.pi/pi-memory.sqlite` dev databases should be migrated or temporarily pinned with `PI_MEMORY_DB_PATH` during upgrade.
 
 ### Allowed in V1
 
@@ -259,6 +263,10 @@ V1 should be **manual-first, assisted-second, never silent by default**.
 - explicit `memory_update`
 - explicit `/memory-session-save`
 - suggested candidates via `/memory-review`
+
+### Candidate review flow
+
+`/memory-review` is read-only in V1. It should show the current session/project/repo context, relevant existing memories, the current session summary if present, and suggested explicit follow-up actions. The operator or agent then chooses one of the explicit write tools (`memory_save`, `memory_update`, `memory_link`, `memory_archive`) or `/memory-session-save`; the review command itself must not persist durable memories.
 
 ### Not default in V1
 
@@ -289,7 +297,7 @@ V1 should bias toward these practical write cases:
 
 ## 9. Session Summary Shape
 
-A V1 session summary should be stored as a structured memory or tightly related memory set containing:
+A V1 session summary should be stored in the existing `sessions.summary` field rather than as a normal memory record, and should contain:
 
 - what changed,
 - what was decided,
@@ -304,6 +312,7 @@ The summary should be compact enough to retrieve later without reloading raw cha
 Recommended packaging for V1:
 
 - build as a normal TypeScript Pi extension package,
+- expose the packaged extension through the `pi.extensions` manifest in `package.json`,
 - keep the extension entry point thin,
 - place the local core in internal modules inside the same repo/package at first.
 
@@ -341,19 +350,22 @@ That keeps V1 easy to run while preserving a later extraction path.
 - session summary persistence
 - archive/TTL behavior
 
-## 13. Open Decisions Still Needing ADRs
+### Slice 4
+- local BGE-M3 command adapter via `PI_MEMORY_BGE_M3_COMMAND`, with bounded timeout and 1024-dimension output validation
+- Pi package manifest/install path
+- upgrade and DB-migration documentation, including WAL-safe repo-local DB migration guidance
 
-- exact SQLite schema and migration format
-- final hybrid ranking formula
-- exact DB location and project partitioning strategy
-- whether session summaries are one memory or multiple linked memories
-- whether a localhost service remains unnecessary after V1 validation
+## 13. Post-v1 Decisions To Revisit If Evidence Changes
+
+- whether a localhost service becomes necessary after real-world V1 usage
+- whether real-machine embedding measurements justify replacing the deterministic fallback
+- whether post-V1 assisted memory creation should expand beyond the manual-first policy
 
 ## 14. Working Recommendation
 
-Until an ADR says otherwise, work as if:
+For V1:
 
-- **Pi extension is the V1 product surface**,
+- **Pi extension is the product surface**,
 - **the core runs in-process**,
 - **retrieval happens automatically at turn start**,
 - **durable writes stay explicit or review-based**.

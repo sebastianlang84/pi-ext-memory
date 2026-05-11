@@ -19,6 +19,7 @@ write-when: A behavior rule, gate, guardrail, or document-role summary changes
 - No secrets in repo/commits/docs.
 - Do not silently guess architecture, performance, or platform constraints.
 - Follow Semantic Versioning 2.0.0 repo-wide.
+- At the start of every task, check that the current branch is appropriate for the work.
 - Do not weaken local-first or portability goals without explicit approval.
 - Do not introduce heavy infra, remote dependencies, or background services into V1 without an explicit decision.
 - Keep retrieval/memory quality ahead of feature count.

@@ -1,11 +1,16 @@
 import { randomUUID } from "node:crypto";
 
-export const MEMORY_KINDS = ["fact", "preference", "decision", "episode", "artifact_ref", "todo"] as const;
+export const MEMORY_KINDS = ["fact", "preference", "decision", "episode", "artifact_ref", "todo", "handoff"] as const;
 export const MEMORY_SCOPES = ["global", "project", "repo", "session"] as const;
+export const MEMORY_STATUSES = ["active", "archived"] as const;
+export const MEMORY_LINK_RELATIONS = ["related_to", "supersedes", "caused_by", "implements", "blocks"] as const;
+export const MEMORY_LIST_ORDER_BY = ["updatedAt", "createdAt"] as const;
 
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 export type MemoryScope = (typeof MEMORY_SCOPES)[number];
-export type MemoryStatus = "active" | "archived";
+export type MemoryStatus = (typeof MEMORY_STATUSES)[number];
+export type MemoryLinkRelation = (typeof MEMORY_LINK_RELATIONS)[number];
+export type MemoryListOrderBy = (typeof MEMORY_LIST_ORDER_BY)[number];
 
 export interface CreateMemoryInput {
   kind: MemoryKind;
@@ -26,6 +31,30 @@ export interface CreateMemoryInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface UpdateMemoryInput {
+  id: string;
+  title?: string;
+  summary?: string;
+  body?: string | null;
+  tags?: string[];
+  importance?: number;
+  confidence?: number;
+  expiresAt?: string | null;
+  status?: MemoryStatus;
+  pinned?: boolean;
+}
+
+export interface ArchiveMemoryInput {
+  id: string;
+  reason?: string;
+}
+
+export interface LinkMemoriesInput {
+  fromId: string;
+  toId: string;
+  relation: MemoryLinkRelation;
+}
+
 export interface SearchMemoriesInput {
   query: string;
   kind?: MemoryKind[];
@@ -35,6 +64,30 @@ export interface SearchMemoriesInput {
   projectId?: string;
   repoPath?: string;
   limit?: number;
+}
+
+export interface ListMemoriesInput {
+  kind?: MemoryKind[];
+  scope?: MemoryScope[];
+  tags?: string[];
+  sessionId?: string;
+  projectId?: string;
+  repoPath?: string;
+  status?: MemoryStatus;
+  limit?: number;
+  orderBy?: MemoryListOrderBy;
+}
+
+export interface NormalizedListMemoriesInput {
+  kind?: MemoryKind[];
+  scope?: MemoryScope[];
+  tags: string[];
+  sessionId?: string;
+  projectId?: string;
+  repoPath?: string;
+  status: MemoryStatus;
+  limit: number;
+  orderBy: MemoryListOrderBy;
 }
 
 export interface NormalizedSearchMemoriesInput {
@@ -47,6 +100,19 @@ export interface NormalizedSearchMemoriesInput {
   projectId?: string;
   repoPath?: string;
   limit: number;
+}
+
+export interface NormalizedUpdateMemoryInput {
+  id: string;
+  title?: string;
+  summary?: string;
+  body?: string | null;
+  tags?: string[];
+  importance?: number;
+  confidence?: number;
+  expiresAt?: string | null;
+  status?: MemoryStatus;
+  pinned?: boolean;
 }
 
 export interface MemoryRecord {
@@ -71,6 +137,14 @@ export interface MemoryRecord {
   lastAccessedAt?: string;
   expiresAt?: string;
   metadata: Record<string, unknown>;
+}
+
+export interface MemoryLinkRecord {
+  id: number;
+  fromId: string;
+  toId: string;
+  relation: MemoryLinkRelation;
+  createdAt: string;
 }
 
 export interface MemorySearchResult {
@@ -157,6 +231,121 @@ export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryReco
   };
 }
 
+export function normalizeUpdateMemoryInput(input: UpdateMemoryInput): NormalizedUpdateMemoryInput {
+  const issues: string[] = [];
+  const id = normalizeNonEmptyId("id", input.id, issues);
+
+  let changedFieldCount = 0;
+
+  const title =
+    input.title === undefined ? undefined : normalizeRequiredText("title", input.title, issues, 3, () => changedFieldCount++);
+  const summary =
+    input.summary === undefined
+      ? undefined
+      : normalizeRequiredText("summary", input.summary, issues, 10, () => changedFieldCount++);
+
+  if (summary && isLowInformationSummary(summary)) {
+    issues.push("summary must contain enough detail to be useful later");
+  }
+
+  const body =
+    input.body === undefined ? undefined : normalizeNullableOptionalText(input.body, "body", issues, () => changedFieldCount++);
+  const tags = input.tags === undefined ? undefined : normalizeTags(input.tags, issues, () => changedFieldCount++);
+  const importance =
+    input.importance === undefined ? undefined : normalizeScore("importance", input.importance, issues, () => changedFieldCount++);
+  const confidence =
+    input.confidence === undefined ? undefined : normalizeScore("confidence", input.confidence, issues, () => changedFieldCount++);
+  const expiresAt =
+    input.expiresAt === undefined
+      ? undefined
+      : normalizeNullableOptionalTimestamp(input.expiresAt, "expiresAt", issues, () => changedFieldCount++);
+  const status =
+    input.status === undefined ? undefined : normalizeEnum("status", input.status, MEMORY_STATUSES, issues, () => changedFieldCount++);
+  const pinned =
+    input.pinned === undefined ? undefined : normalizeBoolean("pinned", input.pinned, issues, () => changedFieldCount++);
+
+  if (changedFieldCount === 0) {
+    issues.push("at least one updatable field must be provided");
+  }
+
+  if (issues.length > 0 || !id) {
+    throw new MemoryValidationError(issues);
+  }
+
+  return {
+    id,
+    title,
+    summary,
+    body,
+    tags,
+    importance,
+    confidence,
+    expiresAt,
+    status,
+    pinned,
+  };
+}
+
+export function normalizeArchiveMemoryInput(input: ArchiveMemoryInput): { id: string; reason?: string } {
+  const issues: string[] = [];
+  const id = normalizeNonEmptyId("id", input.id, issues);
+  const reason = normalizeOptionalText(input.reason);
+
+  if (issues.length > 0 || !id) {
+    throw new MemoryValidationError(issues);
+  }
+
+  return { id, reason };
+}
+
+export function normalizeLinkMemoriesInput(input: LinkMemoriesInput): { fromId: string; toId: string; relation: MemoryLinkRelation } {
+  const issues: string[] = [];
+
+  const fromId = normalizeNonEmptyId("fromId", input.fromId, issues);
+  const toId = normalizeNonEmptyId("toId", input.toId, issues);
+  const relation = normalizeEnum("relation", input.relation, MEMORY_LINK_RELATIONS, issues);
+
+  if (fromId && toId && fromId === toId) {
+    issues.push("fromId and toId must be different memory ids");
+  }
+
+  if (issues.length > 0 || !fromId || !toId || !relation) {
+    throw new MemoryValidationError(issues);
+  }
+
+  return { fromId, toId, relation };
+}
+
+export function normalizeListMemoriesInput(input: ListMemoriesInput): NormalizedListMemoriesInput {
+  const issues: string[] = [];
+
+  const kind = normalizeEnumList("kind", input.kind, MEMORY_KINDS, issues);
+  const scope = normalizeEnumList("scope", input.scope, MEMORY_SCOPES, issues);
+  const tags = normalizeTags(input.tags, issues);
+  const sessionId = normalizeOptionalText(input.sessionId);
+  const projectId = normalizeOptionalText(input.projectId);
+  const repoPath = normalizeOptionalText(input.repoPath);
+  const status = input.status === undefined ? "active" : normalizeEnum("status", input.status, MEMORY_STATUSES, issues);
+  const limit = normalizeLimit(input.limit, issues);
+  const orderBy = input.orderBy === undefined ? "updatedAt" : normalizeEnum("orderBy", input.orderBy, MEMORY_LIST_ORDER_BY, issues);
+
+  if (issues.length > 0 || !status || !orderBy) {
+    throw new MemoryValidationError(issues);
+  }
+
+  return {
+    kind,
+    scope,
+    tags,
+    sessionId,
+    projectId,
+    repoPath,
+    status,
+    limit,
+    orderBy,
+  };
+}
+
 export function normalizeSearchMemoriesInput(input: SearchMemoriesInput): NormalizedSearchMemoriesInput {
   const issues: string[] = [];
 
@@ -192,12 +381,14 @@ function normalizeEnum<T extends string>(
   value: string,
   allowedValues: readonly T[],
   issues: string[],
+  onChange?: () => void,
 ): T | undefined {
   if (typeof value !== "string" || !allowedValues.includes(value as T)) {
     issues.push(`${fieldName} must be one of: ${allowedValues.join(", ")}`);
     return undefined;
   }
 
+  onChange?.();
   return value as T;
 }
 
@@ -238,6 +429,7 @@ function normalizeRequiredText(
   value: string,
   issues: string[],
   minLength: number,
+  onChange?: () => void,
 ): string | undefined {
   if (typeof value !== "string") {
     issues.push(`${fieldName} must be a string`);
@@ -250,6 +442,7 @@ function normalizeRequiredText(
     return undefined;
   }
 
+  onChange?.();
   return normalized;
 }
 
@@ -258,6 +451,26 @@ function normalizeOptionalText(value: string | undefined): string | undefined {
 
   const normalized = collapseWhitespace(value);
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeNullableOptionalText(
+  value: string | null,
+  fieldName: string,
+  issues: string[],
+  onChange?: () => void,
+): string | null | undefined {
+  if (value === null) {
+    onChange?.();
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    issues.push(`${fieldName} must be a string or null`);
+    return undefined;
+  }
+
+  onChange?.();
+  return normalizeOptionalText(value) ?? null;
 }
 
 function normalizeOptionalTimestamp(
@@ -276,7 +489,25 @@ function normalizeOptionalTimestamp(
   return normalized;
 }
 
-function normalizeScore(fieldName: string, value: number | undefined, issues: string[]): number {
+function normalizeNullableOptionalTimestamp(
+  value: string | null,
+  fieldName: string,
+  issues: string[],
+  onChange?: () => void,
+): string | null | undefined {
+  if (value === null) {
+    onChange?.();
+    return null;
+  }
+
+  const normalized = normalizeOptionalTimestamp(value, fieldName, issues);
+  if (normalized !== undefined) {
+    onChange?.();
+  }
+  return normalized;
+}
+
+function normalizeScore(fieldName: string, value: number | undefined, issues: string[], onChange?: () => void): number {
   if (value === undefined) return 0.5;
 
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
@@ -284,6 +515,17 @@ function normalizeScore(fieldName: string, value: number | undefined, issues: st
     return 0.5;
   }
 
+  onChange?.();
+  return value;
+}
+
+function normalizeBoolean(fieldName: string, value: boolean, issues: string[], onChange?: () => void): boolean | undefined {
+  if (typeof value !== "boolean") {
+    issues.push(`${fieldName} must be a boolean`);
+    return undefined;
+  }
+
+  onChange?.();
   return value;
 }
 
@@ -298,7 +540,7 @@ function normalizeLimit(value: number | undefined, issues: string[]): number {
   return value;
 }
 
-function normalizeTags(tags: string[] | undefined, issues: string[]): string[] {
+function normalizeTags(tags: string[] | undefined, issues: string[], onChange?: () => void): string[] {
   if (tags === undefined) return [];
   if (!Array.isArray(tags)) {
     issues.push("tags must be an array of strings");
@@ -321,6 +563,7 @@ function normalizeTags(tags: string[] | undefined, issues: string[]): string[] {
     normalizedTags.push(normalized);
   }
 
+  onChange?.();
   return normalizedTags;
 }
 
@@ -340,6 +583,17 @@ function normalizeMetadata(
     issues.push("metadata must be JSON-serializable");
     return {};
   }
+}
+
+function normalizeNonEmptyId(fieldName: string, value: string, issues: string[]): string | undefined {
+  const normalized = normalizeOptionalText(value);
+
+  if (!normalized) {
+    issues.push(`${fieldName} must be a non-empty string`);
+    return undefined;
+  }
+
+  return normalized;
 }
 
 function buildFtsMatchQuery(query: string, issues: string[]): string | undefined {

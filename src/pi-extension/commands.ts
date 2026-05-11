@@ -1,0 +1,284 @@
+import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+
+import { type MemoryCore, type MemoryRecord, type MemorySearchResult, type MemoryStore, type SearchMemoriesInput } from "../core/index.ts";
+import { resolveMemoryDbPath } from "./config.ts";
+import { deriveMemoryTurnContext, findLatestHandoffForTurn, retrieveMemoriesForTurn } from "./retrieval.ts";
+import {
+  formatMemoryReview,
+  formatMemorySearchResultLine,
+  formatMemorySessionSaved,
+  formatMemorySessionSaveUsage,
+  formatSearchPlanStage,
+} from "./formatters.ts";
+import { formatMemoryStatus, getNextStatusWidgetLines } from "./status.ts";
+
+const MANUAL_SEARCH_RESULT_LIMIT = 8;
+const MANUAL_SEARCH_STAGE_LIMIT = 6;
+const MEMORY_REVIEW_QUERY = "decisions facts preferences todos risks next steps";
+const MEMORY_REVIEW_RESULT_LIMIT = 8;
+const MIN_SESSION_SUMMARY_LENGTH = 12;
+
+export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCommand">, core: MemoryCore): void {
+  let store: MemoryStore | undefined;
+  let isStatusWidgetVisible = false;
+  let isReviewWidgetVisible = false;
+
+  pi.on("session_shutdown", async (_event, ctx) => {
+    if (ctx.hasUI) {
+      ctx.ui.setWidget("pi-memory-status", undefined);
+      ctx.ui.setWidget("pi-memory-search", undefined);
+      ctx.ui.setWidget("pi-memory-review", undefined);
+      ctx.ui.setWidget("pi-memory-session-save", undefined);
+      ctx.ui.setWidget("pi-memory-handoff", undefined);
+    }
+
+    isStatusWidgetVisible = false;
+    isReviewWidgetVisible = false;
+    store?.close();
+    store = undefined;
+  });
+
+  pi.registerCommand("memory-status", {
+    description: "Show the current pi-memory bootstrap status",
+    handler: async (_args, ctx) => {
+      const status = core.getStatus();
+      const output = formatMemoryStatus(status, ctx.cwd);
+
+      if (ctx.hasUI) {
+        const widgetLines = getNextStatusWidgetLines(isStatusWidgetVisible, status, ctx.cwd);
+        isStatusWidgetVisible = widgetLines !== undefined;
+        ctx.ui.setWidget("pi-memory-status", widgetLines);
+        ctx.ui.notify(isStatusWidgetVisible ? "pi-memory status shown" : "pi-memory status cleared", "info");
+        return;
+      }
+
+      process.stdout.write(`${output}\n`);
+    },
+  });
+
+  pi.registerCommand("memory-search", {
+    description: "Run a manual staged memory search for the current context",
+    handler: async (args, ctx) => {
+      const query = args.trim();
+      if (query.length < 2) {
+        writeCommandOutput("Usage: /memory-search <query>", ctx);
+        return;
+      }
+
+      const activeStore = getStoreForCwd(core, store, ctx.cwd);
+      store = activeStore;
+
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, query, turnContext, {
+        resultLimit: MANUAL_SEARCH_RESULT_LIMIT,
+        stageLimit: MANUAL_SEARCH_STAGE_LIMIT,
+      });
+
+      const output = formatManualMemorySearch(query, results, searchPlan, turnContext, activeStore.dbPath);
+
+      if (ctx.hasUI) {
+        ctx.ui.setWidget("pi-memory-search", output.split("\n"));
+        ctx.ui.notify("pi-memory search updated", "info");
+        return;
+      }
+
+      process.stdout.write(`${output}\n`);
+    },
+  });
+
+  pi.registerCommand("memory-review", {
+    description: "Show relevant existing memories and explicit suggested next actions without saving anything",
+    handler: async (_args, ctx) => {
+      if (ctx.hasUI && isReviewWidgetVisible) {
+        ctx.ui.setWidget("pi-memory-review", undefined);
+        isReviewWidgetVisible = false;
+        ctx.ui.notify("pi-memory review cleared", "info");
+        return;
+      }
+
+      const activeStore = getStoreForCwd(core, store, ctx.cwd);
+      store = activeStore;
+
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const session = activeStore.getSession(turnContext.sessionId);
+      const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, MEMORY_REVIEW_QUERY, turnContext, {
+        resultLimit: MEMORY_REVIEW_RESULT_LIMIT,
+        stageLimit: MANUAL_SEARCH_STAGE_LIMIT,
+      });
+      const output = formatMemoryReview(results, searchPlan, turnContext, activeStore.dbPath, session?.summary);
+
+      if (ctx.hasUI) {
+        ctx.ui.setWidget("pi-memory-review", output.split("\n"));
+        isReviewWidgetVisible = true;
+        ctx.ui.notify("pi-memory review shown", "info");
+        return;
+      }
+
+      process.stdout.write(`${output}\n`);
+    },
+  });
+
+  pi.registerCommand("memory-handoff", {
+    description: "Show or archive the active handoff for the current Pi session",
+    handler: async (args, ctx) => {
+      const action = args.trim() || "show";
+      const activeStore = getStoreForCwd(core, store, ctx.cwd);
+      store = activeStore;
+
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+
+      if (action === "archive") {
+        const sessionId = turnContext.sessionId.trim();
+        if (sessionId.length === 0) {
+          writeCommandOutput("Cannot archive handoff without a stable Pi session id.", ctx);
+          return;
+        }
+
+        const current = findLatestSessionHandoff(activeStore, sessionId);
+        if (!current) {
+          writeCommandOutput("No active handoff found for the current session.", ctx);
+          return;
+        }
+
+        const archived = activeStore.archiveMemory({ id: current.id, reason: "handoff archived from /memory-handoff" });
+        writeCommandOutput(formatMemoryHandoffArchived(archived, activeStore.dbPath), ctx);
+        return;
+      }
+
+      if (action !== "show") {
+        writeCommandOutput("Usage: /memory-handoff [show|archive]\nUse memory_handoff_save to create or update a handoff.", ctx);
+        return;
+      }
+
+      const latestHandoff = findLatestHandoffForTurn(activeStore, turnContext);
+      const output = formatMemoryHandoff(latestHandoff?.memory, activeStore.dbPath, latestHandoff?.isFallback ?? false);
+
+      if (ctx.hasUI) {
+        ctx.ui.setWidget("pi-memory-handoff", output.split("\n"));
+        ctx.ui.notify("pi-memory handoff shown", "info");
+        return;
+      }
+
+      process.stdout.write(`${output}\n`);
+    },
+  });
+
+  pi.registerCommand("memory-session-save", {
+    description: "Persist a compact summary for the current Pi session",
+    handler: async (args, ctx) => {
+      const summary = args.trim();
+      if (summary.length < MIN_SESSION_SUMMARY_LENGTH) {
+        writeCommandOutput(formatMemorySessionSaveUsage(MIN_SESSION_SUMMARY_LENGTH), ctx);
+        return;
+      }
+
+      const activeStore = getStoreForCwd(core, store, ctx.cwd);
+      store = activeStore;
+
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const session = activeStore.saveSessionSummary({
+        sessionId: turnContext.sessionId,
+        summary,
+        projectId: turnContext.projectId,
+        repoPath: turnContext.repoPath,
+      });
+      const output = formatMemorySessionSaved(session, activeStore.dbPath);
+
+      if (ctx.hasUI) {
+        ctx.ui.setWidget("pi-memory-session-save", output.split("\n"));
+        ctx.ui.notify("pi-memory session summary saved", "info");
+        return;
+      }
+
+      process.stdout.write(`${output}\n`);
+    },
+  });
+}
+
+function getStoreForCwd(core: MemoryCore, currentStore: MemoryStore | undefined, _cwd: string): MemoryStore {
+  const dbPath = resolveMemoryDbPath();
+
+  if (currentStore?.dbPath === dbPath) {
+    return currentStore;
+  }
+
+  currentStore?.close();
+  return core.initializeStore({ dbPath });
+}
+
+function findLatestSessionHandoff(store: MemoryStore, sessionId: string): MemoryRecord | undefined {
+  return store.listMemories({
+    kind: ["handoff"],
+    scope: ["session"],
+    sessionId,
+    status: "active",
+    orderBy: "updatedAt",
+    limit: 1,
+  })[0];
+}
+
+function formatMemoryHandoff(memory: MemoryRecord | undefined, dbPath: string, isFallback: boolean): string {
+  if (!memory) {
+    return [
+      "No active handoff found for this session/repo/project.",
+      "Use memory_handoff_save before context reset, compaction, wrap-up, or agent transfer.",
+      `db_path: ${dbPath}`,
+    ].join("\n");
+  }
+
+  return [
+    `Latest active handoff${isFallback ? " (fallback from another matching session/repo/project)" : ""}.`,
+    `id: ${memory.id}`,
+    `title: ${memory.title}`,
+    `summary: ${memory.summary}`,
+    `scope: ${memory.scope}`,
+    `session_id: ${memory.sessionId ?? "none"}`,
+    `project_id: ${memory.projectId ?? "none"}`,
+    `repo_path: ${memory.repoPath ?? "none"}`,
+    `updated_at: ${memory.updatedAt}`,
+    memory.body ?? "body: none",
+    `db_path: ${dbPath}`,
+  ].join("\n");
+}
+
+function formatMemoryHandoffArchived(memory: MemoryRecord, dbPath: string): string {
+  return [`Archived handoff ${memory.id}.`, `title: ${memory.title}`, `updated_at: ${memory.updatedAt}`, `db_path: ${dbPath}`].join("\n");
+}
+
+function writeCommandOutput(output: string, ctx: ExtensionCommandContext): void {
+  if (ctx.hasUI) {
+    ctx.ui.notify(output, "warning");
+    return;
+  }
+
+  process.stdout.write(`${output}\n`);
+}
+
+function formatManualMemorySearch(
+  query: string,
+  results: MemorySearchResult[],
+  searchPlan: SearchMemoriesInput[],
+  context: { sessionId: string; projectId?: string; repoPath?: string },
+  dbPath: string,
+): string {
+  const lines = [
+    `Manual memory search for "${query}".`,
+    `search_plan: ${searchPlan.map(formatSearchPlanStage).join(" -> ") || "none"}`,
+    `session_id: ${context.sessionId}`,
+    `project_id: ${context.projectId ?? "none"}`,
+    `repo_path: ${context.repoPath ?? "none"}`,
+  ];
+
+  if (results.length === 0) {
+    lines.push("results: none", `db_path: ${dbPath}`);
+    return lines.join("\n");
+  }
+
+  lines.push(
+    `results: ${results.length}`,
+    ...results.map((result, index) => formatMemorySearchResultLine(index + 1, result)),
+    `db_path: ${dbPath}`,
+  );
+
+  return lines.join("\n");
+}

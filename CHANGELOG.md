@@ -12,12 +12,77 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
-### Fixed
-- `package.json` now includes a `pi` manifest so `pi install` correctly discovers and loads the extension without requiring manual `settings.json` edits.
-- `smoke:memory-status` script no longer passes `-e` with a repo-relative path; it uses the installed extension directly via `pi -p`.
-- README removed references to `memory_handoff_save` and `/memory-handoff` which are not yet implemented.
+## [1.3.2] - 2026-05-09
+
+### Changed
+- Improved the README for faster human overview, tool discovery, install/upgrade, and configuration guidance.
+- Renamed the GitHub/local repository to `pi-ext-memory`; the package/runtime identity remains `pi-memory`.
+
+## [1.3.1] - 2026-05-09
+
+### Changed
+- Shortened the Pi footer status to `memory ok` and show `memory fehler` when turn-start retrieval fails.
+
+## [1.3.0] - 2026-05-09
 
 ### Added
+- Added Handoff V1: `kind: handoff`, `memory_handoff_save`, `/memory-handoff`, and deterministic turn-start preload of the latest matching active handoff before normal retrieval.
+- Added session-id filtering to `memory_list` so handoff save/update and retrieval can isolate concurrent Pi instances safely.
+
+### Changed
+- `memory_save` now refuses direct `kind: handoff` writes and directs agents to `memory_handoff_save`, preserving one active handoff per session.
+
+## [1.2.0] - 2026-05-04
+
+### Added
+- Added `memory_list`, a query-free structured listing tool/API for filtering memories by kind, scope, tags, project, repo, status, limit, and ordering; active memories are the default so active todos can be listed without full-text search terms.
+
+### Changed
+- Clarified `memory_search` as content search and updated status/version metadata for v1.2.0.
+
+## [1.1.2] - 2026-04-29
+
+### Changed
+- Documented the upgrade flow for local clones that are behind the repo: `git pull`, then `pi update .` or reinstall with `pi install .`.
+
+### Removed
+- Removed the repo-local `.pi/extensions/pi-memory/` dev shim so pi-memory loads only through the global/package install path.
+
+### Changed
+- `npm run smoke:memory-status` now smoke-tests the globally installed extension instead of the removed repo-local shim.
+- Updated package metadata and extension status/version strings for v1.1.2.
+
+## [1.1.1] - 2026-04-28
+
+### Changed
+- Shortened the Pi status-line text to `pi-memory v1.1.1 ready`.
+
+## [1.1.0] - 2026-04-28
+
+### Changed
+- Hardened retrieval quality by avoiding unscoped staged-search fallback and reusing a single query embedding across staged searches.
+- Hardened `/memory-review` so a second invocation quickly clears the review widget.
+- Hardened embedding configuration/timeout handling, core/Pi-extension module boundaries, and Pi tool registration test coverage.
+- Updated package metadata and extension status/version strings for v1.1.0.
+
+### Fixed
+- Blank session ids no longer add a session-scoped turn retrieval stage, preventing broad session-memory retrieval without a real `session_id`.
+
+## [1.0.1] - 2026-04-28
+
+### Fixed
+- `/memory-review` now toggles its UI widget off on a second invocation instead of leaving the manual review widget stuck until session shutdown.
+
+### Changed
+- Updated package metadata and extension status/version strings for v1.0.1.
+
+## [1.0.0] - 2026-04-28
+
+### Added
+- A v0.8.2 local BGE-M3 command embedding adapter behind `PI_MEMORY_BGE_M3_COMMAND`, accepting JSON on stdin and common embedding JSON shapes on stdout without adding a new npm dependency.
+- BGE-M3 command safety checks for finite 1024-dimension vectors plus a bounded synchronous timeout configurable with `PI_MEMORY_BGE_M3_TIMEOUT_MS`.
+- A Pi package manifest in `package.json` plus a `npm run smoke:package-status` manifest-path smoke check that disables project-local extension discovery to avoid duplicate dev/package loading.
+- Test coverage proving default deterministic fallback status and command-produced embedding persistence via a temporary local embedding command.
 - Initial repo bootstrap structure aligned with the `agentic-coding` living-doc baseline.
 - Root governance and continuity docs: `AGENTS.md`, `MEMORY.md`, `TODO.md`, and `CHANGELOG.md`.
 - Documentation folders under `docs/` for ADRs, plans, runbooks, policies, audits, and archive material.
@@ -45,15 +110,33 @@ This changelog follows the Keep a Changelog format.
 - Scope-aware runtime enrichment for `memory_save`, so project/repo/session memories inherit current context automatically.
 - Session-aware search filtering in the local core, including automatic session-row creation for persisted session-scoped memories.
 - Extension-focused tests covering context mapping, staged retrieval planning, and compact top-N injection behavior.
+- A v0.8 `memory_update` flow with patch validation, persisted readback, and embedding refresh on content changes.
+- A v0.8 `memory_link` flow backed by the existing `links` table, including idempotent link persistence for simple V1 relations.
+- A v0.8 `memory_archive` flow that keeps records durable while removing archived items from active retrieval.
+- A `/memory-search` command for manual staged retrieval/debugging in the current session/project/repo context.
+- Core tests covering patch updates, relations, and archive semantics.
+- A global Pi-agent memory DB default at `~/.pi/agent/pi-memory.sqlite`, with `PI_MEMORY_DB_PATH` override for custom storage locations.
+- Compact memory trigger guidance in the turn-start injection so agents search before guessing about prior context and save/update durable corrections, decisions, facts, preferences, and todos.
+- A read-only `/memory-review` command that shows relevant existing memories plus explicit suggested actions for manual cleanup/save decisions.
+- A `/memory-session-save <summary>` command plus minimal core session-summary persistence using the existing `sessions.summary` column.
+- Core and extension tests covering explicit session-summary persistence plus review/session-save formatter behavior.
+- Command-level end-to-end coverage for the v0.8.1 save -> search -> review -> session-summary flow.
 
 ### Changed
+- Promoted package metadata, extension status output, README status, and living docs to v1.0.0 after green automated tests and Pi smoke checks.
+- The default embedding target is now `local-bge-m3-command` first, with fallback to `builtin-hash-384-v1` when no command is configured; the low-footprint profile remains `builtin-hash-64-v1`.
+- Updated package metadata and extension status/version strings for v0.8.2 packaging.
+- Documented normal Pi package install/upgrade/smoke flow and WAL-safe migration guidance from repo-local `.pi/pi-memory.sqlite` to `~/.pi/agent/pi-memory.sqlite`.
 - Expanded the root `README.md` from a placeholder to a navigable project guide.
 - Updated `README.md` with the current extension/core structure, test entry points, and v0.6 implementation status.
-- Updated the Pi extension status/reporting strings to reflect v0.7 retrieval-hook readiness and the next v0.8 implementation slice.
-- Updated `README.md` with the v0.7 retrieval-hook status, extension-test coverage, and current verification paths.
+- Updated the Pi extension status/reporting strings to reflect v0.8.1 closure and the next packaging-focused step.
+- Finalized the V1 manual-first write policy and candidate review flow around explicit saves, read-only review, and explicit session summary persistence.
+- Updated `README.md` with the v0.8 status, verification paths, and manual retrieval command smoke check.
+- Changed the Pi extension store resolution from repo-local `.pi/pi-memory.sqlite` to a global store while keeping project/repo/session scopes as metadata filters.
 
 ### Fixed
-- None.
+- `/memory-status` now toggles its UI widget off on a second invocation instead of leaving the status block stuck above the editor for the rest of the session.
+- FTS5 update/delete trigger behavior via schema v4 so memory updates and archives keep the lexical index consistent instead of failing on row updates.
 
 ### Breaking
 - None.
