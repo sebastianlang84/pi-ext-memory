@@ -12,6 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+### Fixed
+- `package.json` now includes a `pi` manifest so `pi install` correctly discovers and loads the extension without requiring manual `settings.json` edits.
+- `smoke:memory-status` script no longer passes `-e` with a repo-relative path; it uses the installed extension directly via `pi -p`.
+- README removed references to `memory_handoff_save` and `/memory-handoff` which are not yet implemented.
+
 ### Added
 - Initial repo bootstrap structure aligned with the `agentic-coding` living-doc baseline.
 - Root governance and continuity docs: `AGENTS.md`, `MEMORY.md`, `TODO.md`, and `CHANGELOG.md`.

@@ -28,9 +28,7 @@ Common tools and commands:
 ```text
 memory_search
 memory_save
-memory_handoff_save
-/memory-search <query>
-/memory-handoff
+/memory-status
 ```
 
 Optional configuration:

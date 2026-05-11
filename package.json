@@ -3,8 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": [".pi/extensions/pi-memory/index.ts"]
+  },
   "scripts": {
     "test": "node --experimental-strip-types --test",
-    "smoke:memory-status": "pi -e ./.pi/extensions/pi-memory/index.ts -p \"/memory-status\""
+    "smoke:memory-status": "pi -p \"/memory-status\""
   }
 }
