@@ -12,6 +12,16 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-05-11
+
+### Added
+- New `kind: progress_snapshot` for project status snapshots (current state, done, next steps, decisions) — prevents Schema-Gravity misrouting to `memory_save_handoff`.
+
+### Changed
+- `memory_save_handoff` now requires `handoffReason` (context_reset|agent_transfer|compaction|session_end) and `resumeInstruction` as mandatory fields, plus optional `recipient`. Makes genuine transfer intent explicit and unattractive for mere status notes.
+- `memory_save` promptSnippet and guidelines updated to positively route progress snapshots via `kind=progress_snapshot`.
+- `memory_save_handoff` guidelines clarified: not for project status — use `memory_save kind=progress_snapshot`.
+
 ## [1.4.0] - 2026-05-11
 
 ### Added

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-export const MEMORY_KINDS = ["fact", "preference", "decision", "episode", "artifact_ref", "todo", "handoff"] as const;
+export const MEMORY_KINDS = ["fact", "preference", "decision", "episode", "artifact_ref", "todo", "progress_snapshot", "handoff"] as const;
 export const MEMORY_SCOPES = ["global", "project", "repo", "session"] as const;
 export const MEMORY_STATUSES = ["active", "archived"] as const;
 export const MEMORY_LINK_RELATIONS = ["related_to", "supersedes", "caused_by", "implements", "blocks"] as const;

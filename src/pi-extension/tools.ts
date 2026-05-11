@@ -94,11 +94,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Save",
     description: "Create a structured memory in the local pi-memory store.",
     promptSnippet:
-      "Save durable facts, preferences, decisions, and notes when the user explicitly wants something remembered or when a stable reusable fact should persist.",
+      "Save durable facts, preferences, decisions, notes, or project status snapshots when the user explicitly wants something remembered or when a stable reusable fact should persist. Use kind=progress_snapshot for project status, current state, decisions, and next steps.",
     promptGuidelines: [
-      "Use for durable facts, preferences, decisions, and notes.",
+      "Use for durable facts, preferences, decisions, notes, and progress snapshots.",
+      "Use kind=progress_snapshot when saving project status, current state, completed steps, next steps, or decisions — not memory_save_handoff.",
       "Do not use for actionable open work; use memory_save_todo for todos.",
-      "Do not use for handoff state; use memory_save_handoff.",
+      "Do not use for handoff state; use memory_save_handoff only when context will be lost and another agent must resume.",
       "Avoid low-information scratch notes.",
       "Always provide a compact but informative summary.",
     ],
@@ -150,19 +151,24 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Save Handoff",
     description: "Create or update the active structured handoff for the current Pi session.",
     promptSnippet:
-      "Save or refresh a compact handoff before context reset, compaction, wrap-up, or agent transfer so the next agent can resume safely.",
+      "Save or refresh a handoff only when the current context will be lost and another agent or future session must resume execution — context reset, compaction, or agent transfer.",
     promptGuidelines: [
-      "Use this for mid-task handoff state, not general long-term facts.",
+      "Use only when context will be lost and execution must be resumable by another agent or future session.",
+      "Do not use for project status notes or progress snapshots — use memory_save with kind=progress_snapshot for those.",
       "Include goal, current state, and concrete next steps.",
       "Mention changed files, decisions, blockers, verification, and avoid-repeating notes when relevant.",
     ],
     parameters: Type.Object({
       title: Type.Optional(Type.String({ description: "Short handoff title" })),
-      reason: Type.Optional(
-        StringEnum(["manual", "before_context_reset", "wrap_up", "task_pause", "task_complete", "blocker"] as const, {
-          description: "Why the handoff is being saved",
+      handoffReason: StringEnum(["context_reset", "agent_transfer", "compaction", "session_end"] as const, {
+        description: "Why the handoff is needed — must be a genuine context-loss or transfer scenario",
+      }),
+      recipient: Type.Optional(
+        StringEnum(["same_agent", "next_agent", "human"] as const, {
+          description: "Who will resume from this handoff",
         }),
       ),
+      resumeInstruction: Type.String({ description: "One-line instruction for the resuming agent on where to start" }),
       goal: Type.String({ description: "Current task goal" }),
       currentState: Type.String({ description: "Where the task stands right now" }),
       nextSteps: Type.Array(Type.String({ description: "Concrete next step" })),
@@ -411,7 +417,9 @@ function buildTodoSummary(params: TodoSaveParams): string {
 
 type HandoffSaveParams = {
   title?: string;
-  reason?: string;
+  handoffReason: "context_reset" | "agent_transfer" | "compaction" | "session_end";
+  recipient?: "same_agent" | "next_agent" | "human";
+  resumeInstruction: string;
   goal: string;
   currentState: string;
   nextSteps: string[];
@@ -428,7 +436,7 @@ type HandoffSaveParams = {
 type HandoffTurnContext = ReturnType<typeof deriveMemoryTurnContext>;
 
 function buildHandoffMemoryInput(params: HandoffSaveParams, context: HandoffTurnContext) {
-  const reason = params.reason?.trim() || "manual";
+  const reason = params.handoffReason;
   const title = params.title?.trim() || `Handoff: ${params.goal.trim().slice(0, 80)}`;
   const body = renderHandoffMarkdown(params, context, reason);
 
@@ -439,12 +447,14 @@ function buildHandoffMemoryInput(params: HandoffSaveParams, context: HandoffTurn
       title,
       summary: params.currentState.trim(),
       body,
-      tags: ["handoff", reason],
+      tags: ["handoff", reason, ...(params.recipient ? [params.recipient] : [])],
       importance: 0.9,
       confidence: 0.9,
       metadata: {
         handoff: {
           reason,
+          recipient: params.recipient ?? "next_agent",
+          resumeInstruction: params.resumeInstruction,
           pid: process.pid,
           hostname: hostname(),
           cwd: context.cwd,
@@ -461,6 +471,8 @@ function renderHandoffMarkdown(params: HandoffSaveParams, context: HandoffTurnCo
     `# ${params.title?.trim() || "Handoff"}`,
     "",
     `Reason: ${reason}`,
+    `Recipient: ${params.recipient ?? "next_agent"}`,
+    `Resume: ${params.resumeInstruction.trim()}`,
     `Session: ${context.sessionId}`,
     `Project: ${context.projectId ?? "none"}`,
     `Repo: ${context.repoPath ?? "none"}`,

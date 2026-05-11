@@ -28,7 +28,7 @@ Common tools and commands:
 ```text
 memory_search          — search durable memory (semantic + lexical)
 memory_list            — filter memories by kind, scope, tags, status
-memory_save            — save facts, preferences, decisions, notes
+memory_save            — save facts, preferences, decisions, notes, progress snapshots (kind=progress_snapshot)
 memory_save_todo       — save actionable open tasks (priority, status, scope)
 memory_save_handoff    — save/refresh resumable agent handoff state
 memory_update          — patch an existing memory by id

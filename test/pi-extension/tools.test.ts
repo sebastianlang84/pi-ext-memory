@@ -254,7 +254,9 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   const handoffOutput = await toolByName(tools, "memory_save_handoff").execute(
     "call-handoff",
     {
-      reason: "before_context_reset",
+      handoffReason: "context_reset",
+      recipient: "next_agent",
+      resumeInstruction: "Continue from tool registration test",
       goal: "Implement handoff support",
       currentState: "Tool registration is under test.",
       nextSteps: ["Verify handoff save wiring"],
@@ -325,7 +327,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       title: "Handoff: Implement handoff support",
       summary: "Tool registration is under test.",
       body: calls.update[0]?.body,
-      tags: ["handoff", "before_context_reset"],
+      tags: ["handoff", "context_reset", "next_agent"],
       importance: 0.9,
       confidence: 0.9,
     },
