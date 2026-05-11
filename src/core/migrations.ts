@@ -146,6 +146,16 @@ export const memoryMigrations: MemoryMigration[] = [
       END;
     `,
   },
+  {
+    version: 5,
+    name: "meta_table",
+    sql: `
+      CREATE TABLE meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL DEFAULT ''
+      );
+    `,
+  },
 ];
 
 export const LATEST_MEMORY_SCHEMA_VERSION = memoryMigrations.at(-1)?.version ?? 0;

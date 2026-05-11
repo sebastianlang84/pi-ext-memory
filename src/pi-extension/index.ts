@@ -9,7 +9,7 @@ import {
   retrieveMemoriesForTurn,
 } from "./retrieval.ts";
 import { registerMemoryCommands } from "./commands.ts";
-import { registerMemoryTools } from "./tools.ts";
+import { buildHygieneLine, registerMemoryTools, runMemoryAudit } from "./tools.ts";
 
 export default function registerPiMemoryExtension(pi: ExtensionAPI) {
   const core = createMemoryCore();
@@ -28,7 +28,19 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const latestHandoff = findLatestHandoffForTurn(activeStore, turnContext);
       const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, event.prompt, turnContext);
-      const message = buildTurnMemoryMessage(event.prompt, results, turnContext, activeStore.dbPath, searchPlan, latestHandoff);
+      const baseMessage = buildTurnMemoryMessage(event.prompt, results, turnContext, activeStore.dbPath, searchPlan, latestHandoff);
+
+      const { staleTodos, oldHandoffs } = runMemoryAudit(activeStore);
+      const hygieneLine = buildHygieneLine(staleTodos.length, oldHandoffs.length);
+
+      let message: string | undefined;
+      if (baseMessage && hygieneLine) {
+        message = `${baseMessage}\n${hygieneLine}`;
+      } else if (baseMessage) {
+        message = baseMessage;
+      } else if (hygieneLine) {
+        message = hygieneLine;
+      }
 
       if (!message) {
         return;

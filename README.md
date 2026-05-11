@@ -33,10 +33,12 @@ memory_save_todo       — save actionable open tasks (priority, status, scope)
 memory_save_handoff    — save/refresh resumable agent handoff state
 memory_update          — patch an existing memory by id
 memory_archive         — archive obsolete memories
+memory_audit           — report stale todos and old handoffs (report-only, no auto-archive)
 memory_link            — link related memories (optional, V2)
 /memory-status         — show extension status and config
 /memory-search <query> — manual memory search
 /memory-handoff        — show or archive the active session handoff
+/memory-audit          — same as memory_audit tool, output to terminal
 ```
 
 Optional configuration:

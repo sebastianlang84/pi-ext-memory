@@ -5,7 +5,7 @@ import { initializeMemoryStore, type InitializeMemoryStoreInput, type MemoryStor
 const embeddingStatus = createDefaultMemoryEmbeddingAdapter().getStatus();
 
 export interface MemoryCoreStatus {
-  version: "v1.3.0";
+  version: "v1.5.0";
   mode: "local-core";
   storage: "sqlite-session-summary-ready";
   latestSchemaVersion: number;
@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v1.3.0",
+        version: "v1.5.0",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
@@ -37,9 +37,9 @@ export function createMemoryCore(): MemoryCore {
         fallbackEmbeddingModel: embeddingStatus.fallbackModel,
         activeEmbeddingModel: embeddingStatus.activeModel,
         embeddingDimensions: embeddingStatus.dimensions,
-        availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save"],
-        availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive"],
-        nextStep: "V1 release is complete; use memory_list for structured listing and monitor local embedding quality in normal use.",
+        availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save", "/memory-audit"],
+        availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit"],
+        nextStep: "V1.5 adds memory hygiene audit. Use memory_audit or /memory-audit to inspect stale todos and old handoffs.",
       };
     },
     initializeStore(input) {

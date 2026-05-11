@@ -16,6 +16,9 @@ This changelog follows the Keep a Changelog format.
 
 ### Added
 - New `kind: progress_snapshot` for project status snapshots (current state, done, next steps, decisions) — prevents Schema-Gravity misrouting to `memory_save_handoff`.
+- New `memory_audit` tool and `/memory-audit` CLI command: reports stale todos and old handoffs. Report-only — no auto-archive.
+- Stale-item hygiene check runs on every session start (`before_agent_start`): injects a compact warning if stale todos or old handoffs are found. Silent when all is clean.
+- SQLite `meta` table (migration v5) for key/value store metadata. `memory_audit` writes `lastAuditAt` after each run.
 
 ### Changed
 - `memory_save_handoff` now requires `handoffReason` (context_reset|agent_transfer|compaction|session_end) and `resumeInstruction` as mandatory fields, plus optional `recipient`. Makes genuine transfer intent explicit and unattractive for mere status notes.

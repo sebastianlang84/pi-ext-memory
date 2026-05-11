@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
 import { type MemoryCore, type MemoryRecord, type MemorySearchResult, type MemoryStore, type SearchMemoriesInput } from "../core/index.ts";
+import { formatAuditResults, runMemoryAudit } from "./audit.ts";
 import { resolveMemoryDbPath } from "./config.ts";
 import { deriveMemoryTurnContext, findLatestHandoffForTurn, retrieveMemoriesForTurn } from "./retrieval.ts";
 import {
@@ -191,6 +192,20 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
       }
 
       process.stdout.write(`${output}\n`);
+    },
+  });
+
+  pi.registerCommand("memory-audit", {
+    description: "Audit memory hygiene: list stale todos and old handoffs",
+    handler: async (_args, ctx) => {
+      const activeStore = getStoreForCwd(core, store, ctx.cwd);
+      store = activeStore;
+
+      const { staleTodos, oldHandoffs } = runMemoryAudit(activeStore);
+      activeStore.setMeta("lastAuditAt", new Date().toISOString());
+      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath);
+
+      writeCommandOutput(output, ctx);
     },
   });
 }

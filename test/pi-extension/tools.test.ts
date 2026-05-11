@@ -220,7 +220,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     },
   );
 
-  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive"];
+  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit"];
   assert.equal(tools.length, expectedToolNames.length);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)), new Set(expectedToolNames));
   assert.ok(tools.every((tool) => tool.parameters), "expected all registered tools to expose parameters");

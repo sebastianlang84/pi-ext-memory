@@ -91,6 +91,8 @@ export interface MemoryStore extends MemoryStoreStatus {
   listMemoryLinks(memoryId: string): MemoryLinkRecord[];
   createSearchQueryEmbedding(query: string): GeneratedMemoryEmbedding;
   searchMemories(input: SearchMemoriesInput, options?: SearchMemoriesOptions): MemorySearchResult[];
+  getMeta(key: string): string | null;
+  setMeta(key: string, value: string): void;
   close(): void;
 }
 
@@ -423,6 +425,15 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
         const queryEmbedding = options?.queryEmbedding ?? embeddingAdapter.generateEmbedding(createQueryEmbeddingContent(normalizedInput.query));
 
         return searchMemoryResults(db, normalizedInput, queryEmbedding);
+      },
+      getMeta(key) {
+        assertStoreOpen(isClosed);
+        const row = db.prepare('SELECT value FROM meta WHERE key = ?;').get(key) as { value: string } | undefined;
+        return row ? row.value : null;
+      },
+      setMeta(key, value) {
+        assertStoreOpen(isClosed);
+        db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;').run(key, value);
       },
       close() {
         if (isClosed) return;

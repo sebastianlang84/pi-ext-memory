@@ -17,6 +17,12 @@ import {
 } from "../core/index.ts";
 import { formatMemorySearchResultLine } from "./formatters.ts";
 import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
+import { type AuditCandidate, buildHygieneLine, formatAuditResults, runMemoryAudit } from "./audit.ts";
+
+const MEMORY_SAVE_KINDS = MEMORY_KINDS.filter(
+  (kind): kind is Exclude<(typeof MEMORY_KINDS)[number], "handoff" | "todo"> =>
+    kind !== "handoff" && kind !== "todo",
+) as readonly Exclude<(typeof MEMORY_KINDS)[number], "handoff" | "todo">[];
 
 export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getActiveStore: (cwd: string) => MemoryStore): void {
   pi.registerTool({
@@ -104,7 +110,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       "Always provide a compact but informative summary.",
     ],
     parameters: Type.Object({
-      kind: StringEnum(MEMORY_KINDS, { description: "Memory kind" }),
+      kind: StringEnum(MEMORY_SAVE_KINDS as unknown as [string, ...string[]], { description: "Memory kind — use progress_snapshot for project status, current state, done steps, and next steps" }),
       scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
       title: Type.String({ description: "Short title for the memory" }),
       summary: Type.String({ description: "Compact summary with enough detail to be useful later" }),
@@ -112,18 +118,28 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
       importance: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
       confidence: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+      progress: Type.Optional(Type.Object({
+        goal: Type.Optional(Type.String({ description: "Overall goal or task being tracked" })),
+        currentState: Type.Optional(Type.String({ description: "Where things stand right now" })),
+        done: Type.Optional(Type.Array(Type.String({ description: "Completed step" }))),
+        nextSteps: Type.Optional(Type.Array(Type.String({ description: "Planned next step" }))),
+        decisions: Type.Optional(Type.Array(Type.String({ description: "Decision made" }))),
+        openQuestions: Type.Optional(Type.Array(Type.String({ description: "Open question" }))),
+        changedFiles: Type.Optional(Type.Array(Type.String({ description: "Relevant file path" }))),
+      }, { description: "Structured snapshot fields — use when kind=progress_snapshot" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
 
-      if (params.kind === "handoff") {
+      // Safety-net guards (schema already excludes these kinds, but belt-and-suspenders)
+      if ((params.kind as string) === "handoff") {
         return {
           content: [{ type: "text", text: `Use memory_save_handoff for handoffs so the active session handoff is updated instead of duplicated.\ndb_path: ${activeStore.dbPath}` }],
           details: { dbPath: activeStore.dbPath },
         };
       }
 
-      if (params.kind === "todo") {
+      if ((params.kind as string) === "todo") {
         return {
           content: [{ type: "text", text: `Use memory_save_todo for actionable open tasks so they get the correct schema and priority/scope fields.\ndb_path: ${activeStore.dbPath}` }],
           details: { dbPath: activeStore.dbPath },
@@ -169,9 +185,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         }),
       ),
       resumeInstruction: Type.String({ description: "One-line instruction for the resuming agent on where to start" }),
-      goal: Type.String({ description: "Current task goal" }),
-      currentState: Type.String({ description: "Where the task stands right now" }),
-      nextSteps: Type.Array(Type.String({ description: "Concrete next step" })),
+      goal: Type.String({ minLength: 1, description: "Current task goal" }),
+      currentState: Type.String({ minLength: 1, description: "Where the task stands right now" }),
+      nextSteps: Type.Array(Type.String({ minLength: 1, description: "Concrete next step" }), { minItems: 1 }),
       done: Type.Optional(Type.Array(Type.String({ description: "Completed step" }))),
       changedFiles: Type.Optional(Type.Array(Type.String({ description: "Changed or especially relevant file path" }))),
       decisions: Type.Optional(Type.Array(Type.String({ description: "Decision made during this task" }))),
@@ -305,8 +321,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_save_todo",
     label: "Memory Save Todo",
-    description: "Save or refresh an actionable open task that should persist across sessions.",
-    promptSnippet: "Save or refresh an actionable open task that should persist across sessions.",
+    description: "Save an actionable open task that should persist across sessions.",
+    promptSnippet: "Save an actionable open task that should persist across sessions. Use memory_update to update an existing todo.",
     promptGuidelines: [
       "Use for actionable open work, not passive facts or decisions.",
       "Include the next concrete action whenever possible.",
@@ -396,6 +412,31 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       };
     },
   });
+
+  pi.registerTool({
+    name: "memory_audit",
+    label: "Memory Audit",
+    description: "Audit memory hygiene: list stale todos and old handoffs that may need attention.",
+    promptSnippet: "Run memory_audit to inspect stale todos and old handoffs. Returns candidates with id, title, reason, and suggested action.",
+    promptGuidelines: [
+      "Run when the session-start hygiene warning mentions stale items.",
+      "Use optional scope or repoPath filters to narrow the audit.",
+    ],
+    parameters: Type.Object({
+      scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope filter" }))),
+      repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const activeStore = getActiveStore(ctx.cwd);
+      const { staleTodos, oldHandoffs } = runMemoryAudit(activeStore, params.scope, params.repoPath);
+      activeStore.setMeta("lastAuditAt", new Date().toISOString());
+      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath);
+      return {
+        content: [{ type: "text", text: output }],
+        details: { dbPath: activeStore.dbPath, staleTodos, oldHandoffs },
+      };
+    },
+  });
 }
 
 type TodoSaveParams = {
@@ -438,7 +479,7 @@ type HandoffTurnContext = ReturnType<typeof deriveMemoryTurnContext>;
 function buildHandoffMemoryInput(params: HandoffSaveParams, context: HandoffTurnContext) {
   const reason = params.handoffReason;
   const title = params.title?.trim() || `Handoff: ${params.goal.trim().slice(0, 80)}`;
-  const body = renderHandoffMarkdown(params, context, reason);
+  const body = renderHandoffMarkdown(params, context, reason, title);
 
   return decorateCreateMemoryInput(
     {
@@ -466,9 +507,9 @@ function buildHandoffMemoryInput(params: HandoffSaveParams, context: HandoffTurn
   );
 }
 
-function renderHandoffMarkdown(params: HandoffSaveParams, context: HandoffTurnContext, reason: string): string {
+function renderHandoffMarkdown(params: HandoffSaveParams, context: HandoffTurnContext, reason: string, title: string): string {
   const lines = [
-    `# ${params.title?.trim() || "Handoff"}`,
+    `# ${title}`,
     "",
     `Reason: ${reason}`,
     `Recipient: ${params.recipient ?? "next_agent"}`,
@@ -616,3 +657,10 @@ function formatMemorySearchResults(query: string, results: MemorySearchResult[],
     `db_path: ${dbPath}`,
   ].join("\n");
 }
+
+// ─── Re-exports for consumers that import from tools.ts ─────────────────────
+
+export type { AuditCandidate } from "./audit.ts";
+export { buildHygieneLine, formatAuditResults, runMemoryAudit } from "./audit.ts";
+
+

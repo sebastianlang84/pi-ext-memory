@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { initializeMemoryStore } from "../../src/core/index.ts";
 
-test("initializeMemoryStore creates a fresh database and applies schema v4", () => {
+test("initializeMemoryStore creates a fresh database and applies schema v5", () => {
   const tempRoot = mkdtempSync(join(tmpdir(), "pi-memory-store-"));
   const dbPath = join(tempRoot, "memory.sqlite");
 
@@ -16,8 +16,8 @@ test("initializeMemoryStore creates a fresh database and applies schema v4", () 
 
   assert.equal(existsSync(dbPath), true);
   assert.equal(store.dbPath, dbPath);
-  assert.equal(store.schemaVersion, 4);
-  assert.equal(store.latestSchemaVersion, 4);
+  assert.equal(store.schemaVersion, 5);
+  assert.equal(store.latestSchemaVersion, 5);
   assert.equal(store.embeddingModel, "builtin-hash-384-v1");
   assert.equal(store.fallbackEmbeddingModel, "builtin-hash-384-v1");
   assert.equal(store.embeddingDimensions, 384);
@@ -27,7 +27,7 @@ test("initializeMemoryStore creates a fresh database and applies schema v4", () 
 
   try {
     const schemaVersion = db.prepare("PRAGMA user_version;").get() as { user_version: number };
-    assert.equal(schemaVersion.user_version, 4);
+    assert.equal(schemaVersion.user_version, 5);
 
     const coreTables = db
       .prepare(
@@ -39,6 +39,11 @@ test("initializeMemoryStore creates a fresh database and applies schema v4", () 
       coreTables.map((table) => table.name),
       ["artifacts", "links", "memories", "memory_embeddings", "sessions"],
     );
+
+    const metaTable = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta';")
+      .get() as { name: string } | undefined;
+    assert.equal(metaTable?.name, "meta");
 
     const ftsTable = db
       .prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_fts';`)
@@ -104,8 +109,8 @@ test("initializeMemoryStore is idempotent for an already-migrated database", () 
   const secondStore = initializeMemoryStore({ dbPath, preferLowFootprintEmbeddings: true });
 
   try {
-    assert.equal(secondStore.schemaVersion, 4);
-    assert.equal(secondStore.latestSchemaVersion, 4);
+    assert.equal(secondStore.schemaVersion, 5);
+    assert.equal(secondStore.latestSchemaVersion, 5);
     assert.equal(secondStore.embeddingModel, "builtin-hash-64-v1");
     assert.equal(secondStore.fallbackEmbeddingModel, "builtin-hash-64-v1");
     assert.equal(secondStore.embeddingDimensions, 64);
