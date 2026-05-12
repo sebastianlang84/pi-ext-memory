@@ -195,3 +195,27 @@ test("searchMemories respects result limits", () => {
     store.close();
   }
 });
+
+test("searchMemories rejects contradictory single-scope identity filters", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    assert.throws(
+      () => store.searchMemories({ query: "identityneedle", scope: ["repo"], projectId: "project-a", repoPath: "/repo/a" }),
+      /scope=repo uses repoPath as its primary identity/,
+    );
+
+    assert.throws(
+      () => store.searchMemories({ query: "identityneedle", scope: ["project"], projectId: "project-a", repoPath: "/repo/a" }),
+      /scope=project uses projectId as its primary identity/,
+    );
+
+    assert.throws(
+      () => store.searchMemories({ query: "identityneedle", scope: ["project"], sessionId: "session-a", projectId: "project-a" }),
+      /scope=project uses projectId as its primary identity/,
+    );
+  } finally {
+    store.close();
+  }
+});

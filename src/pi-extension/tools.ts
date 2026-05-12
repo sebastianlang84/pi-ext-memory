@@ -30,6 +30,90 @@ const MEMORY_SAVE_KINDS = MEMORY_KINDS.filter(
     kind !== "handoff" && kind !== "todo",
 ) as readonly Exclude<(typeof MEMORY_KINDS)[number], "handoff" | "todo">[];
 
+type ToolIdentityParams = {
+  scope: MemoryScope;
+  sessionId?: string;
+  projectId?: string;
+  repoPath?: string;
+};
+
+type ToolIdentityResult = {
+  sessionId?: string;
+  projectId?: string;
+  repoPath?: string;
+  error?: string;
+};
+
+function resolveToolIdentity(
+  params: ToolIdentityParams,
+  context: ReturnType<typeof deriveMemoryTurnContext>,
+  options: { requirePrimary?: boolean } = {},
+): ToolIdentityResult {
+  const sessionId = params.sessionId?.trim() || context.sessionId.trim() || undefined;
+  const projectId = params.projectId?.trim() || context.projectId;
+  const repoPath = params.repoPath?.trim() || context.repoPath;
+
+  if (params.scope === "global") {
+    if (params.sessionId || params.projectId || params.repoPath) {
+      return { error: "scope=global does not accept sessionId, projectId, or repoPath. Remove scope identifiers or choose repo/project/session." };
+    }
+    return {};
+  }
+
+  if (params.scope === "repo") {
+    if (params.sessionId || params.projectId) {
+      return { error: "scope=repo uses repoPath as its primary identity. Remove sessionId and projectId; the runtime can keep metadata internally." };
+    }
+    if (options.requirePrimary && !repoPath) {
+      return { error: "scope=repo requires repoPath, but no repository path was provided or derivable from cwd." };
+    }
+    return { repoPath };
+  }
+
+  if (params.scope === "project") {
+    if (params.sessionId || params.repoPath) {
+      return { error: "scope=project uses projectId as its primary identity. Remove sessionId and repoPath; the runtime can keep metadata internally." };
+    }
+    if (options.requirePrimary && !projectId) {
+      return { error: "scope=project requires projectId, but no project id was provided or derivable from cwd." };
+    }
+    return { projectId };
+  }
+
+  if (params.projectId || params.repoPath) {
+    return { error: "scope=session uses sessionId as its primary identity. Remove projectId and repoPath; runtime context is attached internally." };
+  }
+  if (options.requirePrimary && !sessionId) {
+    return { error: "scope=session requires sessionId, but no session id was provided or derivable from the active Pi session." };
+  }
+  return { sessionId };
+}
+
+function resolveSingleScopeSearchIdentity(
+  params: { scope?: MemoryScope[]; sessionId?: string; projectId?: string; repoPath?: string },
+  context: ReturnType<typeof deriveMemoryTurnContext>,
+): ToolIdentityResult {
+  if (!params.scope || params.scope.length === 0) {
+    if ([params.sessionId, params.projectId, params.repoPath].filter((value) => value !== undefined).length > 1) {
+      return { error: "sessionId, projectId, and repoPath filters cannot be combined without a single compatible scope." };
+    }
+    return { sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath };
+  }
+
+  if (params.scope.length !== 1) {
+    if ([params.sessionId, params.projectId, params.repoPath].filter((value) => value !== undefined).length > 1) {
+      return { error: "sessionId, projectId, and repoPath filters cannot be combined across multiple scopes." };
+    }
+    return { sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath };
+  }
+
+  return resolveToolIdentity({ scope: params.scope[0]!, sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath }, context, { requirePrimary: true });
+}
+
+function formatIdentityError(error: string, dbPath: string): string {
+  return `Invalid memory scope identity: ${error}\ndb_path: ${dbPath}`;
+}
+
 export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getActiveStore: (cwd: string) => MemoryStore): void {
   pi.registerTool({
     name: "memory_search",
@@ -48,12 +132,26 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
       projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
+      sessionId: Type.Optional(Type.String({ description: "Optional session identifier filter" })),
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Max result count" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const identity = resolveSingleScopeSearchIdentity(params, turnContext);
+      if (identity.error) {
+        return {
+          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
 
-      const results = activeStore.searchMemories(params);
+      const results = activeStore.searchMemories({
+        ...params,
+        sessionId: identity.sessionId,
+        projectId: identity.projectId,
+        repoPath: identity.repoPath,
+      });
 
       return {
         content: [{ type: "text", text: formatMemorySearchResults(params.query, results, activeStore.dbPath) }],
@@ -89,14 +187,26 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const identity = resolveToolIdentity(
+        { scope: params.scope as MemoryScope, sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath },
+        turnContext,
+        { requirePrimary: true },
+      );
+      if (identity.error) {
+        return {
+          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
 
       const result = activeStore.listForTool({
         kind: [params.kind as MemoryKind],
         scope: [params.scope as MemoryScope],
         tags: params.tags,
-        sessionId: params.sessionId,
-        projectId: params.projectId,
-        repoPath: params.repoPath,
+        sessionId: identity.sessionId,
+        projectId: identity.projectId,
+        repoPath: identity.repoPath,
         status: params.status,
         orderBy: params.orderBy,
         limit: params.limit ?? 20,
@@ -133,7 +243,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     ],
     parameters: Type.Object({
       kind: StringEnum(MEMORY_SAVE_KINDS as unknown as [string, ...string[]], { description: "Memory kind — use progress_snapshot for project status, current state, done steps, and next steps" }),
-      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
+      scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Memory scope; defaults to repo inside a Git repo, otherwise global" })),
       title: Type.String({ description: "Short title for the memory" }),
       summary: Type.String({ description: "Compact summary with enough detail to be useful later" }),
       body: Type.Optional(Type.String({ description: "Optional longer details" })),
@@ -169,8 +279,35 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       }
 
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const requestedScope = (params.scope ?? (turnContext.repoPath ? "repo" : "global")) as MemoryScope;
+      const rawIdentityParams = params as typeof params & { sessionId?: string; projectId?: string; repoPath?: string };
+      const identity = resolveToolIdentity(
+        {
+          scope: requestedScope,
+          sessionId: rawIdentityParams.sessionId,
+          projectId: rawIdentityParams.projectId,
+          repoPath: rawIdentityParams.repoPath,
+        },
+        turnContext,
+        { requirePrimary: requestedScope !== "global" },
+      );
+      if (identity.error) {
+        return {
+          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
       const memory = activeStore.createMemory({
-        ...decorateCreateMemoryInput(params, turnContext),
+        ...decorateCreateMemoryInput(
+          {
+            ...params,
+            scope: requestedScope,
+            sessionId: identity.sessionId,
+            projectId: identity.projectId,
+            repoPath: identity.repoPath,
+          },
+          turnContext,
+        ),
         sourceAgent: "pi",
       });
 
@@ -334,6 +471,54 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
 
       // Build updated params for todo-specific fields
       let updateParams = { ...params } as typeof params & { summary?: string; tags?: string[] };
+
+      if (params.scope !== undefined || params.projectId !== undefined || params.repoPath !== undefined) {
+        if (params.scope === "global" && (existingMemory.sessionId || existingMemory.projectId || existingMemory.repoPath)) {
+          return {
+            content: [{ type: "text", text: formatIdentityError("memory_update cannot change an identified memory to scope=global because project/repo/session identifiers cannot be cleared by this tool.", activeStore.dbPath) }],
+            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+          };
+        }
+
+        if (params.scope === "session" && !existingMemory.sessionId) {
+          return {
+            content: [{ type: "text", text: formatIdentityError("memory_update cannot change a non-session memory to scope=session because sessionId cannot be patched by this tool.", activeStore.dbPath) }],
+            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+          };
+        }
+
+        if (params.scope !== undefined && params.scope !== "session" && existingMemory.sessionId) {
+          return {
+            content: [{ type: "text", text: formatIdentityError("memory_update cannot change a session memory to repo/project/global because sessionId cannot be cleared by this tool.", activeStore.dbPath) }],
+            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+          };
+        }
+
+        const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+        const identity = resolveToolIdentity(
+          {
+            scope: (params.scope ?? existingMemory.scope) as MemoryScope,
+            projectId: params.projectId,
+            repoPath: params.repoPath,
+            sessionId: existingMemory.sessionId,
+          },
+          turnContext,
+          { requirePrimary: params.scope === "repo" || params.scope === "project" },
+        );
+        if (identity.error) {
+          return {
+            content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
+            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+          };
+        }
+
+        if (params.scope === "repo" && identity.repoPath) {
+          updateParams = { ...updateParams, repoPath: identity.repoPath };
+        }
+        if (params.scope === "project" && identity.projectId) {
+          updateParams = { ...updateParams, projectId: identity.projectId };
+        }
+      }
       if (existingMemory.kind === "todo" && (params.priority !== undefined || params.nextAction !== undefined)) {
         const baseSummary = existingMemory.summary
           .replace(/^\[P[012]\]\s*/, "")
@@ -427,6 +612,19 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       const activeStore = getActiveStore(ctx.cwd);
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
 
+      const requestedScope = (params.scope ?? (turnContext.repoPath ? "repo" : "global")) as MemoryScope;
+      const identity = resolveToolIdentity(
+        { scope: requestedScope, projectId: params.projectId, repoPath: params.repoPath },
+        turnContext,
+        { requirePrimary: requestedScope !== "global" },
+      );
+      if (identity.error) {
+        return {
+          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
+
       const tags = [...(params.tags ?? []), "todo"];
       if (params.priority) tags.push(params.priority);
       if (params.status && params.status !== "open") tags.push(params.status);
@@ -437,15 +635,16 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         ...decorateCreateMemoryInput(
           {
             kind: "todo",
-            scope: params.scope ?? "global",
+            scope: requestedScope,
             title: params.title,
             summary,
             body: params.description,
             tags,
             importance: params.priority === "P0" ? 0.95 : params.priority === "P1" ? 0.75 : 0.5,
             confidence: 1,
-            projectId: params.projectId,
-            repoPath: params.repoPath,
+            projectId: identity.projectId,
+            repoPath: identity.repoPath,
+            sessionId: identity.sessionId,
           },
           turnContext,
         ),
@@ -536,12 +735,25 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const identity = resolveToolIdentity(
+        { scope: params.scope as MemoryScope, projectId: params.projectId, repoPath: params.repoPath },
+        turnContext,
+        { requirePrimary: params.scope !== "global" },
+      );
+      if (identity.error) {
+        return {
+          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
       const result = activeStore.listForTool({
         kind: ["todo"],
         scope: [params.scope as MemoryScope],
         status: "active",
-        repoPath: params.repoPath,
-        projectId: params.projectId,
+        sessionId: identity.sessionId,
+        repoPath: identity.repoPath,
+        projectId: identity.projectId,
         limit: 50,
         offset: 0,
       });
@@ -569,17 +781,30 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const scope = params.scope as MemoryScope;
+      const identity = resolveToolIdentity(
+        { scope, projectId: params.projectId, repoPath: params.repoPath },
+        turnContext,
+        { requirePrimary: scope !== "global" },
+      );
+      if (identity.error) {
+        return {
+          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
       const relatedScopes: MemoryScope[] =
-        (scope === "repo" && params.repoPath) || (scope === "project" && params.projectId)
+        (scope === "repo" && identity.repoPath) || (scope === "project" && identity.projectId)
           ? [scope, "session"]
           : [scope];
       const result = activeStore.listForTool({
         kind: ["handoff"],
         scope: relatedScopes,
         status: "active",
-        repoPath: params.repoPath,
-        projectId: params.projectId,
+        sessionId: identity.sessionId,
+        repoPath: identity.repoPath,
+        projectId: identity.projectId,
         limit: 10,
         offset: 0,
       });
@@ -605,8 +830,20 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const scope = params.scope as MemoryScope;
-      const scopeFilter = { scope: [scope], repoPath: params.repoPath, projectId: params.projectId };
+      const identity = resolveToolIdentity(
+        { scope, projectId: params.projectId, repoPath: params.repoPath },
+        turnContext,
+        { requirePrimary: scope !== "global" },
+      );
+      if (identity.error) {
+        return {
+          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
+          details: { dbPath: activeStore.dbPath },
+        };
+      }
+      const scopeFilter = { scope: [scope], sessionId: identity.sessionId, repoPath: identity.repoPath, projectId: identity.projectId };
 
       const kindStatuses: Array<{ kind: string; statuses: string[] }> = [
         { kind: "todo", statuses: ["active", "done", "archived"] },

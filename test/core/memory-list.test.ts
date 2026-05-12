@@ -127,7 +127,6 @@ test("listMemories applies scope tags project repo status limit and createdAt or
       kind: ["todo"],
       scope: ["repo"],
       tags: ["ops", "v1"],
-      projectId: "project-a",
       repoPath: "/repo/a",
       status: "archived",
       limit: 1,
@@ -136,6 +135,35 @@ test("listMemories applies scope tags project repo status limit and createdAt or
 
     assert.equal(results.length, 1);
     assert.equal(results[0]?.id, second.id);
+  } finally {
+    store.close();
+  }
+});
+
+test("listMemories rejects contradictory single-scope identity filters", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    assert.throws(
+      () => store.listMemories({ scope: ["repo"], projectId: "project-a", repoPath: "/repo/a" }),
+      /scope=repo uses repoPath as its primary identity/,
+    );
+
+    assert.throws(
+      () => store.listMemories({ scope: ["project"], projectId: "project-a", repoPath: "/repo/a" }),
+      /scope=project uses projectId as its primary identity/,
+    );
+
+    assert.throws(
+      () => store.listMemories({ scope: ["global"], repoPath: "/repo/a" }),
+      /scope=global does not accept/,
+    );
+
+    assert.throws(
+      () => store.listMemories({ scope: ["repo"], sessionId: "session-a", repoPath: "/repo/a" }),
+      /scope=repo uses repoPath as its primary identity/,
+    );
   } finally {
     store.close();
   }

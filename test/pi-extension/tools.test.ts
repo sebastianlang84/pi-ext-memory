@@ -339,9 +339,9 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   );
 
   assert.deepEqual(requestedCwds, [ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd]);
-  assert.deepEqual(calls.search, [{ query: "manual policy", limit: 3 }]);
+  assert.deepEqual(calls.search, [{ query: "manual policy", limit: 3, sessionId: undefined, projectId: undefined, repoPath: undefined }]);
   assert.deepEqual(calls.listForTool, [
-    { kind: ["todo"], scope: ["project"], tags: undefined, sessionId: undefined, projectId: undefined, repoPath: undefined, status: undefined, orderBy: undefined, limit: 3, offset: 0 },
+    { kind: ["todo"], scope: ["project"], tags: undefined, sessionId: undefined, projectId: projectContext.projectId, repoPath: undefined, status: undefined, orderBy: undefined, limit: 3, offset: 0 },
   ]);
   assert.deepEqual(calls.list, []);
   assert.deepEqual(calls.create, [
@@ -358,16 +358,17 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     },
     {
       kind: "todo",
-      scope: "global",
+      scope: "repo",
       title: "Implement memory_save_todo",
       summary: "[P1] [in_progress] Add dedicated todo tool with priority and scope \u2192 Write tests",
       body: "Add dedicated todo tool with priority and scope",
       tags: ["todo", "P1", "in_progress"],
       importance: 0.75,
       confidence: 1,
+      projectId: projectContext.projectId,
+      repoPath: projectContext.cwd,
+      sessionId: undefined,
       sourceAgent: "pi",
-      projectId: undefined,
-      repoPath: undefined,
     },
   ]);
   assert.deepEqual(calls.get, ["memory-saved", "memory-updated"]);
@@ -479,9 +480,9 @@ test("memory_list_active_handoffs widens repo and project lookups to matching se
   await handoffs.execute("call-session-handoffs", { scope: "session" }, signal, () => undefined, ctx);
 
   assert.deepEqual(calls, [
-    { kind: ["handoff"], scope: ["repo", "session"], status: "active", repoPath: projectContext.cwd, projectId: undefined, limit: 10, offset: 0 },
-    { kind: ["handoff"], scope: ["project", "session"], status: "active", repoPath: undefined, projectId: projectContext.projectId, limit: 10, offset: 0 },
-    { kind: ["handoff"], scope: ["session"], status: "active", repoPath: undefined, projectId: undefined, limit: 10, offset: 0 },
+    { kind: ["handoff"], scope: ["repo", "session"], status: "active", sessionId: undefined, repoPath: projectContext.cwd, projectId: undefined, limit: 10, offset: 0 },
+    { kind: ["handoff"], scope: ["project", "session"], status: "active", sessionId: undefined, repoPath: undefined, projectId: projectContext.projectId, limit: 10, offset: 0 },
+    { kind: ["handoff"], scope: ["session"], status: "active", sessionId: projectContext.sessionId, repoPath: undefined, projectId: undefined, limit: 10, offset: 0 },
   ]);
 });
 
@@ -693,4 +694,107 @@ test("memory_update with explicit summary + priority keeps prefix consistent", a
   const update = capturedUpdates[0]!;
   assert.ok(update.summary?.startsWith("[P0]"), `expected summary to start with [P0], got: ${update.summary}`);
   assert.ok(update.tags?.includes("P0"), `expected tags to include P0, got: ${JSON.stringify(update.tags)}`);
+});
+
+test("memory_save defaults to repo identity in a Git repo and rejects hidden contradictory ids", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const capturedCreates: CreateMemoryInput[] = [];
+  const saved = createMemory({ id: "saved-default", scope: "repo", projectId: projectContext.projectId, repoPath: projectContext.cwd });
+  const store = createMinimalStore({
+    createMemory(input: CreateMemoryInput) {
+      capturedCreates.push(input);
+      return { ...saved, ...input, tags: input.tags ?? [] } as MemoryRecord;
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+
+  const savedOutput = await toolByName(tools, "memory_save").execute(
+    "call-save-default",
+    { kind: "decision", title: "Default repo scope", summary: "Default memory save should infer repo scope in a Git repository." },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  const invalidOutput = await toolByName(tools, "memory_save").execute(
+    "call-save-invalid",
+    { kind: "decision", scope: "repo", title: "Bad repo scope", summary: "Contradictory hidden identifiers should be rejected.", projectId: "manual-project" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.equal(capturedCreates.length, 1);
+  assert.equal(capturedCreates[0]?.scope, "repo");
+  assert.equal(capturedCreates[0]?.repoPath, projectContext.cwd);
+  assert.equal(capturedCreates[0]?.projectId, projectContext.projectId);
+  assert.match(savedOutput.content[0].text, /Saved memory/);
+  assert.match(invalidOutput.content[0].text, /Invalid memory scope identity/);
+  assert.match(invalidOutput.content[0].text, /scope=repo uses repoPath/);
+});
+
+test("memory_update derives primary identity when changing to repo scope", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const projectMemory = createMemory({ id: "memory-project", scope: "project", projectId: projectContext.projectId, repoPath: undefined });
+  const capturedUpdates: UpdateMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory(id: string): MemoryRecord | null { return id === projectMemory.id ? projectMemory : null; },
+    updateMemory(input: UpdateMemoryInput): MemoryRecord {
+      capturedUpdates.push(input);
+      return { ...projectMemory, ...input } as MemoryRecord;
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_update").execute(
+    "call-update-scope",
+    { id: projectMemory.id, scope: "repo" },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.deepEqual(capturedUpdates, [{ id: projectMemory.id, scope: "repo", repoPath: projectContext.cwd }]);
+  assert.match(output.content[0].text, /Updated memory/);
+});
+
+test("memory_update rejects scope changes that would leave stale session identity", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const sessionMemory = createMemory({ id: "memory-session", scope: "session", sessionId: "old-session" });
+  const capturedUpdates: UpdateMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory(id: string): MemoryRecord | null { return id === sessionMemory.id ? sessionMemory : null; },
+    updateMemory(input: UpdateMemoryInput): MemoryRecord {
+      capturedUpdates.push(input);
+      return { ...sessionMemory, ...input } as MemoryRecord;
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_update").execute(
+    "call-update-session-to-repo",
+    { id: sessionMemory.id, scope: "repo" },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.deepEqual(capturedUpdates, []);
+  assert.match(output.content[0].text, /cannot change a session memory to repo\/project\/global/);
 });

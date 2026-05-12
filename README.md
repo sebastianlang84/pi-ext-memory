@@ -44,6 +44,19 @@ memory_link                  — link related memories (optional)
 /memory-audit                — same as memory_audit tool, output to terminal
 ```
 
+### Scope identity
+
+`scope` selects the primary identity:
+
+| Scope | Primary identity |
+|---|---|
+| `global` | none |
+| `repo` | `repoPath` |
+| `project` | `projectId` |
+| `session` | `sessionId` |
+
+Inside a Git repository, ordinary saves and todos default to `repo`; outside a repo they default to `global`. Tools reject contradictory filters such as `scope="repo"` plus `projectId`, avoiding accidental `project_id AND repo_path` misses.
+
 ### Active caps
 
 | Scope | Todo hard cap | Handoff hard cap | Todo stale after | Handoff expires after |

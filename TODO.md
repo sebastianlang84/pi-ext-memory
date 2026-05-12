@@ -35,3 +35,16 @@ Für ein single-repo Projekt wie partflow könnte ein Agent theoretisch alle dre
 4. Oder: `scope` wird aus `repoPath`/`projectId` automatisch abgeleitet — ein Identifier reicht
 
 **Impact:** Hoch — betrifft jeden Agent der project-scoped Memories schreiben will. Ohne klare Konvention ist konsistente Nutzung nicht möglich.
+
+**Plan/Entscheidung:** Siehe [Memory Scope Identity](docs/plans/memory-scope-identity.md) und [ADR 004 — Scope-first memory identity](docs/adr/004-scope-first-memory-identity.md). Erster Implementierungs-Slice ist umgesetzt: Scope-first Tool/Core-Validierung, repo-default für normale Saves/Todos im Git-Repo, und Schutz gegen `projectId AND repoPath`-Fragmentierung. Offen bleiben Audit bestehender Misch-Datensätze und finale ProjectId-Namespace-Semantik.
+
+### [DESIGN] Tool-Naming — `memory_list_active_handoffs`
+
+**Problem:** Der Toolname `memory_list_active_handoffs` wirkt sehr spezifisch und möglicherweise unnötig lang. Es ist offen, ob ein einfacherer Name wie `memory_list_handoffs` für Agenten verständlicher wäre.
+
+**Zu prüfen:**
+- Ist `active` im Namen notwendig, weil das Tool bewusst nur aktive Handoffs listet?
+- Oder genügt `memory_list_handoffs`, wenn Status/Caps/aktive Defaults in Schema und Beschreibung klar sind?
+- Sollte die Benennung im Rahmen der geplanten Tool-API- und Scope-Identity-Vereinfachung vereinheitlicht werden?
+
+**Impact:** Mittel — betrifft Agent-Verständlichkeit und Tool-API-Konsistenz, ist aber nicht blockierend für die Scope-Identifier-Entscheidung.

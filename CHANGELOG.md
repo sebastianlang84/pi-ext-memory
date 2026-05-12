@@ -10,6 +10,18 @@ write-when: A user/operator-relevant repo change is introduced
 All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
 
+## [3.0.0] - 2026-05-12
+
+### Added
+- ADR 004 documents the new scope-first memory identity policy for `global`, `repo`, `project`, and `session` memories.
+- README now documents primary identity per scope and the repo-default behavior.
+
+### Changed
+- **Breaking:** `memory_search`, `memory_list`, active-list tools, and `memory_stats` now reject contradictory manual scope filters such as `scope="repo"` plus `projectId`, or `scope="project"` plus `repoPath`, instead of applying accidental `AND` predicates.
+- **Breaking:** `memory_save` and `memory_save_todo` now default to `scope="repo"` when running inside a Git repository; outside a Git repository they still default to `scope="global"`.
+- Tool handlers now derive the primary identity for single-scope repo/project/session list/search/stat calls from the active runtime context when the caller omits it.
+- Runtime status metadata now reports `v3.0.0` and lists all registered memory tools.
+
 ## [2.1.0] - 2026-05-12
 
 ### Added
