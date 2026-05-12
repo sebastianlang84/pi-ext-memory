@@ -51,6 +51,11 @@ function formatWithLegacyProjectScopeNotice(text: string, scope?: MemoryScope | 
   return scopes.includes("project") ? `${LEGACY_PROJECT_SCOPE_NOTICE}\n${text}` : text;
 }
 
+function normalizeOptionalArray<T>(value?: T | T[]): T[] | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value : [value];
+}
+
 function resolveToolIdentity(
   params: ToolIdentityParams,
   context: ReturnType<typeof deriveMemoryTurnContext>,
@@ -173,16 +178,17 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_list",
     label: "Memory List",
-    description: "List structured memories from the local pi-memory store using filters without full-text content search.",
+    description: "List structured memories from the local pi-memory store using filters or a small active catalog, without full-text content search.",
     promptSnippet: "List structured memories when kind, scope, tags, repo/session identity, legacy projectId, or status are known and no content query is needed.",
     promptGuidelines: [
-      "Use memory_list for structured filtering, especially active todos with kind: [\"todo\"].",
+      "Use memory_list for normal structured filtering, including active todos with kind=todo and active handoffs with kind=handoff.",
+      "Use memory_list with no kind/scope only for a small active catalog; add filters before paginating deeply.",
       "Do not pass content queries to memory_list; use memory_search when searching memory text.",
       "Use memory_list defaults intentionally: status is active and ordering is newest updated first.",
     ],
     parameters: Type.Object({
-      kind: StringEnum(MEMORY_KINDS, { description: "Memory kind" }),
-      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }),
+      kind: Type.Optional(Type.Union([StringEnum(MEMORY_KINDS, { description: "Memory kind" }), Type.Array(StringEnum(MEMORY_KINDS, { description: "Memory kind" }))])),
+      scope: Type.Optional(Type.Union([StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }), Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope" }))])),
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
       sessionId: Type.Optional(Type.String({ description: "Optional session identifier filter" })),
       projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo memory" })),
@@ -195,10 +201,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
-      const identity = resolveToolIdentity(
-        { scope: params.scope as MemoryScope, sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath },
+      const kindFilter = normalizeOptionalArray(params.kind as MemoryKind | MemoryKind[] | undefined);
+      const scopeFilter = normalizeOptionalArray(params.scope as MemoryScope | MemoryScope[] | undefined);
+      const identity = resolveSingleScopeSearchIdentity(
+        { scope: scopeFilter, sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath },
         turnContext,
-        { requirePrimary: true },
       );
       if (identity.error) {
         return {
@@ -208,8 +215,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       }
 
       const result = activeStore.listForTool({
-        kind: [params.kind as MemoryKind],
-        scope: [params.scope as MemoryScope],
+        kind: kindFilter,
+        scope: scopeFilter,
         tags: params.tags,
         sessionId: identity.sessionId,
         projectId: identity.projectId,
@@ -221,7 +228,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       });
 
       return {
-        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatListResult(result, activeStore.dbPath), params.scope as MemoryScope) }],
+        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatListResult(result, activeStore.dbPath), scopeFilter) }],
         details: {
           dbPath: activeStore.dbPath,
           total_count: result.totalCount,
@@ -409,11 +416,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_update",
     label: "Memory Update",
-    description: "Correct, refine, pin, or close an existing memory.",
-    promptSnippet: "Update an existing structured memory instead of creating duplicates when the memory should be corrected or refined.",
+    description: "Correct, refine, pin, close, or archive an existing memory.",
+    promptSnippet: "Update an existing structured memory instead of creating duplicates when the memory should be corrected, closed, or archived.",
     promptGuidelines: [
       "Use memory_update to patch only the fields that actually changed.",
       "Prefer memory_update over writing a weaker duplicate memory.",
+      "Use memory_update(status=\"archived\", archiveReason=...) instead of memory_archive for normal archive flows.",
       "Use memory_update only when the target memory id is known from memory_search, memory_list, or retrieved context.",
     ],
     parameters: Type.Object({
@@ -428,6 +436,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         Type.Union([Type.String({ description: "Optional ISO-8601 expiry timestamp" }), Type.Null()]),
       ),
       status: Type.Optional(StringEnum(MEMORY_STATUSES, { description: "Memory lifecycle status" })),
+      archiveReason: Type.Optional(Type.String({ description: "Reason for archiving; only valid with status=archived" })),
       pinned: Type.Optional(Type.Boolean({ description: "Whether the memory should stay pinned" })),
       scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Updated scope — use with caution; normal choices are global, repo, and session; project is legacy/advanced compatibility" })),
       repoPath: Type.Optional(Type.String({ description: "Updated repoPath" })),
@@ -466,6 +475,13 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
             details: { dbPath: activeStore.dbPath, memory: existingMemory },
           };
         }
+      }
+
+      if (params.archiveReason !== undefined && params.status !== "archived") {
+        return {
+          content: [{ type: "text", text: `archiveReason is only valid with status=archived.\ndb_path: ${activeStore.dbPath}` }],
+          details: { dbPath: activeStore.dbPath, memory: existingMemory },
+        };
       }
 
       // Validate todo-specific fields
@@ -550,7 +566,40 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         updateParams = { ...updateParams, summary: effectiveSummary, tags: updatedTags };
       }
 
-      const memory = activeStore.updateMemory(updateParams);
+      if (params.status === "archived" && params.archiveReason !== undefined) {
+        const archiveCombinedPatchFields = [
+          params.title,
+          params.summary,
+          params.body,
+          params.tags,
+          params.importance,
+          params.confidence,
+          params.expiresAt,
+          params.pinned,
+          params.scope,
+          params.repoPath,
+          params.projectId,
+          params.priority,
+          params.nextAction,
+        ];
+        if (archiveCombinedPatchFields.some((value) => value !== undefined)) {
+          return {
+            content: [{ type: "text", text: `memory_update archiveReason cannot be combined with other field patches; archive first, then patch only if still needed.\ndb_path: ${activeStore.dbPath}` }],
+            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+          };
+        }
+        const memory = activeStore.archiveMemory({ id: params.id, reason: params.archiveReason });
+        return {
+          content: [{ type: "text", text: formatMemoryArchived(memory, activeStore.dbPath) }],
+          details: {
+            dbPath: activeStore.dbPath,
+            memory,
+          },
+        };
+      }
+
+      const { archiveReason: _archiveReason, ...coreUpdateParams } = updateParams;
+      const memory = activeStore.updateMemory(coreUpdateParams);
 
       return {
         content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatMemoryUpdated(memory, activeStore), params.scope as MemoryScope | undefined) }],
@@ -565,9 +614,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_link",
     label: "Memory Link",
-    description: "Link related memories in the local pi-memory store.",
-    promptSnippet: "Link related memories when a useful relationship should be preserved explicitly.",
+    description: "Advanced/admin tool: link related memories in the local pi-memory store.",
+    promptSnippet: "Use memory_link only for advanced relation maintenance when an explicit relation changes future retrieval or prevents duplicated context.",
     promptGuidelines: [
+      "Use memory_link only as an advanced/admin tool, not for normal memory capture.",
       "Use memory_link with simple V1 relations like related_to, supersedes, caused_by, implements, and blocks.",
       "Use memory_link to connect existing memories instead of copying the same context into multiple records.",
       "Use memory_link only when the relation changes future retrieval or prevents duplicated context.",
@@ -668,9 +718,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_archive",
     label: "Memory Archive",
-    description: "Archive a short-lived or superseded memory without hard-deleting it.",
-    promptSnippet: "Archive obsolete memories instead of deleting them when they should stop influencing retrieval.",
+    description: "Compatibility wrapper: archive a short-lived or superseded memory without hard-deleting it.",
+    promptSnippet: "Use memory_archive only for compatibility; prefer memory_update(status=\"archived\", archiveReason=...) for normal archive flows.",
     promptGuidelines: [
+      "Use memory_archive only as a compatibility wrapper; prefer memory_update(status=\"archived\", archiveReason=...) when possible.",
       "Use memory_archive instead of deleting memories in V1.",
       "Use memory_archive with a short reason when a future reader would benefit from the context.",
     ],
@@ -729,10 +780,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_list_active_todos",
     label: "Memory Active Todos",
-    description: "List all active todos for the given scope. Bounded by active caps — no pagination needed.",
-    promptSnippet: "Use to inspect the current todo working-set for a scope.",
+    description: "Compatibility wrapper: list active todos for one scope. Prefer memory_list(kind=\"todo\", status=\"active\") for normal use.",
+    promptSnippet: "Use memory_list_active_todos only when a bounded compatibility wrapper is preferable to memory_list(kind=\"todo\", status=\"active\").",
     promptGuidelines: [
-      "Use memory_list_active_todos with repo scope inside repositories to avoid global todo noise; project scope is legacy/advanced compatibility.",
+      "Prefer memory_list(kind=\"todo\", status=\"active\") over memory_list_active_todos for normal todo inspection.",
+      "Use memory_list_active_todos with repo scope inside repositories only when the bounded no-pagination wrapper is useful; project scope is legacy/advanced compatibility.",
       "For content-based todo search, use memory_search instead of memory_list_active_todos.",
     ],
     parameters: Type.Object({
@@ -774,10 +826,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_list_active_handoffs",
     label: "Memory Active Handoffs",
-    description: "List active handoffs relevant to the given session or repo scope. Legacy project lookups also include session handoffs with matching metadata.",
-    promptSnippet: "Use to inspect current session or repo handoff state without missing matching session-scoped handoffs; project scope is legacy compatibility.",
+    description: "Compatibility wrapper: list active handoffs relevant to one scope, including matching session handoffs for repo/legacy project lookups.",
+    promptSnippet: "Use memory_list_active_handoffs only when its repo/session widening is needed; otherwise prefer memory_list(kind=\"handoff\", status=\"active\").",
     promptGuidelines: [
-      "Use memory_list_active_handoffs for bounded active handoff inspection by scope.",
+      "Prefer memory_list(kind=\"handoff\", status=\"active\") over memory_list_active_handoffs for normal handoff listing.",
+      "Use memory_list_active_handoffs only when bounded active handoff inspection or repo/session widening is specifically needed.",
       "Use memory_list_active_handoffs with repoPath for repo handoff state; projectId is legacy/advanced compatibility.",
       "For content-based handoff search, use memory_search instead of memory_list_active_handoffs.",
     ],
@@ -825,9 +878,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_stats",
     label: "Memory Stats",
-    description: "Summarize active/archived/done counts per kind and scope with cap warnings.",
-    promptSnippet: "Use for a health overview of the memory store — counts, caps, and warnings.",
+    description: "Advanced/admin tool: summarize active/archived/done counts per kind and scope with cap warnings.",
+    promptSnippet: "Use memory_stats only for memory-store health, caps, and warnings; use memory_list for normal listing.",
     promptGuidelines: [
+      "Use memory_stats as an advanced/admin health overview, not for normal memory navigation.",
       "Use memory_stats for memory store health, not for listing memory content — use memory_list or memory_search for that.",
     ],
     parameters: Type.Object({

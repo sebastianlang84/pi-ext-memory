@@ -12,6 +12,18 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-05-13
+
+### Added
+- ADR 006 documents the normal-vs-advanced tool surface and keeps specialized wrappers callable as compatibility/admin tools.
+- `memory_list` now accepts optional `kind` and `scope`, enabling small active catalog/listing flows without requiring specialized active-list tools.
+- `memory_update` now supports `archiveReason` with `status="archived"` for normal archive flows.
+
+### Changed
+- README and tool descriptions now guide normal agents toward `memory_list` for structured listing and `memory_update` for archiving.
+- `memory_list_active_todos`, `memory_list_active_handoffs`, `memory_stats`, `memory_archive`, and `memory_link` are documented as advanced/compatibility tools rather than normal first-choice tools.
+- Runtime status metadata now reports `v3.3.0`.
+
 ## [3.2.0] - 2026-05-13
 
 ### Added

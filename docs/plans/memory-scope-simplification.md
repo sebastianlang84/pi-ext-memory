@@ -122,14 +122,14 @@ Target normal agent-facing tools after simplification:
 5. `memory_save_handoff` — one active session handoff for context-loss, agent-transfer, compaction, or session-end resume state.
 6. `memory_update` — correct, close, supersede, archive, or refine existing memories.
 
-Planned consolidations:
+Accepted consolidation path from ADR 006:
 
-- `memory_stats` folds into `memory_list` catalog output.
-- `memory_list_active_todos` folds into `memory_list` filters and defaults.
-- `memory_list_active_handoffs` folds into `memory_list` filters and defaults.
-- `memory_archive` folds into `memory_update(status="archived")` plus an archive reason field or metadata path.
-- `memory_link` becomes advanced/admin-only or is removed from normal agent exposure.
-- `memory_audit` remains available as an admin/command surface, but should not be part of the normal agent tool set.
+- `memory_list` is the normal structured listing surface and accepts optional `kind` and `scope` for small active catalog/listing flows.
+- `memory_list_active_todos` and `memory_list_active_handoffs` remain callable as compatibility wrappers, but normal agents should prefer `memory_list`.
+- `memory_update(status="archived", archiveReason=...)` is the normal archive path.
+- `memory_archive` remains callable as a compatibility wrapper.
+- `memory_stats` and `memory_link` remain callable as advanced/admin tools.
+- `memory_audit` remains available for hygiene, scope identity findings, and read-only migration previews.
 
 `memory_list` should support the navigation pattern needed to replace `MEMORY.md` discovery:
 
@@ -199,12 +199,22 @@ Status: complete.
 - The preview classifies active legacy project-scoped records as repo/global/archive/legacy-read-only/needs-human-review candidates.
 - No migration, archive, or metadata write is performed by the preview.
 
-### Slice 6 — Tests and SemVer
+### Slice 6 — Tool surface simplification
+
+Status: complete.
+
+- ADR 006 defines the normal-vs-advanced tool surface.
+- `memory_list` now covers optional kind/scope catalog-style listing without requiring active-list wrappers.
+- `memory_update(status="archived", archiveReason=...)` now covers normal archive flows.
+- Specialized wrappers remain callable as advanced/compatibility tools; no hard removal was done.
+
+### Slice 7 — Tests and SemVer
 
 - Add regression tests for global/repo/session routing rules.
 - Add tests proving ordinary repo saves do not create project identity.
 - Add compatibility tests for legacy project records.
 - Treat removal/rejection of `project` in public tools as a major SemVer change.
+- Treat hard removal of callable compatibility/admin tools as a major SemVer change.
 
 ## 10. Acceptance Criteria
 

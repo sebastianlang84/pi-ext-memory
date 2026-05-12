@@ -23,26 +23,23 @@ Check extension status:
 /memory-status
 ```
 
-Common tools and commands:
+Normal tools and commands:
 
 ```text
 memory_search                — search durable memory (semantic + lexical)
-memory_list                  — filter memories by kind+scope (required), paginated; returns total_count, has_more, next_offset
-memory_list_active_todos     — list active todos for a scope (bounded by caps, no pagination)
-memory_list_active_handoffs  — list active handoffs for a scope (bounded by caps, no pagination)
-memory_stats                 — per-kind counts, cap utilisation, and warnings for a scope
+memory_list                  — list/filter structured memories; kind and scope are optional; paginated with total_count, has_more, next_offset
 memory_save                  — save facts, decisions, notes, progress snapshots (kind=progress_snapshot)
 memory_save_todo             — save actionable open tasks (priority, status, scope)
 memory_save_handoff          — save/refresh resumable agent handoff state
-memory_update                — patch an existing memory by id (scope, repoPath, legacy projectId, title, summary, body, tags, status, pinned, importance, confidence, expiresAt; priority+nextAction for kind=todo)
-memory_archive               — archive obsolete memories
+memory_update                — patch, close, or archive an existing memory by id; use archiveReason with status=archived when archiving
 memory_audit                 — report stale todos, old handoffs, scope identity issues, and read-only legacy project migration preview
-memory_link                  — link related memories (optional)
 /memory-status               — show extension status and config
 /memory-search <query>       — manual memory search
 /memory-handoff              — show or archive the active session handoff
 /memory-audit                — same as memory_audit tool, output to terminal
 ```
+
+Advanced/compatibility tools remain callable for older workflows: `memory_list_active_todos`, `memory_list_active_handoffs`, `memory_stats`, `memory_archive`, and `memory_link`. Prefer `memory_list` for normal listing and `memory_update(status="archived", archiveReason=...)` for normal archive flows.
 
 ### Scope identity
 

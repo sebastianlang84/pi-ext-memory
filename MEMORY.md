@@ -39,8 +39,9 @@ scope: always-loaded bootstrap; keep lean
 - v3.0.0 adopts scope-first memory identity: `global` has no identity, `repo` uses `repoPath`, `project` uses `projectId`, and `session` uses `sessionId`; tool/core validation now rejects contradictory manual filters to avoid `project_id AND repo_path` fragmentation, while runtime enrichment may still store extra metadata.
 - v3.1.0 extends `memory_audit` and `/memory-audit` with report-only scope identity findings for active records that miss primary identifiers or carry identifiers contradicting their scope.
 - v3.2.0 extends `memory_audit` and `/memory-audit` with a read-only migration preview that classifies active legacy project-scoped records before any approved migration.
+- v3.3.0 simplifies the recommended agent-facing tool path: `memory_list` now covers optional kind/scope catalog-style listing, `memory_update(status="archived", archiveReason=...)` covers normal archiving, and specialized wrappers remain callable as advanced/compatibility tools.
 - `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`; smoke scripts cover the global install path and package manifest path without relying on a project-local dev shim.
-- ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default; ADR 004 records scope-first memory identity; ADR 005 records the simplified normal scope model and soft-deprecates `project`/`projectId` for normal agent-facing use.
+- ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default; ADR 004 records scope-first memory identity; ADR 005 records the simplified normal scope model and soft-deprecates `project`/`projectId` for normal agent-facing use; ADR 006 records the normal-vs-advanced tool surface.
 - Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, handoff save/preload behavior, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level handoff/review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus global/package smoke checks with `npm run smoke:memory-status` and `npm run smoke:package-status`, and manual `/memory-search` and `/memory-handoff` smoke paths for the extension.
 - Current V1 direction from the PRD and plan: local-first, single-user, SQLite-based, hybrid retrieval, Pi-first extension surface, thin local core boundary, no heavy server infrastructure.
 
@@ -82,6 +83,7 @@ scope: always-loaded bootstrap; keep lean
 - 2026-05-13 — Added compatibility notices for explicit `scope="project"` tool calls while keeping legacy project-scoped reads/writes accepted.
 - 2026-05-13 — Added regression coverage proving legacy project-scoped records remain discoverable by `projectId` alone without adding `repoPath` to project-scope retrieval.
 - 2026-05-13 — Extended `memory_audit` and `/memory-audit` with a read-only migration preview that classifies active legacy project-scoped records as repo/global/archive/legacy-read-only/needs-human-review candidates and bumped package/runtime metadata to v3.2.0.
+- 2026-05-13 — Accepted ADR 006 and simplified the recommended tool surface for v3.3.0: normal listing goes through `memory_list`, normal archiving goes through `memory_update`, and specialized wrappers are advanced/compatibility only.
 - 2026-04-30 — Renamed the GitHub/local repository from `pi-memory` to `pi-ext-memory`; package/runtime names remain `pi-memory`.
 
 ## 4) Open Decisions

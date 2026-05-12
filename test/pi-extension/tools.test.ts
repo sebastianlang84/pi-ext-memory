@@ -545,6 +545,158 @@ test("memory_list_active_handoffs widens repo and project lookups to matching se
   ]);
 });
 
+test("memory_list supports optional kind/scope catalog mode", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const calls: Array<Partial<NormalizedListMemoriesInput> & { offset?: number }> = [];
+  const store = createMinimalStore({
+    listForTool(filter: Partial<NormalizedListMemoriesInput> & { offset?: number }): ListForToolResult {
+      calls.push(filter);
+      return { items: [], totalCount: 0, hasMore: false, nextOffset: null };
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_list").execute(
+    "call-list-catalog",
+    { limit: 5 },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.deepEqual(calls, [
+    { kind: undefined, scope: undefined, tags: undefined, sessionId: undefined, projectId: undefined, repoPath: undefined, status: undefined, orderBy: undefined, limit: 5, offset: 0 },
+  ]);
+  assert.match(output.content[0].text, /No memories matched the list filters/);
+});
+
+test("memory_list supports kind-only normal replacement flows", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const calls: Array<Partial<NormalizedListMemoriesInput> & { offset?: number }> = [];
+  const store = createMinimalStore({
+    listForTool(filter: Partial<NormalizedListMemoriesInput> & { offset?: number }): ListForToolResult {
+      calls.push(filter);
+      return { items: [], totalCount: 0, hasMore: false, nextOffset: null };
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+
+  await toolByName(tools, "memory_list").execute(
+    "call-list-todos",
+    { kind: "todo", status: "active", limit: 20 },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  await toolByName(tools, "memory_list").execute(
+    "call-list-handoffs",
+    { kind: "handoff", status: "active", limit: 10 },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.deepEqual(calls, [
+    { kind: ["todo"], scope: undefined, tags: undefined, sessionId: undefined, projectId: undefined, repoPath: undefined, status: "active", orderBy: undefined, limit: 20, offset: 0 },
+    { kind: ["handoff"], scope: undefined, tags: undefined, sessionId: undefined, projectId: undefined, repoPath: undefined, status: "active", orderBy: undefined, limit: 10, offset: 0 },
+  ]);
+});
+
+test("memory_update archives with archiveReason through the normal update surface", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const memory = createMemory({ id: "memory-to-archive", kind: "decision" });
+  const archived = createMemory({ ...memory, status: "archived", metadata: { archive: { archivedReason: "superseded" } } });
+  const archiveCalls: ArchiveMemoryInput[] = [];
+  const updateCalls: UpdateMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory(id: string): MemoryRecord | null { return id === memory.id ? memory : null; },
+    updateMemory(input: UpdateMemoryInput): MemoryRecord {
+      updateCalls.push(input);
+      return memory;
+    },
+  });
+  store.archiveMemory = (input: ArchiveMemoryInput) => {
+    archiveCalls.push(input);
+    return archived;
+  };
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_update").execute(
+    "call-update-archive",
+    { id: memory.id, status: "archived", archiveReason: "superseded" },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.deepEqual(archiveCalls, [{ id: memory.id, reason: "superseded" }]);
+  assert.deepEqual(updateCalls, []);
+  assert.match(output.content[0].text, /Archived memory memory-to-archive\./);
+});
+
+test("memory_update rejects invalid archiveReason combinations", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const memory = createMemory({ id: "memory-to-check", kind: "decision" });
+  const archiveCalls: ArchiveMemoryInput[] = [];
+  const updateCalls: UpdateMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory(id: string): MemoryRecord | null { return id === memory.id ? memory : null; },
+    updateMemory(input: UpdateMemoryInput): MemoryRecord {
+      updateCalls.push(input);
+      return memory;
+    },
+  });
+  store.archiveMemory = (input: ArchiveMemoryInput) => {
+    archiveCalls.push(input);
+    return memory;
+  };
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+
+  const missingStatus = await toolByName(tools, "memory_update").execute(
+    "call-invalid-archive-reason",
+    { id: memory.id, archiveReason: "superseded" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  const combinedPatch = await toolByName(tools, "memory_update").execute(
+    "call-combined-archive-reason",
+    { id: memory.id, status: "archived", archiveReason: "superseded", title: "Edited" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.match(missingStatus.content[0].text, /archiveReason is only valid with status=archived/);
+  assert.match(combinedPatch.content[0].text, /archiveReason cannot be combined with other field patches/);
+  assert.deepEqual(archiveCalls, []);
+  assert.deepEqual(updateCalls, []);
+});
+
 test("memory_archive archives handoffs by id from any session", async (t) => {
   const projectContext = await createTempPiToolContext();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
