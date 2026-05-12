@@ -196,14 +196,14 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
   });
 
   pi.registerCommand("memory-audit", {
-    description: "Audit memory hygiene: list stale todos and old handoffs",
+    description: "Audit memory hygiene: list stale todos, old handoffs, and scope identity issues",
     handler: async (_args, ctx) => {
       const activeStore = getStoreForCwd(core, store, ctx.cwd);
       store = activeStore;
 
-      const { staleTodos, oldHandoffs } = runMemoryAudit(activeStore);
+      const { staleTodos, oldHandoffs, identityViolations } = runMemoryAudit(activeStore);
       activeStore.setMeta("lastAuditAt", new Date().toISOString());
-      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath);
+      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations);
 
       writeCommandOutput(output, ctx);
     },

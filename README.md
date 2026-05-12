@@ -36,7 +36,7 @@ memory_save_todo             — save actionable open tasks (priority, status, s
 memory_save_handoff          — save/refresh resumable agent handoff state
 memory_update                — patch an existing memory by id (scope, repoPath, projectId, title, summary, body, tags, status, pinned, importance, confidence, expiresAt; priority+nextAction for kind=todo)
 memory_archive               — archive obsolete memories
-memory_audit                 — report stale todos and old handoffs (report-only, no auto-archive)
+memory_audit                 — report stale todos, old handoffs, and scope identity issues (report-only, no auto-migration/archive)
 memory_link                  — link related memories (optional)
 /memory-status               — show extension status and config
 /memory-search <query>       — manual memory search

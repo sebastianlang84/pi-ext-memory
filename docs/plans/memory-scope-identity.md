@@ -9,7 +9,7 @@ write-when: Scope/identifier semantics, planned validation, defaults, or migrati
 
 ## 1. Purpose
 
-Status: first implementation slice accepted in [ADR 004 — Scope-first memory identity](../adr/004-scope-first-memory-identity.md). Remaining follow-up: audit existing mixed records and decide project-id namespace semantics.
+Status: first implementation slice accepted in [ADR 004 — Scope-first memory identity](../adr/004-scope-first-memory-identity.md). The audit/report follow-up is implemented as report-only `memory_audit` identity findings. Remaining follow-up: decide project-id namespace semantics.
 
 This plan resolves the `scope` / `projectId` / `repoPath` ambiguity in pi-memory without losing the two core use cases:
 
@@ -173,8 +173,10 @@ Status: implemented for the first strict-validation slice.
 
 ### Slice 5 — Compatibility and audit
 
-- Extend audit/review output to find records that violate the new primary identity expectations.
-- Decide whether to leave, backfill, or migrate existing records only after audit output is available.
+Status: audit/report path implemented for active records; migration remains intentionally manual.
+
+- `memory_audit` and `/memory-audit` now report active records that violate primary identity expectations.
+- Decide whether to leave, backfill, or migrate existing records only after reviewing audit output.
 
 ## 10. Acceptance Criteria
 

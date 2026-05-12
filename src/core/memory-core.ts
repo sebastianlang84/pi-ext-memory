@@ -5,7 +5,7 @@ import { initializeMemoryStore, type InitializeMemoryStoreInput, type MemoryStor
 const embeddingStatus = createDefaultMemoryEmbeddingAdapter().getStatus();
 
 export interface MemoryCoreStatus {
-  version: "v3.0.0";
+  version: "v3.1.0";
   mode: "local-core";
   storage: "sqlite-session-summary-ready";
   latestSchemaVersion: number;
@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v3.0.0",
+        version: "v3.1.0",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
@@ -39,7 +39,7 @@ export function createMemoryCore(): MemoryCore {
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save", "/memory-audit"],
         availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit", "memory_list_active_todos", "memory_list_active_handoffs", "memory_stats"],
-        nextStep: "V3.0.0 uses scope-first memory identity to avoid repo/project filter fragmentation.",
+        nextStep: "V3.1.0 reports scope identity issues through memory_audit before any migration.",
       };
     },
     initializeStore(input) {

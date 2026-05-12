@@ -697,10 +697,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_audit",
     label: "Memory Audit",
-    description: "Audit memory hygiene: list stale todos and old handoffs that may need attention.",
-    promptSnippet: "Run memory_audit to inspect stale todos and old handoffs. Returns candidates with id, title, reason, and suggested action.",
+    description: "Audit memory hygiene: list stale todos, old handoffs, and scope identity issues that may need attention.",
+    promptSnippet: "Run memory_audit to inspect stale todos, old handoffs, and scope identity issues. Returns candidates with id, title, reason, and suggested action.",
     promptGuidelines: [
-      "Run memory_audit when the session-start hygiene warning mentions stale items.",
+      "Run memory_audit when the session-start hygiene warning mentions stale items or after scope-identity changes.",
       "Use memory_audit optional scope or repoPath filters to narrow the audit.",
     ],
     parameters: Type.Object({
@@ -709,12 +709,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
-      const { staleTodos, oldHandoffs } = runMemoryAudit(activeStore, params.scope, params.repoPath);
+      const { staleTodos, oldHandoffs, identityViolations } = runMemoryAudit(activeStore, params.scope, params.repoPath);
       activeStore.setMeta("lastAuditAt", new Date().toISOString());
-      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath);
+      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations);
       return {
         content: [{ type: "text", text: output }],
-        details: { dbPath: activeStore.dbPath, staleTodos, oldHandoffs },
+        details: { dbPath: activeStore.dbPath, staleTodos, oldHandoffs, identityViolations },
       };
     },
   });

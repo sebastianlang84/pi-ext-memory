@@ -10,6 +10,15 @@ write-when: A user/operator-relevant repo change is introduced
 All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
 
+## [3.1.0] - 2026-05-12
+
+### Added
+- `memory_audit` and `/memory-audit` now report active scope identity violations, such as missing primary identifiers or identifiers that contradict scope-first identity rules.
+- Audit output and tool details now include `identityViolations` for report-only review before any migration.
+
+### Changed
+- Runtime status metadata now reports `v3.1.0`.
+
 ## [3.0.0] - 2026-05-12
 
 ### Added

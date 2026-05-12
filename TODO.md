@@ -36,7 +36,7 @@ Für ein single-repo Projekt wie partflow könnte ein Agent theoretisch alle dre
 
 **Impact:** Hoch — betrifft jeden Agent der project-scoped Memories schreiben will. Ohne klare Konvention ist konsistente Nutzung nicht möglich.
 
-**Plan/Entscheidung:** Siehe [Memory Scope Identity](docs/plans/memory-scope-identity.md) und [ADR 004 — Scope-first memory identity](docs/adr/004-scope-first-memory-identity.md). Erster Implementierungs-Slice ist umgesetzt: Scope-first Tool/Core-Validierung, repo-default für normale Saves/Todos im Git-Repo, und Schutz gegen `projectId AND repoPath`-Fragmentierung. Offen bleiben Audit bestehender Misch-Datensätze und finale ProjectId-Namespace-Semantik.
+**Plan/Entscheidung:** Siehe [Memory Scope Identity](docs/plans/memory-scope-identity.md) und [ADR 004 — Scope-first memory identity](docs/adr/004-scope-first-memory-identity.md). Umgesetzt sind Scope-first Tool/Core-Validierung, repo-default für normale Saves/Todos im Git-Repo, Schutz gegen `projectId AND repoPath`-Fragmentierung, und ein report-only Audit für aktive Scope-Identity-Verstöße. Offen bleibt die finale ProjectId-Namespace-Semantik.
 
 ### [DESIGN] Tool-Naming — `memory_list_active_handoffs`
 

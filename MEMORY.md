@@ -37,6 +37,7 @@ scope: always-loaded bootstrap; keep lean
 - v1.2.0 adds `memory_list` for query-free structured memory listing/filtering; `memory_search` remains content search.
 - v1.3.0 adds Handoff V1: `kind: handoff`, `memory_handoff_save`, `/memory-handoff`, one active handoff per session, session-safe save/update behavior for concurrent Pi instances, and deterministic latest matching active handoff preload ahead of normal turn retrieval.
 - v3.0.0 adopts scope-first memory identity: `global` has no identity, `repo` uses `repoPath`, `project` uses `projectId`, and `session` uses `sessionId`; tool/core validation now rejects contradictory manual filters to avoid `project_id AND repo_path` fragmentation, while runtime enrichment may still store extra metadata.
+- v3.1.0 extends `memory_audit` and `/memory-audit` with report-only scope identity findings for active records that miss primary identifiers or carry identifiers contradicting their scope.
 - `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`; smoke scripts cover the global install path and package manifest path without relying on a project-local dev shim.
 - ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default; ADR 004 records scope-first memory identity.
 - Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, handoff save/preload behavior, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level handoff/review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus global/package smoke checks with `npm run smoke:memory-status` and `npm run smoke:package-status`, and manual `/memory-search` and `/memory-handoff` smoke paths for the extension.
@@ -73,6 +74,7 @@ scope: always-loaded bootstrap; keep lean
 - 2026-05-04 — Added `memory_list` so agents can list/filter active todos and other structured memories without relying on full-text query matches; bumped package/status metadata to v1.2.0.
 - 2026-05-09 — Added Handoff V1 with `memory_handoff_save`, `/memory-handoff`, session-isolated active handoff updates, latest handoff turn-start preload, and v1.3.0 status/package metadata.
 - 2026-05-12 — Added ADR 004 and implemented v3.0.0 scope-first identity validation/defaults to avoid `projectId`/`repoPath` filter fragmentation.
+- 2026-05-12 — Added v3.1.0 report-only scope identity findings to `memory_audit` and `/memory-audit`.
 - 2026-04-30 — Renamed the GitHub/local repository from `pi-memory` to `pi-ext-memory`; package/runtime names remain `pi-memory`.
 
 ## 4) Open Decisions

@@ -16,10 +16,12 @@ export interface AuditCandidate {
 export interface AuditSummary {
   staleTodos: AuditCandidate[];
   oldHandoffs: AuditCandidate[];
+  identityViolations: AuditCandidate[];
   activeTodosCount: number;
   activeHandoffsCount: number;
   staleTodosCount: number;
   expiredHandoffsCount: number;
+  identityViolationsCount: number;
   warnings: string[];
   suggestedActions: string[];
 }
@@ -28,9 +30,13 @@ export function runMemoryAudit(
   store: MemoryStore,
   scopeFilter?: string[],
   repoPathFilter?: string,
-): { staleTodos: AuditCandidate[]; oldHandoffs: AuditCandidate[] } {
+): { staleTodos: AuditCandidate[]; oldHandoffs: AuditCandidate[]; identityViolations: AuditCandidate[] } {
   const summary = runMemoryAuditFull(store, scopeFilter, repoPathFilter);
-  return { staleTodos: summary.staleTodos, oldHandoffs: summary.oldHandoffs };
+  return {
+    staleTodos: summary.staleTodos,
+    oldHandoffs: summary.oldHandoffs,
+    identityViolations: summary.identityViolations,
+  };
 }
 
 export function runMemoryAuditFull(
@@ -46,8 +52,11 @@ export function runMemoryAuditFull(
     ...(repoPathFilter ? { repoPath: repoPathFilter } : {}),
   };
 
+  const memories = store.listAllInternal(internalFilter);
   const todos = store.listAllInternal({ ...internalFilter, kind: ["todo"] });
   const handoffs = store.listAllInternal({ ...internalFilter, kind: ["handoff"] });
+
+  const identityViolations = memories.flatMap((m) => buildIdentityViolationCandidate(m));
 
   const staleTodos: AuditCandidate[] = todos
     .filter((m) => isTodoStale(m, now))
@@ -105,16 +114,58 @@ export function runMemoryAuditFull(
     suggestedActions.push("Review stale todos");
   }
 
+  if (identityViolations.length > 0) {
+    warnings.push(`${identityViolations.length} active memor${identityViolations.length !== 1 ? "ies have" : "y has"} scope identity issues`);
+    suggestedActions.push("Review identity violations before any migration");
+  }
+
   return {
     staleTodos,
     oldHandoffs,
+    identityViolations,
     activeTodosCount: todos.length,
     activeHandoffsCount: handoffs.length,
     staleTodosCount: staleTodos.length,
     expiredHandoffsCount: expiredHandoffs.length,
+    identityViolationsCount: identityViolations.length,
     warnings,
     suggestedActions,
   };
+}
+
+function buildIdentityViolationCandidate(m: MemoryRecord): AuditCandidate[] {
+  const issues: string[] = [];
+
+  if (m.scope === "global" && (m.sessionId || m.projectId || m.repoPath)) {
+    issues.push("scope=global should not have sessionId, projectId, or repoPath");
+  }
+
+  if (m.scope === "repo") {
+    if (!m.repoPath) issues.push("scope=repo is missing primary identity repoPath");
+    if (m.sessionId) issues.push("scope=repo should not carry sessionId; use scope=session for session identity");
+  }
+
+  if (m.scope === "project") {
+    if (!m.projectId) issues.push("scope=project is missing primary identity projectId");
+    if (m.sessionId) issues.push("scope=project should not carry sessionId; use scope=session for session identity");
+  }
+
+  if (m.scope === "session" && !m.sessionId) {
+    issues.push("scope=session is missing primary identity sessionId");
+  }
+
+  if (issues.length === 0) return [];
+
+  return [{
+    id: m.id,
+    title: m.title,
+    kind: m.kind,
+    tags: m.tags,
+    updatedAt: m.updatedAt,
+    scope: m.scope,
+    reason: issues.join("; "),
+    suggestedAction: "Review scope and primary identity; migrate only after confirming the intended scope",
+  }];
 }
 
 function isTodoStale(m: MemoryRecord, now: Date): boolean {
@@ -132,12 +183,17 @@ export function buildHygieneLine(staleTodoCount: number, oldHandoffCount: number
   return `⚠ Memory hygiene: ${staleTodoCount} stale todo${staleTodoCount !== 1 ? "s" : ""}, ${oldHandoffCount} old handoff${oldHandoffCount !== 1 ? "s" : ""}. Run memory_audit for details.`;
 }
 
-export function formatAuditResults(staleTodos: AuditCandidate[], oldHandoffs: AuditCandidate[], dbPath: string): string {
+export function formatAuditResults(
+  staleTodos: AuditCandidate[],
+  oldHandoffs: AuditCandidate[],
+  dbPath: string,
+  identityViolations: AuditCandidate[] = [],
+): string {
   const lines: string[] = [];
-  const total = staleTodos.length + oldHandoffs.length;
+  const total = staleTodos.length + oldHandoffs.length + identityViolations.length;
 
   if (total === 0) {
-    lines.push("Memory audit: no stale items found.", `db_path: ${dbPath}`);
+    lines.push("Memory audit: no items need attention.", `db_path: ${dbPath}`);
     return lines.join("\n");
   }
 
@@ -159,6 +215,19 @@ export function formatAuditResults(staleTodos: AuditCandidate[], oldHandoffs: Au
   if (oldHandoffs.length > 0) {
     lines.push("", `Old handoffs (${oldHandoffs.length}):`);
     oldHandoffs.forEach((c, i) => {
+      lines.push(
+        `  ${i + 1}. [${c.scope}] ${c.title} (${c.id})`,
+        `     tags: ${c.tags.join(", ") || "none"}`,
+        `     updated_at: ${c.updatedAt}`,
+        `     reason: ${c.reason}`,
+        `     action: ${c.suggestedAction}`,
+      );
+    });
+  }
+
+  if (identityViolations.length > 0) {
+    lines.push("", `Identity violations (${identityViolations.length}):`);
+    identityViolations.forEach((c, i) => {
       lines.push(
         `  ${i + 1}. [${c.scope}] ${c.title} (${c.id})`,
         `     tags: ${c.tags.join(", ") || "none"}`,
