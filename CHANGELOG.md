@@ -10,6 +10,17 @@ write-when: A user/operator-relevant repo change is introduced
 All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
 
+## [2.1.0] - 2026-05-12
+
+### Added
+- `memory_archive` can now archive handoffs by id, including handoffs created by another Pi session.
+- `memory_update` can now change handoff lifecycle fields (`status`, `expiresAt`) while still rejecting handoff content edits that should go through `memory_save_handoff`.
+
+### Changed
+- `memory_list_active_handoffs` repo/project lookups now include matching session-scoped handoffs by `repoPath`/`projectId`, preventing relevant cross-session handoffs from being missed.
+- Tool prompt guidance now consistently names the intended memory tool for clearer agent routing.
+- Runtime status metadata now reports `v2.1.0`.
+
 ## [2.0.2] - 2026-05-11
 
 ### Changed

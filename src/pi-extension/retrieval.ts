@@ -290,9 +290,9 @@ export function formatTurnMemoryContext(results: MemorySearchResult[], latestHan
   return [
     ...handoffLines,
     ...contextLines,
-    "Memory triggers: search before guessing about prior/project/workflow context.",
-    "Save or update durable user corrections, decisions, facts, preferences, and todos.",
-    "Prefer current user instructions if they conflict with older memory.",
+    "Memory triggers: use memory_search when prior decisions, durable preferences, project history, or workflow context materially affect the answer.",
+    "Memory writes: save or update only durable, reusable corrections, decisions, facts, preferences, progress snapshots, or persistent todos.",
+    "Memory precedence: prefer current user instructions when they conflict with older memory.",
   ].join("\n");
 }
 

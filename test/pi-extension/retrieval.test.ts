@@ -340,8 +340,8 @@ test("buildTurnMemoryMessage injects memory triggers even when no results match"
 
   assert.ok(message);
   assert.match(message?.content ?? "", /Relevant memory context: none found\./);
-  assert.match(message?.content ?? "", /Memory triggers: search before guessing/);
-  assert.match(message?.content ?? "", /Save or update durable user corrections/);
+  assert.match(message?.content ?? "", /Memory triggers: use memory_search/);
+  assert.match(message?.content ?? "", /Memory writes: save or update only durable/);
   assert.deepEqual(message?.details.resultIds, []);
 });
 

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { initializeMemoryStore } from "../../src/core/index.ts";
 import type {
   ArchiveMemoryInput,
   CreateMemoryInput,
@@ -22,6 +23,8 @@ import type {
 type RegisteredTool = {
   name: string;
   parameters: unknown;
+  promptSnippet?: string;
+  promptGuidelines?: string[];
   execute: (...args: unknown[]) => Promise<{
     content: Array<{ type: string; text: string }>;
     details: Record<string, unknown>;
@@ -139,6 +142,7 @@ async function createTempPiToolContext() {
 function createMinimalStore(overrides: Partial<{
   getMemory: (id: string) => MemoryRecord | null;
   updateMemory: (input: UpdateMemoryInput) => MemoryRecord;
+  listForTool: (filter: Partial<NormalizedListMemoriesInput> & { offset?: number }) => ListForToolResult;
 }> = {}) {
   const base = createMemory();
   return {
@@ -230,8 +234,8 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     },
     getMemory(id: string) {
       calls.get.push(id);
-      // Return a valid non-handoff memory for memory_update; null for archive (id differs)
       if (id === "memory-saved") return savedMemory;
+      if (id === "memory-updated") return updatedMemory;
       return null;
     },
     updateMemory(input: UpdateMemoryInput) {
@@ -266,6 +270,10 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.equal(tools.length, expectedToolNames.length);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)), new Set(expectedToolNames));
   assert.ok(tools.every((tool) => tool.parameters), "expected all registered tools to expose parameters");
+  for (const tool of tools) {
+    assert.ok(tool.promptSnippet, `${tool.name} should provide promptSnippet`);
+    assert.ok(tool.promptGuidelines?.every((guideline) => guideline.includes(tool.name)), `${tool.name} guidelines should name the tool`);
+  }
 
   const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
   const signal = new AbortController().signal;
@@ -406,6 +414,147 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.deepEqual(updateOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
   assert.deepEqual(linkOutput.details, { dbPath: store.dbPath, link });
   assert.deepEqual(archiveOutput.details, { dbPath: store.dbPath, memory: archivedMemory });
+});
+
+test("memory_list_active_handoffs returns session handoffs for matching repo metadata", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
+  t.after(() => { store.close(); });
+  const handoff = store.createMemory({
+    kind: "handoff",
+    scope: "session",
+    sessionId: "previous-session",
+    projectId: projectContext.projectId,
+    repoPath: projectContext.cwd,
+    title: "Repo metadata session handoff",
+    summary: "This session-scoped handoff should appear in repo handoff lookup.",
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools(
+    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
+    () => store as never,
+  );
+
+  const output = await toolByName(tools, "memory_list_active_handoffs").execute(
+    "call-repo-handoffs",
+    { scope: "repo", repoPath: projectContext.cwd },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /Repo metadata session handoff/);
+  assert.deepEqual(output.details.items, [handoff]);
+});
+
+test("memory_list_active_handoffs widens repo and project lookups to matching session handoffs", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const calls: Array<Partial<NormalizedListMemoriesInput> & { offset?: number }> = [];
+  const store = createMinimalStore({
+    listForTool(filter: Partial<NormalizedListMemoriesInput> & { offset?: number }): ListForToolResult {
+      calls.push(filter);
+      return { items: [], totalCount: 0, hasMore: false, nextOffset: null };
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools(
+    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
+    () => store as never,
+  );
+
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  const handoffs = toolByName(tools, "memory_list_active_handoffs");
+
+  await handoffs.execute("call-repo-handoffs", { scope: "repo", repoPath: projectContext.cwd }, signal, () => undefined, ctx);
+  await handoffs.execute("call-project-handoffs", { scope: "project", projectId: projectContext.projectId }, signal, () => undefined, ctx);
+  await handoffs.execute("call-session-handoffs", { scope: "session" }, signal, () => undefined, ctx);
+
+  assert.deepEqual(calls, [
+    { kind: ["handoff"], scope: ["repo", "session"], status: "active", repoPath: projectContext.cwd, projectId: undefined, limit: 10, offset: 0 },
+    { kind: ["handoff"], scope: ["project", "session"], status: "active", repoPath: undefined, projectId: projectContext.projectId, limit: 10, offset: 0 },
+    { kind: ["handoff"], scope: ["session"], status: "active", repoPath: undefined, projectId: undefined, limit: 10, offset: 0 },
+  ]);
+});
+
+test("memory_archive archives handoffs by id from any session", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const handoff = createMemory({ id: "handoff-old", kind: "handoff", scope: "session", sessionId: "old-session" });
+  const archived = createMemory({ ...handoff, status: "archived" });
+  const calls: ArchiveMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory(id: string): MemoryRecord | null { return id === handoff.id ? handoff : null; },
+  });
+  store.archiveMemory = (input: ArchiveMemoryInput) => {
+    calls.push(input);
+    return archived;
+  };
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_archive").execute(
+    "call-archive-handoff",
+    { id: "handoff-old", reason: "superseded by newer handoff" },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.deepEqual(calls, [{ id: "handoff-old", reason: "superseded by newer handoff" }]);
+  assert.match(output.content[0].text, /Archived memory handoff-old\./);
+});
+
+test("memory_update permits handoff lifecycle status updates but blocks content edits", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const handoff = createMemory({ id: "handoff-old", kind: "handoff", scope: "session", sessionId: "old-session" });
+  const updated = createMemory({ ...handoff, status: "superseded" });
+  const calls: UpdateMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory(id: string): MemoryRecord | null { return id === handoff.id ? handoff : null; },
+    updateMemory(input: UpdateMemoryInput): MemoryRecord {
+      calls.push(input);
+      return updated;
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+
+  const statusOutput = await toolByName(tools, "memory_update").execute(
+    "call-supersede-handoff",
+    { id: "handoff-old", status: "superseded" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  const contentOutput = await toolByName(tools, "memory_update").execute(
+    "call-edit-handoff",
+    { id: "handoff-old", title: "Edited handoff" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.deepEqual(calls, [{ id: "handoff-old", status: "superseded" }]);
+  assert.match(statusOutput.content[0].text, /Updated memory handoff-old\./);
+  assert.match(contentOutput.content[0].text, /memory_update may only change handoff status\/expiresAt/);
 });
 
 test("memory_update returns not-found for unknown id", async (t) => {
