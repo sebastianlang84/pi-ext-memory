@@ -14,37 +14,37 @@ Rule: Completed items are removed, not checked off.
 
 No active release tasks; add new tasks here only when fresh work is accepted.
 
+## Quality Reviews
+
+### [REVIEW] Architecture review with `improve-codebase-architecture`
+
+Run an architecture review using the `improve-codebase-architecture` skill after the current scope-identity follow-ups are stable. Focus on retrieval/memory quality, module boundaries, testability, and agent-navigability.
+
+### [REVIEW] TDD review with `tdd`
+
+Run a TDD/test-coverage review using the `tdd` skill. Focus on missing red/green coverage, regression gaps around scope identity, audit behavior, handoffs, and tool-facing validation.
+
 ## Open Design Issues
 
-### [DESIGN] Redundante Identifier — scope, repoPath, projectId
+### [DESIGN] Tool surface simplification
 
-**Problem:** Das Tool erlaubt drei Identifier gleichzeitig für dasselbe Konzept:
-- `scope="repo"` + `repoPath="/path/to/repo"`
-- `scope="project"` + `projectId="name"`
-- Kombinationen aus allen dreien
+**Problem:** The current normal tool surface still includes transitional convenience/admin tools from the archived lifecycle plan.
 
-Für ein single-repo Projekt wie partflow könnte ein Agent theoretisch alle drei setzen obwohl alle dasselbe meinen. Es gibt keine erzwungene Regel wann welche Kombination gilt. Das führt zu:
-- Inkonsistenten Saves (einmal `repoPath`, einmal `projectId`, einmal beides)
-- Split-Memories die nicht zusammen gelistet werden weil Identifier nicht matchen
-- Agent-Verwirrung weil zu viele Optionen ohne klare Konvention
+**Questions to check:**
+- Should `memory_stats`, `memory_list_active_todos`, and `memory_list_active_handoffs` fold into `memory_list` defaults/catalog output?
+- Should `memory_archive` fold into `memory_update(status="archived")` with an archive reason?
+- Should `memory_link` become advanced/admin-only or be removed from normal agent exposure?
+- Does `memory_list` need a no-scope catalog/bucket mode for navigation, or is filtered pagination enough?
 
-**Erwartetes Verhalten / Lösungsoptionen:**
-1. Entweder `repoPath` oder `projectId` — niemals beide gleichzeitig sinnvoll
-2. Klare Regel dokumentieren: `scope="repo"` + `repoPath` für single-repo, `scope="project"` + `projectId` für multi-repo
-3. Oder: Tool-Validierung die warnt/blockt wenn beide gesetzt sind
-4. Oder: `scope` wird aus `repoPath`/`projectId` automatisch abgeleitet — ein Identifier reicht
-
-**Impact:** Hoch — betrifft jeden Agent der project-scoped Memories schreiben will. Ohne klare Konvention ist konsistente Nutzung nicht möglich.
-
-**Plan/Entscheidung:** Siehe [Memory Scope Identity](docs/plans/memory-scope-identity.md) und [ADR 004 — Scope-first memory identity](docs/adr/004-scope-first-memory-identity.md). Umgesetzt sind Scope-first Tool/Core-Validierung, repo-default für normale Saves/Todos im Git-Repo, Schutz gegen `projectId AND repoPath`-Fragmentierung, und ein report-only Audit für aktive Scope-Identity-Verstöße. Offen bleibt die finale ProjectId-Namespace-Semantik.
+**Impact:** Medium — affects agent clarity and future API shape, but should follow the scope simplification decision.
 
 ### [DESIGN] Tool-Naming — `memory_list_active_handoffs`
 
-**Problem:** Der Toolname `memory_list_active_handoffs` wirkt sehr spezifisch und möglicherweise unnötig lang. Es ist offen, ob ein einfacherer Name wie `memory_list_handoffs` für Agenten verständlicher wäre.
+**Problem:** The tool name `memory_list_active_handoffs` feels very specific and may be unnecessarily long. It is still open whether a simpler name such as `memory_list_handoffs` would be clearer for agents.
 
-**Zu prüfen:**
-- Ist `active` im Namen notwendig, weil das Tool bewusst nur aktive Handoffs listet?
-- Oder genügt `memory_list_handoffs`, wenn Status/Caps/aktive Defaults in Schema und Beschreibung klar sind?
-- Sollte die Benennung im Rahmen der geplanten Tool-API- und Scope-Identity-Vereinfachung vereinheitlicht werden?
+**Questions to check:**
+- Is `active` necessary in the name because the tool intentionally lists only active handoffs?
+- Or is `memory_list_handoffs` enough if status, caps, and active defaults are clear in the schema and description?
+- Should naming be unified as part of the planned tool API and scope-identity simplification?
 
-**Impact:** Mittel — betrifft Agent-Verständlichkeit und Tool-API-Konsistenz, ist aber nicht blockierend für die Scope-Identifier-Entscheidung.
+**Impact:** Medium — affects agent clarity and tool API consistency, but does not block the scope-identifier decision.

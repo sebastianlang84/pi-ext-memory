@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-12
+- Extended by: [ADR 005 — Simplified agent-facing memory scopes](005-simplified-agent-facing-scopes.md)
 
 ## Context
 
@@ -49,4 +50,4 @@ Inside a Git repository, ordinary memory and todo saves may default to `scope="r
 ## Follow-up
 
 - Add an audit/report path for existing records that violate the new primary identity expectations.
-- Revisit whether project ids should be globally unique or internally repo-namespaced for same-name services across different monorepos.
+- ADR 005 resolves the project-id namespace question by soft-deprecating `project` / `projectId` for normal agent-facing use instead of defining a new namespace model.

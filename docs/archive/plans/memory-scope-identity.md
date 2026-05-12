@@ -9,7 +9,7 @@ write-when: Scope/identifier semantics, planned validation, defaults, or migrati
 
 ## 1. Purpose
 
-Status: first implementation slice accepted in [ADR 004 — Scope-first memory identity](../adr/004-scope-first-memory-identity.md). The audit/report follow-up is implemented as report-only `memory_audit` identity findings. Remaining follow-up: decide project-id namespace semantics.
+Status: archived/superseded. The first implementation slice was accepted in [ADR 004 — Scope-first memory identity](../../adr/004-scope-first-memory-identity.md). The audit/report follow-up is implemented as report-only `memory_audit` identity findings. ADR 005 resolves the remaining project-id namespace question by soft-deprecating normal project/projectId use.
 
 This plan resolves the `scope` / `projectId` / `repoPath` ambiguity in pi-memory without losing the two core use cases:
 

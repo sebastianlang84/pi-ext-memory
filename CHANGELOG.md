@@ -10,6 +10,21 @@ write-when: A user/operator-relevant repo change is introduced
 All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
 
+## [Unreleased]
+
+## [3.2.0] - 2026-05-13
+
+### Added
+- ADR 005 documents the simplified normal scope model: `global`, `repo`, and `session` for normal agent use, with `project`/`projectId` soft-deprecated as legacy/advanced compatibility.
+- `memory_audit` and `/memory-audit` now include a read-only migration preview for legacy project-scoped records, classifying candidates as repo/global/archive/legacy-read-only/needs-human-review without writing changes.
+
+### Changed
+- Archived completed or superseded plan documents and kept `docs/plans/` focused on the active scope simplification plan.
+- README and Pi tool descriptions now present `global`, `repo`, and `session` as the normal scope model and mark `project`/`projectId` as legacy/advanced compatibility.
+- Tool output for explicit `scope="project"` calls now includes a compatibility notice while preserving legacy project-scope behavior.
+- Added regression coverage for legacy project-scoped record discoverability without `projectId AND repoPath` filter fragmentation.
+- Runtime status metadata now reports `v3.2.0`.
+
 ## [3.1.0] - 2026-05-12
 
 ### Added

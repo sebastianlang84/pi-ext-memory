@@ -23,6 +23,7 @@ write-when: A behavior rule, gate, guardrail, or document-role summary changes
 - Do not weaken local-first or portability goals without explicit approval.
 - Do not introduce heavy infra, remote dependencies, or background services into V1 without an explicit decision.
 - Keep retrieval/memory quality ahead of feature count.
+- Keep repository documentation in English; avoid mixed-language or Denglish prose.
 - Dirty worktree with unrelated changes: stop and ask before commit or revert.
 
 ## 3) Bootstrap Sequence

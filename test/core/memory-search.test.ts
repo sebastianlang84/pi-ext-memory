@@ -88,6 +88,54 @@ test("searchMemories applies kind and scope filters", () => {
   }
 });
 
+test("searchMemories finds legacy project records by projectId without a repoPath filter", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    const legacyProject = store.createMemory({
+      kind: "decision",
+      scope: "project",
+      projectId: "legacy-project",
+      repoPath: "/old/repo-path-metadata",
+      title: "Legacy project decision",
+      summary: "Legacyprojectneedle should remain discoverable by project id alone.",
+      tags: ["legacy-project"],
+    });
+
+    store.createMemory({
+      kind: "decision",
+      scope: "project",
+      projectId: "other-project",
+      repoPath: "/old/repo-path-metadata",
+      title: "Other project decision",
+      summary: "Legacyprojectneedle belongs to a different project id.",
+      tags: ["legacy-project"],
+    });
+
+    store.createMemory({
+      kind: "decision",
+      scope: "repo",
+      projectId: "legacy-project",
+      repoPath: "/new/repo",
+      title: "Repo decision",
+      summary: "Legacyprojectneedle belongs to repo scope, not the legacy project scope.",
+      tags: ["legacy-project"],
+    });
+
+    const results = store.searchMemories({
+      query: "legacyprojectneedle",
+      scope: ["project"],
+      projectId: "legacy-project",
+    });
+
+    assert.deepEqual(results.map((result) => result.id), [legacyProject.id]);
+    assert.equal(results[0]?.repoPath, "/old/repo-path-metadata");
+  } finally {
+    store.close();
+  }
+});
+
 test("searchMemories filters session-scoped results by sessionId", () => {
   const dbPath = createTempDbPath();
   const store = initializeMemoryStore({ dbPath });

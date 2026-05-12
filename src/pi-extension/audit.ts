@@ -13,15 +13,26 @@ export interface AuditCandidate {
   suggestedAction: string;
 }
 
+export type ProjectMigrationRecommendation = "repo" | "global" | "legacy-read-only" | "archive" | "needs-human-review";
+
+export interface ProjectMigrationPreviewCandidate extends AuditCandidate {
+  recommendation: ProjectMigrationRecommendation;
+  projectId?: string;
+  repoPath?: string;
+  sessionId?: string;
+}
+
 export interface AuditSummary {
   staleTodos: AuditCandidate[];
   oldHandoffs: AuditCandidate[];
   identityViolations: AuditCandidate[];
+  projectMigrationPreview: ProjectMigrationPreviewCandidate[];
   activeTodosCount: number;
   activeHandoffsCount: number;
   staleTodosCount: number;
   expiredHandoffsCount: number;
   identityViolationsCount: number;
+  projectMigrationPreviewCount: number;
   warnings: string[];
   suggestedActions: string[];
 }
@@ -30,12 +41,13 @@ export function runMemoryAudit(
   store: MemoryStore,
   scopeFilter?: string[],
   repoPathFilter?: string,
-): { staleTodos: AuditCandidate[]; oldHandoffs: AuditCandidate[]; identityViolations: AuditCandidate[] } {
+): { staleTodos: AuditCandidate[]; oldHandoffs: AuditCandidate[]; identityViolations: AuditCandidate[]; projectMigrationPreview: ProjectMigrationPreviewCandidate[] } {
   const summary = runMemoryAuditFull(store, scopeFilter, repoPathFilter);
   return {
     staleTodos: summary.staleTodos,
     oldHandoffs: summary.oldHandoffs,
     identityViolations: summary.identityViolations,
+    projectMigrationPreview: summary.projectMigrationPreview,
   };
 }
 
@@ -57,6 +69,12 @@ export function runMemoryAuditFull(
   const handoffs = store.listAllInternal({ ...internalFilter, kind: ["handoff"] });
 
   const identityViolations = memories.flatMap((m) => buildIdentityViolationCandidate(m));
+  const shouldPreviewProjectRecords = !scopeFilter || scopeFilter.includes("project");
+  const projectMigrationPreview = shouldPreviewProjectRecords
+    ? memories
+      .filter((m) => m.scope === "project")
+      .map((m) => buildProjectMigrationPreviewCandidate(m, now))
+    : [];
 
   const staleTodos: AuditCandidate[] = todos
     .filter((m) => isTodoStale(m, now))
@@ -119,15 +137,21 @@ export function runMemoryAuditFull(
     suggestedActions.push("Review identity violations before any migration");
   }
 
+  if (projectMigrationPreview.length > 0) {
+    suggestedActions.push("Review project migration preview; apply no changes without explicit approval");
+  }
+
   return {
     staleTodos,
     oldHandoffs,
     identityViolations,
+    projectMigrationPreview,
     activeTodosCount: todos.length,
     activeHandoffsCount: handoffs.length,
     staleTodosCount: staleTodos.length,
     expiredHandoffsCount: expiredHandoffs.length,
     identityViolationsCount: identityViolations.length,
+    projectMigrationPreviewCount: projectMigrationPreview.length,
     warnings,
     suggestedActions,
   };
@@ -168,6 +192,63 @@ function buildIdentityViolationCandidate(m: MemoryRecord): AuditCandidate[] {
   }];
 }
 
+function buildProjectMigrationPreviewCandidate(m: MemoryRecord, now: Date): ProjectMigrationPreviewCandidate {
+  const base = {
+    id: m.id,
+    title: m.title,
+    kind: m.kind,
+    tags: m.tags,
+    updatedAt: m.updatedAt,
+    scope: m.scope,
+    projectId: m.projectId,
+    repoPath: m.repoPath,
+    sessionId: m.sessionId,
+  };
+
+  if (!m.projectId || m.sessionId) {
+    return {
+      ...base,
+      recommendation: "needs-human-review",
+      reason: "Legacy project record has missing or conflicting identity metadata",
+      suggestedAction: "Review manually before choosing repo, global, archive, or legacy-read-only",
+    };
+  }
+
+  if (isHandoffExpired(m, now) || isTodoStale(m, now)) {
+    return {
+      ...base,
+      recommendation: "archive",
+      reason: "Legacy project record is stale or expired",
+      suggestedAction: "Consider archiving after confirming it is no longer useful; preview only, no write performed",
+    };
+  }
+
+  if (m.repoPath) {
+    return {
+      ...base,
+      recommendation: "repo",
+      reason: "Legacy project record carries repoPath metadata, so repo scope is the likely normal replacement",
+      suggestedAction: `After approval, consider scope=repo with repoPath=${m.repoPath}; keep projectId only as optional metadata if needed`,
+    };
+  }
+
+  if (m.tags.includes("global") || m.tags.includes("cross-repo")) {
+    return {
+      ...base,
+      recommendation: "global",
+      reason: "Legacy project record is tagged as global or cross-repo and has no repoPath metadata",
+      suggestedAction: "After approval, consider scope=global only if the memory truly applies across repositories",
+    };
+  }
+
+  return {
+    ...base,
+    recommendation: "legacy-read-only",
+    reason: "Legacy project record has projectId but no repoPath metadata, so repo/global migration cannot be inferred safely",
+    suggestedAction: "Keep discoverable as legacy/read-only until a human chooses the target scope",
+  };
+}
+
 function isTodoStale(m: MemoryRecord, now: Date): boolean {
   if (!m.staleAfter) return false;
   return new Date(m.staleAfter) < now;
@@ -188,16 +269,17 @@ export function formatAuditResults(
   oldHandoffs: AuditCandidate[],
   dbPath: string,
   identityViolations: AuditCandidate[] = [],
+  projectMigrationPreview: ProjectMigrationPreviewCandidate[] = [],
 ): string {
   const lines: string[] = [];
-  const total = staleTodos.length + oldHandoffs.length + identityViolations.length;
+  const total = staleTodos.length + oldHandoffs.length + identityViolations.length + projectMigrationPreview.length;
 
   if (total === 0) {
-    lines.push("Memory audit: no items need attention.", `db_path: ${dbPath}`);
+    lines.push("Memory audit: no items need attention.", "Project migration preview: no legacy project records included.", `db_path: ${dbPath}`);
     return lines.join("\n");
   }
 
-  lines.push(`Memory audit: ${total} item${total !== 1 ? "s" : ""} need attention.`);
+  lines.push(`Memory audit: ${total} item${total !== 1 ? "s" : ""} need attention or review.`);
 
   if (staleTodos.length > 0) {
     lines.push("", `Stale todos (${staleTodos.length}):`);
@@ -230,6 +312,22 @@ export function formatAuditResults(
     identityViolations.forEach((c, i) => {
       lines.push(
         `  ${i + 1}. [${c.scope}] ${c.title} (${c.id})`,
+        `     tags: ${c.tags.join(", ") || "none"}`,
+        `     updated_at: ${c.updatedAt}`,
+        `     reason: ${c.reason}`,
+        `     action: ${c.suggestedAction}`,
+      );
+    });
+  }
+
+  if (projectMigrationPreview.length > 0) {
+    lines.push("", `Project migration preview (${projectMigrationPreview.length}, read-only):`);
+    projectMigrationPreview.forEach((c, i) => {
+      lines.push(
+        `  ${i + 1}. [${c.recommendation}] ${c.title} (${c.id})`,
+        `     kind: ${c.kind}`,
+        `     project_id: ${c.projectId ?? "none"}`,
+        `     repo_path: ${c.repoPath ?? "none"}`,
         `     tags: ${c.tags.join(", ") || "none"}`,
         `     updated_at: ${c.updatedAt}`,
         `     reason: ${c.reason}`,

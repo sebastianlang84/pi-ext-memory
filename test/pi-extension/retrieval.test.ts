@@ -151,6 +151,46 @@ test("buildTurnSearchPlan skips session stage for blank session ids", () => {
   );
 });
 
+test("retrieveMemoriesForTurn finds legacy project memories without matching repoPath metadata", () => {
+  const dbPath = join(createTempDir("pi-memory-retrieval-legacy-project-"), "memory.sqlite");
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    const legacyProject = store.createMemory({
+      kind: "decision",
+      scope: "project",
+      projectId: "@acme/api",
+      repoPath: "/old/repo-path-metadata",
+      title: "Legacy project retrieval decision",
+      summary: "Legacyturnneedle should remain discoverable through the project stage alone.",
+    });
+
+    const oldRepo = store.createMemory({
+      kind: "decision",
+      scope: "repo",
+      repoPath: "/old/repo-path-metadata",
+      title: "Old repo retrieval decision",
+      summary: "Legacyturnneedle should not require matching legacy repo metadata.",
+    });
+
+    const result = retrieveMemoriesForTurn(store, "legacyturnneedle", {
+      cwd: "/new/repo/packages/api",
+      sessionId: "session-789",
+      projectId: "@acme/api",
+      projectPath: "/new/repo/packages/api",
+      repoPath: "/new/repo",
+    });
+
+    assert.ok(result.results.some((memory) => memory.id === legacyProject.id));
+    assert.ok(!result.results.some((memory) => memory.id === oldRepo.id));
+    const projectStage = result.searchPlan.find((stage) => stage.scope?.includes("project"));
+    assert.equal(projectStage?.projectId, "@acme/api");
+    assert.equal(projectStage?.repoPath, undefined);
+  } finally {
+    store.close();
+  }
+});
+
 test("retrieveMemoriesForTurn does not retrieve all session memories for blank session ids", () => {
   const dbPath = join(createTempDir("pi-memory-retrieval-blank-session-"), "memory.sqlite");
   const store = initializeMemoryStore({ dbPath });

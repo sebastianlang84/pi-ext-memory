@@ -12,6 +12,75 @@ function createTempDbPath(): { dbPath: string; tempRoot: string } {
   return { dbPath: join(tempRoot, "memory.sqlite"), tempRoot };
 }
 
+test("memory audit builds read-only migration preview for legacy project records", () => {
+  const { dbPath, tempRoot } = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    store.createMemory({
+      kind: "decision",
+      scope: "project",
+      projectId: "legacy-project",
+      repoPath: "/repo/a",
+      title: "Repo-shaped legacy project",
+      summary: "Legacy project record with repo metadata should preview as a repo migration candidate.",
+    });
+    store.createMemory({
+      kind: "preference",
+      scope: "project",
+      projectId: "legacy-project",
+      title: "Cross repo preference",
+      summary: "Cross-repo tagged project memory can be reviewed as global.",
+      tags: ["cross-repo"],
+    });
+    store.createMemory({
+      kind: "fact",
+      scope: "project",
+      projectId: "legacy-project",
+      title: "Project only fact",
+      summary: "Project-only legacy memory stays discoverable until a human classifies it.",
+    });
+    store.createMemory({
+      kind: "todo",
+      scope: "project",
+      projectId: "legacy-project",
+      title: "Expired project todo",
+      summary: "Expired project todo can be reviewed for archival.",
+      staleAfter: "2000-01-01T00:00:00.000Z",
+    });
+    store.createMemory({
+      kind: "fact",
+      scope: "project",
+      title: "Broken project fact",
+      summary: "Missing project id needs manual review before migration.",
+    });
+
+    const summary = runMemoryAuditFull(store);
+
+    assert.equal(summary.projectMigrationPreviewCount, 5);
+    assert.deepEqual(
+      summary.projectMigrationPreview.map((candidate) => [candidate.title, candidate.recommendation]).sort(),
+      [
+        ["Broken project fact", "needs-human-review"],
+        ["Cross repo preference", "global"],
+        ["Expired project todo", "archive"],
+        ["Project only fact", "legacy-read-only"],
+        ["Repo-shaped legacy project", "repo"],
+      ],
+    );
+    assert.ok(summary.suggestedActions.some((action) => action.includes("Review project migration preview")));
+
+    const output = formatAuditResults(summary.staleTodos, summary.oldHandoffs, dbPath, summary.identityViolations, summary.projectMigrationPreview);
+    assert.match(output, /Project migration preview \(5, read-only\):/);
+    assert.match(output, /\[repo\] Repo-shaped legacy project/);
+    assert.match(output, /\[legacy-read-only\] Project only fact/);
+    assert.match(output, /preview only, no write performed/);
+  } finally {
+    store.close();
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("memory audit reports active scope identity violations", () => {
   const { dbPath, tempRoot } = createTempDbPath();
   const store = initializeMemoryStore({ dbPath });

@@ -140,6 +140,55 @@ test("listMemories applies scope tags project repo status limit and createdAt or
   }
 });
 
+test("listMemories finds legacy project records by projectId without a repoPath filter", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    const legacyProject = store.createMemory({
+      kind: "decision",
+      scope: "project",
+      projectId: "legacy-project",
+      repoPath: "/old/repo-path-metadata",
+      title: "Legacy project list decision",
+      summary: "Legacy project records should list by project id alone.",
+      tags: ["legacy-project"],
+    });
+
+    store.createMemory({
+      kind: "decision",
+      scope: "project",
+      projectId: "other-project",
+      repoPath: "/old/repo-path-metadata",
+      title: "Other project list decision",
+      summary: "Wrong project id should not list.",
+      tags: ["legacy-project"],
+    });
+
+    store.createMemory({
+      kind: "decision",
+      scope: "repo",
+      projectId: "legacy-project",
+      repoPath: "/new/repo",
+      title: "Repo list decision",
+      summary: "Wrong scope should not list for legacy project compatibility.",
+      tags: ["legacy-project"],
+    });
+
+    const results = store.listMemories({
+      kind: ["decision"],
+      scope: ["project"],
+      projectId: "legacy-project",
+      tags: ["legacy-project"],
+    });
+
+    assert.deepEqual(results.map((memory) => memory.id), [legacyProject.id]);
+    assert.equal(results[0]?.repoPath, "/old/repo-path-metadata");
+  } finally {
+    store.close();
+  }
+});
+
 test("listMemories rejects contradictory single-scope identity filters", () => {
   const dbPath = createTempDbPath();
   const store = initializeMemoryStore({ dbPath });

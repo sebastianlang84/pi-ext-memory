@@ -44,6 +44,13 @@ type ToolIdentityResult = {
   error?: string;
 };
 
+const LEGACY_PROJECT_SCOPE_NOTICE = "notice: scope=project is legacy/advanced compatibility; prefer scope=repo with repoPath for normal repository memory.";
+
+function formatWithLegacyProjectScopeNotice(text: string, scope?: MemoryScope | MemoryScope[]): string {
+  const scopes = Array.isArray(scope) ? scope : scope ? [scope] : [];
+  return scopes.includes("project") ? `${LEGACY_PROJECT_SCOPE_NOTICE}\n${text}` : text;
+}
+
 function resolveToolIdentity(
   params: ToolIdentityParams,
   context: ReturnType<typeof deriveMemoryTurnContext>,
@@ -55,7 +62,7 @@ function resolveToolIdentity(
 
   if (params.scope === "global") {
     if (params.sessionId || params.projectId || params.repoPath) {
-      return { error: "scope=global does not accept sessionId, projectId, or repoPath. Remove scope identifiers or choose repo/project/session." };
+      return { error: "scope=global does not accept sessionId, projectId, or repoPath. Remove scope identifiers or choose repo/session; scope=project is legacy compatibility only." };
     }
     return {};
   }
@@ -72,10 +79,10 @@ function resolveToolIdentity(
 
   if (params.scope === "project") {
     if (params.sessionId || params.repoPath) {
-      return { error: "scope=project uses projectId as its primary identity. Remove sessionId and repoPath; the runtime can keep metadata internally." };
+      return { error: "legacy scope=project uses projectId as its primary identity. Remove sessionId and repoPath, or prefer scope=repo for normal repository memory." };
     }
     if (options.requirePrimary && !projectId) {
-      return { error: "scope=project requires projectId, but no project id was provided or derivable from cwd." };
+      return { error: "legacy scope=project requires projectId. Prefer scope=repo for normal repository memory." };
     }
     return { projectId };
   }
@@ -122,15 +129,15 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     promptSnippet: "Search local durable memory when automatic retrieved context is insufficient and prior decisions, facts, or todos may matter.",
     promptGuidelines: [
       "Use memory_search with compact, concrete queries.",
-      "Use memory_search filters to narrow results when kind, scope, project, repo, or tags are known.",
+      "Use memory_search filters to narrow results when kind, scope, repo, session, tags, or a legacy projectId are known.",
       "Use small memory_search limits to protect context quality.",
     ],
     parameters: Type.Object({
       query: Type.String({ description: "Content search query" }),
       kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS, { description: "Memory kind" }))),
-      scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope" }))),
+      scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }))),
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
-      projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
+      projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo memory" })),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
       sessionId: Type.Optional(Type.String({ description: "Optional session identifier filter" })),
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Max result count" })),
@@ -154,7 +161,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       });
 
       return {
-        content: [{ type: "text", text: formatMemorySearchResults(params.query, results, activeStore.dbPath) }],
+        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatMemorySearchResults(params.query, results, activeStore.dbPath), params.scope as MemoryScope[] | undefined) }],
         details: {
           dbPath: activeStore.dbPath,
           results,
@@ -167,7 +174,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     name: "memory_list",
     label: "Memory List",
     description: "List structured memories from the local pi-memory store using filters without full-text content search.",
-    promptSnippet: "List structured memories when kind, scope, tags, project, repo, or status are known and no content query is needed.",
+    promptSnippet: "List structured memories when kind, scope, tags, repo/session identity, legacy projectId, or status are known and no content query is needed.",
     promptGuidelines: [
       "Use memory_list for structured filtering, especially active todos with kind: [\"todo\"].",
       "Do not pass content queries to memory_list; use memory_search when searching memory text.",
@@ -175,10 +182,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     ],
     parameters: Type.Object({
       kind: StringEnum(MEMORY_KINDS, { description: "Memory kind" }),
-      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
+      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }),
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
       sessionId: Type.Optional(Type.String({ description: "Optional session identifier filter" })),
-      projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
+      projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo memory" })),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
       status: Type.Optional(StringEnum(MEMORY_STATUSES, { description: "Memory lifecycle status; defaults to active" })),
       orderBy: Type.Optional(StringEnum(MEMORY_LIST_ORDER_BY, { description: "Newest-first ordering field" })),
@@ -214,7 +221,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       });
 
       return {
-        content: [{ type: "text", text: formatListResult(result, activeStore.dbPath) }],
+        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatListResult(result, activeStore.dbPath), params.scope as MemoryScope) }],
         details: {
           dbPath: activeStore.dbPath,
           total_count: result.totalCount,
@@ -232,18 +239,18 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Save",
     description: "Create a structured memory in the local pi-memory store.",
     promptSnippet:
-      "Save durable facts, preferences, decisions, notes, or project status snapshots when the user explicitly wants something remembered or when a stable reusable fact should persist. Use kind=progress_snapshot for project status, current state, decisions, and next steps.",
+      "Save durable facts, preferences, decisions, notes, or progress snapshots when the user explicitly wants something remembered or when a stable reusable fact should persist. Use kind=progress_snapshot for repo/task status, current state, decisions, and next steps.",
     promptGuidelines: [
       "Use memory_save for durable facts, preferences, decisions, notes, and progress snapshots.",
-      "Use memory_save with kind=progress_snapshot for project status, current state, completed steps, next steps, or decisions — not memory_save_handoff.",
+      "Use memory_save with kind=progress_snapshot for repo/task status, current state, completed steps, next steps, or decisions — not memory_save_handoff.",
       "Do not use memory_save for actionable open work; use memory_save_todo for todos.",
       "Do not use memory_save for handoff state; use memory_save_handoff only when context will be lost and another agent must resume.",
       "Avoid low-information memory_save scratch notes.",
       "Always give memory_save a compact but informative summary.",
     ],
     parameters: Type.Object({
-      kind: StringEnum(MEMORY_SAVE_KINDS as unknown as [string, ...string[]], { description: "Memory kind — use progress_snapshot for project status, current state, done steps, and next steps" }),
-      scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Memory scope; defaults to repo inside a Git repo, otherwise global" })),
+      kind: StringEnum(MEMORY_SAVE_KINDS as unknown as [string, ...string[]], { description: "Memory kind — use progress_snapshot for repo/task status, current state, done steps, and next steps" }),
+      scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Memory scope; defaults to repo inside a Git repo, otherwise global; project is legacy/advanced compatibility" })),
       title: Type.String({ description: "Short title for the memory" }),
       summary: Type.String({ description: "Compact summary with enough detail to be useful later" }),
       body: Type.Optional(Type.String({ description: "Optional longer details" })),
@@ -312,7 +319,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       });
 
       return {
-        content: [{ type: "text", text: formatMemorySaved(memory, activeStore) }],
+        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatMemorySaved(memory, activeStore), requestedScope) }],
         details: {
           dbPath: activeStore.dbPath,
           memory,
@@ -329,7 +336,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       "Save or refresh a handoff only when the current context will be lost and another agent or future session must resume execution — context reset, compaction, or agent transfer.",
     promptGuidelines: [
       "Use memory_save_handoff only when context will be lost and execution must be resumable by another agent or future session.",
-      "Do not use memory_save_handoff for project status notes or progress snapshots — use memory_save with kind=progress_snapshot for those.",
+      "Do not use memory_save_handoff for repo/task status notes or progress snapshots — use memory_save with kind=progress_snapshot for those.",
       "Include goal, current state, and concrete next steps in memory_save_handoff.",
       "Mention changed files, decisions, blockers, verification, and avoid-repeating notes in memory_save_handoff when relevant.",
     ],
@@ -422,9 +429,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       ),
       status: Type.Optional(StringEnum(MEMORY_STATUSES, { description: "Memory lifecycle status" })),
       pinned: Type.Optional(Type.Boolean({ description: "Whether the memory should stay pinned" })),
-      scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Updated scope — use with caution, changes retrieval context" })),
+      scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Updated scope — use with caution; normal choices are global, repo, and session; project is legacy/advanced compatibility" })),
       repoPath: Type.Optional(Type.String({ description: "Updated repoPath" })),
-      projectId: Type.Optional(Type.String({ description: "Updated projectId" })),
+      projectId: Type.Optional(Type.String({ description: "Updated legacy/advanced projectId" })),
       priority: Type.Optional(StringEnum(["P0", "P1", "P2"] as const, { description: "Todo priority — only applies when kind=todo" })),
       nextAction: Type.Optional(Type.String({ description: "Next concrete action — only applies when kind=todo" })),
     }),
@@ -546,7 +553,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       const memory = activeStore.updateMemory(updateParams);
 
       return {
-        content: [{ type: "text", text: formatMemoryUpdated(memory, activeStore) }],
+        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatMemoryUpdated(memory, activeStore), params.scope as MemoryScope | undefined) }],
         details: {
           dbPath: activeStore.dbPath,
           memory,
@@ -593,7 +600,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     promptGuidelines: [
       "Use memory_save_todo for actionable open work, not passive facts or decisions.",
       "Include the next concrete action in memory_save_todo whenever possible.",
-      "Use memory_save_todo scope/project/repo to avoid global todo noise.",
+      "Use memory_save_todo with repo scope inside repositories to avoid global todo noise; project scope is legacy/advanced compatibility.",
       "Prefer memory_update for an existing active todo over creating a duplicate with memory_save_todo.",
       "Do not let memory_save_todo compete with TODO.md: repo-canonical backlog belongs in TODO.md when appropriate.",
     ],
@@ -602,8 +609,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       description: Type.Optional(Type.String({ description: "Longer description of the task" })),
       priority: Type.Optional(StringEnum(["P0", "P1", "P2"] as const, { description: "Priority: P0=critical, P1=important, P2=nice-to-have" })),
       status: Type.Optional(StringEnum(["open", "in_progress", "blocked"] as const, { description: "Current status of the todo" })),
-      scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Memory scope" })),
-      projectId: Type.Optional(Type.String({ description: "Optional project identifier" })),
+      scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" })),
+      projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier; prefer repoPath for normal repo todos" })),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path" })),
       nextAction: Type.Optional(Type.String({ description: "The immediate next concrete action to take" })),
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
@@ -652,7 +659,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       });
 
       return {
-        content: [{ type: "text", text: formatMemorySaved(memory, activeStore) }],
+        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatMemorySaved(memory, activeStore), requestedScope) }],
         details: { dbPath: activeStore.dbPath, memory },
       };
     },
@@ -697,24 +704,24 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_audit",
     label: "Memory Audit",
-    description: "Audit memory hygiene: list stale todos, old handoffs, and scope identity issues that may need attention.",
-    promptSnippet: "Run memory_audit to inspect stale todos, old handoffs, and scope identity issues. Returns candidates with id, title, reason, and suggested action.",
+    description: "Audit memory hygiene and show a read-only migration preview for legacy project-scoped records.",
+    promptSnippet: "Run memory_audit to inspect stale todos, old handoffs, scope identity issues, and legacy project-scope migration preview candidates. Returns candidates with id, title, reason, and suggested action.",
     promptGuidelines: [
       "Run memory_audit when the session-start hygiene warning mentions stale items or after scope-identity changes.",
+      "Use memory_audit to preview legacy project-scope records before any migration; the preview is read-only.",
       "Use memory_audit optional scope or repoPath filters to narrow the audit.",
     ],
     parameters: Type.Object({
-      scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope filter" }))),
+      scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope filter; normal choices are global, repo, and session; project is legacy/advanced compatibility" }))),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
-      const { staleTodos, oldHandoffs, identityViolations } = runMemoryAudit(activeStore, params.scope, params.repoPath);
-      activeStore.setMeta("lastAuditAt", new Date().toISOString());
-      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations);
+      const { staleTodos, oldHandoffs, identityViolations, projectMigrationPreview } = runMemoryAudit(activeStore, params.scope, params.repoPath);
+      const output = formatWithLegacyProjectScopeNotice(formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview), params.scope as MemoryScope[] | undefined);
       return {
         content: [{ type: "text", text: output }],
-        details: { dbPath: activeStore.dbPath, staleTodos, oldHandoffs, identityViolations },
+        details: { dbPath: activeStore.dbPath, staleTodos, oldHandoffs, identityViolations, projectMigrationPreview },
       };
     },
   });
@@ -725,13 +732,13 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     description: "List all active todos for the given scope. Bounded by active caps — no pagination needed.",
     promptSnippet: "Use to inspect the current todo working-set for a scope.",
     promptGuidelines: [
-      "Use memory_list_active_todos with scope/project/repo to avoid global todo noise.",
+      "Use memory_list_active_todos with repo scope inside repositories to avoid global todo noise; project scope is legacy/advanced compatibility.",
       "For content-based todo search, use memory_search instead of memory_list_active_todos.",
     ],
     parameters: Type.Object({
-      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
+      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
-      projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
+      projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo todos" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
@@ -758,7 +765,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         offset: 0,
       });
       return {
-        content: [{ type: "text", text: formatActiveList("todos", result.items, result.totalCount, activeStore.dbPath) }],
+        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatActiveList("todos", result.items, result.totalCount, activeStore.dbPath), params.scope as MemoryScope) }],
         details: { dbPath: activeStore.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
       };
     },
@@ -767,17 +774,17 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_list_active_handoffs",
     label: "Memory Active Handoffs",
-    description: "List active handoffs relevant to the given session, repo, or project scope. Repo/project lookups also include session handoffs with matching metadata.",
-    promptSnippet: "Use to inspect current session, repo, or project handoff state without missing matching session-scoped handoffs.",
+    description: "List active handoffs relevant to the given session or repo scope. Legacy project lookups also include session handoffs with matching metadata.",
+    promptSnippet: "Use to inspect current session or repo handoff state without missing matching session-scoped handoffs; project scope is legacy compatibility.",
     promptGuidelines: [
       "Use memory_list_active_handoffs for bounded active handoff inspection by scope.",
-      "Use memory_list_active_handoffs with repoPath/projectId when checking repo or project handoff state so matching session handoffs are included.",
+      "Use memory_list_active_handoffs with repoPath for repo handoff state; projectId is legacy/advanced compatibility.",
       "For content-based handoff search, use memory_search instead of memory_list_active_handoffs.",
     ],
     parameters: Type.Object({
-      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
+      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
-      projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
+      projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo handoffs" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
@@ -809,7 +816,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         offset: 0,
       });
       return {
-        content: [{ type: "text", text: formatActiveList("handoffs", result.items, result.totalCount, activeStore.dbPath) }],
+        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatActiveList("handoffs", result.items, result.totalCount, activeStore.dbPath), scope) }],
         details: { dbPath: activeStore.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
       };
     },
@@ -824,9 +831,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       "Use memory_stats for memory store health, not for listing memory content — use memory_list or memory_search for that.",
     ],
     parameters: Type.Object({
-      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope" }),
+      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
-      projectId: Type.Optional(Type.String({ description: "Optional project identifier filter" })),
+      projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo stats" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const activeStore = getActiveStore(ctx.cwd);
@@ -892,7 +899,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       ].join("\n");
 
       return {
-        content: [{ type: "text", text: output }],
+        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(output, scope) }],
         details: { dbPath: activeStore.dbPath, scope, counts, warnings },
       };
     },

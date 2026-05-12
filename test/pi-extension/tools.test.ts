@@ -143,6 +143,8 @@ function createMinimalStore(overrides: Partial<{
   getMemory: (id: string) => MemoryRecord | null;
   updateMemory: (input: UpdateMemoryInput) => MemoryRecord;
   listForTool: (filter: Partial<NormalizedListMemoriesInput> & { offset?: number }) => ListForToolResult;
+  listAllInternal: (filter?: Partial<NormalizedListMemoriesInput>) => MemoryRecord[];
+  setMeta: (key: string, value: string) => void;
 }> = {}) {
   const base = createMemory();
   return {
@@ -389,6 +391,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
 
   assert.match(searchOutput.content[0].text, /Found 1 memory result for "manual policy"\./);
   assert.match(searchOutput.content[0].text, /Keep writes manual-first/);
+  assert.match(listOutput.content[0].text, /scope=project is legacy\/advanced compatibility/);
   assert.match(listOutput.content[0].text, /Found 1 of 1 memor/);
   assert.match(listOutput.content[0].text, /Keep writes manual-first/);
   assert.match(listOutput.content[0].text, /Use explicit review and save tools for durable memory updates/);
@@ -415,6 +418,62 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.deepEqual(updateOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
   assert.deepEqual(linkOutput.details, { dbPath: store.dbPath, link });
   assert.deepEqual(archiveOutput.details, { dbPath: store.dbPath, memory: archivedMemory });
+});
+
+test("memory_audit returns project migration preview without writing audit metadata", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const legacyProject = createMemory({
+    id: "legacy-project-record",
+    scope: "project",
+    projectId: projectContext.projectId,
+    repoPath: projectContext.cwd,
+    title: "Legacy project record",
+  });
+  const filters: Array<Partial<NormalizedListMemoriesInput> | undefined> = [];
+  const store = createMinimalStore({
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      filters.push(filter);
+      return filter?.scope?.includes("project") || !filter?.scope ? [legacyProject] : [];
+    },
+    setMeta() {
+      throw new Error("memory_audit must be read-only");
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_audit").execute(
+    "call-audit",
+    { scope: ["project"] },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /^notice: scope=project is legacy\/advanced compatibility/);
+  assert.match(output.content[0].text, /Project migration preview \(1, read-only\):/);
+  assert.match(output.content[0].text, /\[repo\] Legacy project record/);
+  assert.deepEqual(output.details.projectMigrationPreview, [
+    {
+      id: legacyProject.id,
+      title: legacyProject.title,
+      kind: legacyProject.kind,
+      tags: legacyProject.tags,
+      updatedAt: legacyProject.updatedAt,
+      scope: legacyProject.scope,
+      projectId: legacyProject.projectId,
+      repoPath: legacyProject.repoPath,
+      sessionId: legacyProject.sessionId,
+      recommendation: "repo",
+      reason: "Legacy project record carries repoPath metadata, so repo scope is the likely normal replacement",
+      suggestedAction: `After approval, consider scope=repo with repoPath=${projectContext.cwd}; keep projectId only as optional metadata if needed`,
+    },
+  ]);
+  assert.ok(filters.every((filter) => filter?.projectId === undefined), "audit preview must not add projectId+repoPath filters");
 });
 
 test("memory_list_active_handoffs returns session handoffs for matching repo metadata", async (t) => {
@@ -737,6 +796,38 @@ test("memory_save defaults to repo identity in a Git repo and rejects hidden con
   assert.match(savedOutput.content[0].text, /Saved memory/);
   assert.match(invalidOutput.content[0].text, /Invalid memory scope identity/);
   assert.match(invalidOutput.content[0].text, /scope=repo uses repoPath/);
+});
+
+test("memory_save warns but accepts explicit legacy project scope", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const capturedCreates: CreateMemoryInput[] = [];
+  const saved = createMemory({ id: "saved-project", scope: "project", projectId: projectContext.projectId });
+  const store = createMinimalStore({
+    createMemory(input: CreateMemoryInput) {
+      capturedCreates.push(input);
+      return { ...saved, ...input, tags: input.tags ?? [] } as MemoryRecord;
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_save").execute(
+    "call-save-project",
+    { kind: "decision", scope: "project", title: "Legacy project scope", summary: "Explicit project scope remains compatible." },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.equal(capturedCreates.length, 1);
+  assert.equal(capturedCreates[0]?.scope, "project");
+  assert.equal(capturedCreates[0]?.projectId, projectContext.projectId);
+  assert.match(output.content[0].text, /^notice: scope=project is legacy\/advanced compatibility/);
+  assert.match(output.content[0].text, /Saved memory saved-project\./);
 });
 
 test("memory_update derives primary identity when changing to repo scope", async (t) => {

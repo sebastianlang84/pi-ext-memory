@@ -14,7 +14,7 @@ scope: always-loaded bootstrap; keep lean
 - GitHub/local repo identity is `pi-ext-memory`; package/runtime identity remains `pi-memory`, a lightweight local memory system for coding agents.
 - Root living docs and `docs/` baseline were aligned to the `~/agentic-coding` governance structure.
 - Product direction for V1 is documented in `docs/prd-lightweight-local-memory-system.md`.
-- A working Pi integration plan now exists in `docs/plans/pi-extension-v1.md`.
+- The original Pi Extension V1 working plan is archived at `docs/archive/plans/pi-extension-v1.md`; the scope-first identity implementation plan is archived at `docs/archive/plans/memory-scope-identity.md`; the lifecycle/tooling design plan is archived at `docs/archive/plans/tool-and-lifecycle-design.md`; current active planning lives in `docs/plans/memory-scope-simplification.md`.
 - The historical project-local Pi extension shim under `.pi/extensions/pi-memory/` has been removed; pi-memory is intended to load once via the global Pi package install, backed by the thin local core under `src/core/` and Pi-facing modules under `src/pi-extension/`.
 - The local core now supports SQLite store initialization, schema migrations via `PRAGMA user_version`, schema v2 FTS5 lexical indexing, schema v3 persisted embeddings, and schema v4 FTS trigger fixes for reliable memory updates/archives.
 - v0.3 implemented validated memory creation: the core normalizes and persists memory records with immediate readback, and the Pi extension registers a `memory_save` tool.
@@ -38,8 +38,9 @@ scope: always-loaded bootstrap; keep lean
 - v1.3.0 adds Handoff V1: `kind: handoff`, `memory_handoff_save`, `/memory-handoff`, one active handoff per session, session-safe save/update behavior for concurrent Pi instances, and deterministic latest matching active handoff preload ahead of normal turn retrieval.
 - v3.0.0 adopts scope-first memory identity: `global` has no identity, `repo` uses `repoPath`, `project` uses `projectId`, and `session` uses `sessionId`; tool/core validation now rejects contradictory manual filters to avoid `project_id AND repo_path` fragmentation, while runtime enrichment may still store extra metadata.
 - v3.1.0 extends `memory_audit` and `/memory-audit` with report-only scope identity findings for active records that miss primary identifiers or carry identifiers contradicting their scope.
+- v3.2.0 extends `memory_audit` and `/memory-audit` with a read-only migration preview that classifies active legacy project-scoped records before any approved migration.
 - `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`; smoke scripts cover the global install path and package manifest path without relying on a project-local dev shim.
-- ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default; ADR 004 records scope-first memory identity.
+- ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default; ADR 004 records scope-first memory identity; ADR 005 records the simplified normal scope model and soft-deprecates `project`/`projectId` for normal agent-facing use.
 - Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, handoff save/preload behavior, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level handoff/review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus global/package smoke checks with `npm run smoke:memory-status` and `npm run smoke:package-status`, and manual `/memory-search` and `/memory-handoff` smoke paths for the extension.
 - Current V1 direction from the PRD and plan: local-first, single-user, SQLite-based, hybrid retrieval, Pi-first extension surface, thin local core boundary, no heavy server infrastructure.
 
@@ -75,6 +76,12 @@ scope: always-loaded bootstrap; keep lean
 - 2026-05-09 — Added Handoff V1 with `memory_handoff_save`, `/memory-handoff`, session-isolated active handoff updates, latest handoff turn-start preload, and v1.3.0 status/package metadata.
 - 2026-05-12 — Added ADR 004 and implemented v3.0.0 scope-first identity validation/defaults to avoid `projectId`/`repoPath` filter fragmentation.
 - 2026-05-12 — Added v3.1.0 report-only scope identity findings to `memory_audit` and `/memory-audit`.
+- 2026-05-13 — Completed the first docs plan inventory pass and archived the historical/superseded Pi Extension V1, scope-first identity, and tool/lifecycle plans under `docs/archive/plans/`.
+- 2026-05-13 — Accepted ADR 005: normal agent-facing scopes are `global`, `repo`, and `session`; `project`/`projectId` are soft-deprecated for normal use while legacy records remain discoverable.
+- 2026-05-13 — Updated README and Pi tool descriptions to present `global`/`repo`/`session` as the normal scope model and mark `project`/`projectId` as legacy/advanced compatibility.
+- 2026-05-13 — Added compatibility notices for explicit `scope="project"` tool calls while keeping legacy project-scoped reads/writes accepted.
+- 2026-05-13 — Added regression coverage proving legacy project-scoped records remain discoverable by `projectId` alone without adding `repoPath` to project-scope retrieval.
+- 2026-05-13 — Extended `memory_audit` and `/memory-audit` with a read-only migration preview that classifies active legacy project-scoped records as repo/global/archive/legacy-read-only/needs-human-review candidates and bumped package/runtime metadata to v3.2.0.
 - 2026-04-30 — Renamed the GitHub/local repository from `pi-memory` to `pi-ext-memory`; package/runtime names remain `pi-memory`.
 
 ## 4) Open Decisions

@@ -34,9 +34,9 @@ memory_stats                 — per-kind counts, cap utilisation, and warnings 
 memory_save                  — save facts, decisions, notes, progress snapshots (kind=progress_snapshot)
 memory_save_todo             — save actionable open tasks (priority, status, scope)
 memory_save_handoff          — save/refresh resumable agent handoff state
-memory_update                — patch an existing memory by id (scope, repoPath, projectId, title, summary, body, tags, status, pinned, importance, confidence, expiresAt; priority+nextAction for kind=todo)
+memory_update                — patch an existing memory by id (scope, repoPath, legacy projectId, title, summary, body, tags, status, pinned, importance, confidence, expiresAt; priority+nextAction for kind=todo)
 memory_archive               — archive obsolete memories
-memory_audit                 — report stale todos, old handoffs, and scope identity issues (report-only, no auto-migration/archive)
+memory_audit                 — report stale todos, old handoffs, scope identity issues, and read-only legacy project migration preview
 memory_link                  — link related memories (optional)
 /memory-status               — show extension status and config
 /memory-search <query>       — manual memory search
@@ -46,24 +46,25 @@ memory_link                  — link related memories (optional)
 
 ### Scope identity
 
-`scope` selects the primary identity:
+Normal agent-facing scopes are:
 
-| Scope | Primary identity |
+| Scope | Use when |
 |---|---|
-| `global` | none |
-| `repo` | `repoPath` |
-| `project` | `projectId` |
-| `session` | `sessionId` |
+| `global` | The memory should apply across repositories. |
+| `repo` | Future agents in the current repository/worktree should know it. |
+| `session` | The state is short-lived handoff/resume/current-run context. |
 
 Inside a Git repository, ordinary saves and todos default to `repo`; outside a repo they default to `global`. Tools reject contradictory filters such as `scope="repo"` plus `projectId`, avoiding accidental `project_id AND repo_path` misses.
+
+`project` / `projectId` remains available only as legacy/advanced compatibility. Explicit `scope="project"` tool calls return a compatibility notice; new normal agent use should prefer `repo` with `repoPath`.
 
 ### Active caps
 
 | Scope | Todo hard cap | Handoff hard cap | Todo stale after | Handoff expires after |
 |---|---|---|---|---|
 | repo / session | 50 | 10 | 30 days | 14 days |
-| project | 50 | 10 | 30 days | 14 days |
 | global | 20 | 5 | 30 days | 14 days |
+| legacy project | 50 | 10 | 30 days | 14 days |
 
 Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup suggestions. Archive or complete existing todos/handoffs first.
 
