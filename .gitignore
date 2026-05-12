@@ -1,3 +1,4 @@
 .pi/*.sqlite
 .pi/*.sqlite-shm
 .pi/*.sqlite-wal
+node_modules/
