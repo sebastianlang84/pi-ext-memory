@@ -1,6 +1,6 @@
 {
   "name": "pi-memory",
-  "version": "3.3.4",
+  "version": "3.3.5",
   "description": "A lightweight local memory system for Pi coding agent.",
   "keywords": [
     "pi-package"

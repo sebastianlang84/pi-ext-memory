@@ -12,6 +12,13 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.5] - 2026-05-13
+
+### Changed
+- `before_agent_start` now delegates all turn-message orchestration to a new `turn-intake` module; the hook body is reduced to store resolution, the `runTurnIntake` call, and error handling.
+- Fixed a silent bug where `buildTurnMemoryMessage` result was used as a string instead of its `.content` property.
+- Runtime status metadata now reports `v3.3.5`.
+
 ## [3.3.4] - 2026-05-13
 
 ### Added

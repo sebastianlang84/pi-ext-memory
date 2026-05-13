@@ -18,8 +18,7 @@ No active release tasks; add new tasks here only when fresh work is accepted.
 
 Architecture deepening program: follow [Plan — Architecture Deepening](docs/plans/architecture-deepening.md). Remove each slice item after its verified commit.
 
-1. Deepen turn intake.
-2. Deepen Pi tool execution shell.
+1. Deepen Pi tool execution shell.
 
 ## Open Design Issues
 
