@@ -23,13 +23,8 @@ import {
 import { formatMemorySearchResultLine } from "./formatters.ts";
 import { findLatestExactSessionHandoff, listRelevantActiveHandoffsForScope } from "./handoffs.ts";
 import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
-import {
-  formatIdentityError,
-  formatWithLegacyProjectScopeNotice,
-  resolveSingleScopeSearchIdentity,
-  resolveToolIdentity,
-} from "./tool-identity.ts";
 import { type AuditCandidate, buildHygieneLine, formatAuditResults, runMemoryAudit } from "./audit.ts";
+import { createToolShell } from "./tool-shell.ts";
 
 const MEMORY_SAVE_KINDS = MEMORY_KINDS.filter(
   (kind): kind is Exclude<(typeof MEMORY_KINDS)[number], "handoff" | "todo"> =>
@@ -42,6 +37,7 @@ function normalizeOptionalArray<T>(value?: T | T[]): T[] | undefined {
 }
 
 export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getActiveStore: (cwd: string) => MemoryStore): void {
+  const shell = createToolShell(getActiveStore);
   pi.registerTool({
     name: "memory_search",
     label: "Memory Search",
@@ -63,29 +59,18 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 20, description: "Max result count" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
-      const identity = resolveSingleScopeSearchIdentity(params, turnContext);
-      if (identity.error) {
-        return {
-          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
-          details: { dbPath: activeStore.dbPath },
-        };
-      }
-
-      const results = activeStore.searchMemories({
+      const { store, identityErrorResponse, withLegacyNotice, resolveSearchIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
+      const identity = resolveSearchIdentity(params, turnContext);
+      if (identity.error) return identityErrorResponse(identity.error);
+      const results = store.searchMemories({
         ...params,
         sessionId: identity.sessionId,
         projectId: identity.projectId,
         repoPath: identity.repoPath,
       });
-
       return {
-        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatMemorySearchResults(params.query, results, activeStore.dbPath), params.scope as MemoryScope[] | undefined) }],
-        details: {
-          dbPath: activeStore.dbPath,
-          results,
-        },
+        content: [{ type: "text", text: withLegacyNotice(formatMemorySearchResults(params.query, results, store.dbPath), params.scope as MemoryScope[] | undefined) }],
+        details: { dbPath: store.dbPath, results },
       };
     },
   });
@@ -114,22 +99,15 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       offset: Type.Optional(Type.Number({ minimum: 0, default: 0 })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const { store, identityErrorResponse, withLegacyNotice, resolveSearchIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
       const kindFilter = normalizeOptionalArray(params.kind as MemoryKind | MemoryKind[] | undefined);
       const scopeFilter = normalizeOptionalArray(params.scope as MemoryScope | MemoryScope[] | undefined);
-      const identity = resolveSingleScopeSearchIdentity(
+      const identity = resolveSearchIdentity(
         { scope: scopeFilter, sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath },
         turnContext,
       );
-      if (identity.error) {
-        return {
-          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
-          details: { dbPath: activeStore.dbPath },
-        };
-      }
-
-      const result = activeStore.listForTool({
+      if (identity.error) return identityErrorResponse(identity.error);
+      const result = store.listForTool({
         kind: kindFilter,
         scope: scopeFilter,
         tags: params.tags,
@@ -141,11 +119,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         limit: params.limit ?? 20,
         offset: params.offset ?? 0,
       });
-
       return {
-        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatListResult(result, activeStore.dbPath), scopeFilter) }],
+        content: [{ type: "text", text: withLegacyNotice(formatListResult(result, store.dbPath), scopeFilter) }],
         details: {
-          dbPath: activeStore.dbPath,
+          dbPath: store.dbPath,
           total_count: result.totalCount,
           count: result.items.length,
           has_more: result.hasMore,
@@ -190,27 +167,26 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       }, { description: "Structured snapshot fields — use when kind=progress_snapshot" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
+      const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
 
       // Safety-net guards (schema already excludes these kinds, but belt-and-suspenders)
       if ((params.kind as string) === "handoff") {
         return {
-          content: [{ type: "text", text: `Use memory_save_handoff for handoffs so the active session handoff is updated instead of duplicated.\ndb_path: ${activeStore.dbPath}` }],
-          details: { dbPath: activeStore.dbPath },
+          content: [{ type: "text", text: `Use memory_save_handoff for handoffs so the active session handoff is updated instead of duplicated.\ndb_path: ${store.dbPath}` }],
+          details: { dbPath: store.dbPath },
         };
       }
 
       if ((params.kind as string) === "todo") {
         return {
-          content: [{ type: "text", text: `Use memory_save_todo for actionable open tasks so they get the correct schema and priority/scope fields.\ndb_path: ${activeStore.dbPath}` }],
-          details: { dbPath: activeStore.dbPath },
+          content: [{ type: "text", text: `Use memory_save_todo for actionable open tasks so they get the correct schema and priority/scope fields.\ndb_path: ${store.dbPath}` }],
+          details: { dbPath: store.dbPath },
         };
       }
 
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const requestedScope = (params.scope ?? (turnContext.repoPath ? "repo" : "global")) as MemoryScope;
       const rawIdentityParams = params as typeof params & { sessionId?: string; projectId?: string; repoPath?: string };
-      const identity = resolveToolIdentity(
+      const identity = resolveWriteIdentity(
         {
           scope: requestedScope,
           sessionId: rawIdentityParams.sessionId,
@@ -220,13 +196,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         turnContext,
         { requirePrimary: requestedScope !== "global" },
       );
-      if (identity.error) {
-        return {
-          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
-          details: { dbPath: activeStore.dbPath },
-        };
-      }
-      const memory = activeStore.createMemory({
+      if (identity.error) return identityErrorResponse(identity.error);
+      const memory = store.createMemory({
         ...decorateCreateMemoryInput(
           {
             ...params,
@@ -239,13 +210,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         ),
         sourceAgent: "pi",
       });
-
       return {
-        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatMemorySaved(memory, activeStore), requestedScope) }],
-        details: {
-          dbPath: activeStore.dbPath,
-          memory,
-        },
+        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store), requestedScope) }],
+        details: { dbPath: store.dbPath, memory },
       };
     },
   });
@@ -286,22 +253,21 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       avoidRepeating: Type.Optional(Type.Array(Type.String({ description: "Work the next agent should not repeat" }))),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const { store, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
       const sessionId = turnContext.sessionId.trim();
 
       if (sessionId.length === 0) {
         return {
-          content: [{ type: "text", text: `Cannot save handoff without a stable Pi session id.\ndb_path: ${activeStore.dbPath}` }],
-          details: { dbPath: activeStore.dbPath },
+          content: [{ type: "text", text: `Cannot save handoff without a stable Pi session id.\ndb_path: ${store.dbPath}` }],
+          details: { dbPath: store.dbPath },
         };
       }
 
       const handoffInput = buildHandoffMemoryInput(params, turnContext);
-      const existingHandoff = findLatestExactSessionHandoff(activeStore, sessionId);
+      const existingHandoff = findLatestExactSessionHandoff(store, sessionId);
 
       const memory = existingHandoff
-        ? activeStore.updateMemory({
+        ? store.updateMemory({
             id: existingHandoff.id,
             title: handoffInput.title,
             summary: handoffInput.summary,
@@ -311,14 +277,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
             confidence: handoffInput.confidence,
             expiresAt: handoffInput.expiresAt ?? computeDefaultExpiresAt("session"),
           })
-        : activeStore.createMemory({ ...handoffInput, sourceAgent: "pi" });
+        : store.createMemory({ ...handoffInput, sourceAgent: "pi" });
 
       return {
-        content: [{ type: "text", text: formatMemorySaved(memory, activeStore) }],
-        details: {
-          dbPath: activeStore.dbPath,
-          memory,
-        },
+        content: [{ type: "text", text: formatMemorySaved(memory, store) }],
+        details: { dbPath: store.dbPath, memory },
       };
     },
   });
@@ -355,13 +318,13 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       nextAction: Type.Optional(Type.String({ description: "Next concrete action — only applies when kind=todo" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
+      const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
 
-      const existingMemory = activeStore.getMemory(params.id);
+      const existingMemory = store.getMemory(params.id);
       if (!existingMemory) {
         return {
-          content: [{ type: "text", text: `Memory ${params.id} was not found.\ndb_path: ${activeStore.dbPath}` }],
-          details: { dbPath: activeStore.dbPath },
+          content: [{ type: "text", text: `Memory ${params.id} was not found.\ndb_path: ${store.dbPath}` }],
+          details: { dbPath: store.dbPath },
         };
       }
       if (existingMemory.kind === "handoff") {
@@ -381,24 +344,24 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         ];
         if (handoffContentFields.some((value) => value !== undefined)) {
           return {
-            content: [{ type: "text", text: `Use memory_save_handoff for handoff content changes; memory_update may only change handoff status/expiresAt.\ndb_path: ${activeStore.dbPath}` }],
-            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+            content: [{ type: "text", text: `Use memory_save_handoff for handoff content changes; memory_update may only change handoff status/expiresAt.\ndb_path: ${store.dbPath}` }],
+            details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
       }
 
       if (params.archiveReason !== undefined && params.status !== "archived") {
         return {
-          content: [{ type: "text", text: `archiveReason is only valid with status=archived.\ndb_path: ${activeStore.dbPath}` }],
-          details: { dbPath: activeStore.dbPath, memory: existingMemory },
+          content: [{ type: "text", text: `archiveReason is only valid with status=archived.\ndb_path: ${store.dbPath}` }],
+          details: { dbPath: store.dbPath, memory: existingMemory },
         };
       }
 
       // Validate todo-specific fields
       if ((params.priority !== undefined || params.nextAction !== undefined) && existingMemory.kind !== "todo") {
         return {
-          content: [{ type: "text", text: `priority and nextAction are only valid for kind=todo memories.\ndb_path: ${activeStore.dbPath}` }],
-          details: { dbPath: activeStore.dbPath, memory: existingMemory },
+          content: [{ type: "text", text: `priority and nextAction are only valid for kind=todo memories.\ndb_path: ${store.dbPath}` }],
+          details: { dbPath: store.dbPath, memory: existingMemory },
         };
       }
 
@@ -408,27 +371,26 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       if (params.scope !== undefined || params.projectId !== undefined || params.repoPath !== undefined) {
         if (params.scope === "global" && (existingMemory.sessionId || existingMemory.projectId || existingMemory.repoPath)) {
           return {
-            content: [{ type: "text", text: formatIdentityError("memory_update cannot change an identified memory to scope=global because project/repo/session identifiers cannot be cleared by this tool.", activeStore.dbPath) }],
-            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+            content: [{ type: "text", text: identityErrorResponse("memory_update cannot change an identified memory to scope=global because project/repo/session identifiers cannot be cleared by this tool.").content[0].text }],
+            details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
 
         if (params.scope === "session" && !existingMemory.sessionId) {
           return {
-            content: [{ type: "text", text: formatIdentityError("memory_update cannot change a non-session memory to scope=session because sessionId cannot be patched by this tool.", activeStore.dbPath) }],
-            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+            content: [{ type: "text", text: identityErrorResponse("memory_update cannot change a non-session memory to scope=session because sessionId cannot be patched by this tool.").content[0].text }],
+            details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
 
         if (params.scope !== undefined && params.scope !== "session" && existingMemory.sessionId) {
           return {
-            content: [{ type: "text", text: formatIdentityError("memory_update cannot change a session memory to repo/project/global because sessionId cannot be cleared by this tool.", activeStore.dbPath) }],
-            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+            content: [{ type: "text", text: identityErrorResponse("memory_update cannot change a session memory to repo/project/global because sessionId cannot be cleared by this tool.").content[0].text }],
+            details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
 
-        const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
-        const identity = resolveToolIdentity(
+        const identity = resolveWriteIdentity(
           {
             scope: (params.scope ?? existingMemory.scope) as MemoryScope,
             projectId: params.projectId,
@@ -440,8 +402,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         );
         if (identity.error) {
           return {
-            content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
-            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+            content: [{ type: "text", text: identityErrorResponse(identity.error).content[0].text }],
+            details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
 
@@ -494,29 +456,22 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         ];
         if (archiveCombinedPatchFields.some((value) => value !== undefined)) {
           return {
-            content: [{ type: "text", text: `memory_update archiveReason cannot be combined with other field patches; archive first, then patch only if still needed.\ndb_path: ${activeStore.dbPath}` }],
-            details: { dbPath: activeStore.dbPath, memory: existingMemory },
+            content: [{ type: "text", text: `memory_update archiveReason cannot be combined with other field patches; archive first, then patch only if still needed.\ndb_path: ${store.dbPath}` }],
+            details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
-        const memory = activeStore.archiveMemory({ id: params.id, reason: params.archiveReason });
+        const memory = store.archiveMemory({ id: params.id, reason: params.archiveReason });
         return {
-          content: [{ type: "text", text: formatMemoryArchived(memory, activeStore.dbPath) }],
-          details: {
-            dbPath: activeStore.dbPath,
-            memory,
-          },
+          content: [{ type: "text", text: formatMemoryArchived(memory, store.dbPath) }],
+          details: { dbPath: store.dbPath, memory },
         };
       }
 
       const { archiveReason: _archiveReason, ...coreUpdateParams } = updateParams;
-      const memory = activeStore.updateMemory(coreUpdateParams);
-
+      const memory = store.updateMemory(coreUpdateParams);
       return {
-        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatMemoryUpdated(memory, activeStore), params.scope as MemoryScope | undefined) }],
-        details: {
-          dbPath: activeStore.dbPath,
-          memory,
-        },
+        content: [{ type: "text", text: withLegacyNotice(formatMemoryUpdated(memory, store), params.scope as MemoryScope | undefined) }],
+        details: { dbPath: store.dbPath, memory },
       };
     },
   });
@@ -538,16 +493,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       relation: StringEnum(MEMORY_LINK_RELATIONS, { description: "Relationship type" }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-
-      const link = activeStore.linkMemories(params);
-
+      const { store } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
+      const link = store.linkMemories(params);
       return {
-        content: [{ type: "text", text: formatMemoryLinked(link, activeStore.dbPath) }],
-        details: {
-          dbPath: activeStore.dbPath,
-          link,
-        },
+        content: [{ type: "text", text: formatMemoryLinked(link, store.dbPath) }],
+        details: { dbPath: store.dbPath, link },
       };
     },
   });
@@ -576,21 +526,14 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
-
+      const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
       const requestedScope = (params.scope ?? (turnContext.repoPath ? "repo" : "global")) as MemoryScope;
-      const identity = resolveToolIdentity(
+      const identity = resolveWriteIdentity(
         { scope: requestedScope, projectId: params.projectId, repoPath: params.repoPath },
         turnContext,
         { requirePrimary: requestedScope !== "global" },
       );
-      if (identity.error) {
-        return {
-          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
-          details: { dbPath: activeStore.dbPath },
-        };
-      }
+      if (identity.error) return identityErrorResponse(identity.error);
 
       const tags = [...(params.tags ?? []), "todo"];
       if (params.priority) tags.push(params.priority);
@@ -598,7 +541,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
 
       const summary = buildTodoSummary(params);
 
-      const memory = activeStore.createMemory({
+      const memory = store.createMemory({
         ...decorateCreateMemoryInput(
           {
             kind: "todo",
@@ -617,10 +560,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         ),
         sourceAgent: "pi",
       });
-
       return {
-        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatMemorySaved(memory, activeStore), requestedScope) }],
-        details: { dbPath: activeStore.dbPath, memory },
+        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store), requestedScope) }],
+        details: { dbPath: store.dbPath, memory },
       };
     },
   });
@@ -640,24 +582,18 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       reason: Type.Optional(Type.String({ description: "Optional archive reason" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-
-      const existingMemory = activeStore.getMemory(params.id);
+      const { store } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
+      const existingMemory = store.getMemory(params.id);
       if (!existingMemory) {
         return {
-          content: [{ type: "text", text: `Memory ${params.id} was not found.\ndb_path: ${activeStore.dbPath}` }],
-          details: { dbPath: activeStore.dbPath },
+          content: [{ type: "text", text: `Memory ${params.id} was not found.\ndb_path: ${store.dbPath}` }],
+          details: { dbPath: store.dbPath },
         };
       }
-
-      const memory = activeStore.archiveMemory(params);
-
+      const memory = store.archiveMemory(params);
       return {
-        content: [{ type: "text", text: formatMemoryArchived(memory, activeStore.dbPath) }],
-        details: {
-          dbPath: activeStore.dbPath,
-          memory,
-        },
+        content: [{ type: "text", text: formatMemoryArchived(memory, store.dbPath) }],
+        details: { dbPath: store.dbPath, memory },
       };
     },
   });
@@ -677,12 +613,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-      const { staleTodos, oldHandoffs, identityViolations, projectMigrationPreview } = runMemoryAudit(activeStore, params.scope, params.repoPath);
-      const output = formatWithLegacyProjectScopeNotice(formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview), params.scope as MemoryScope[] | undefined);
+      const { store, withLegacyNotice } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
+      const { staleTodos, oldHandoffs, identityViolations, projectMigrationPreview } = runMemoryAudit(store, params.scope, params.repoPath);
+      const output = withLegacyNotice(formatAuditResults(staleTodos, oldHandoffs, store.dbPath, identityViolations, projectMigrationPreview), params.scope as MemoryScope[] | undefined);
       return {
         content: [{ type: "text", text: output }],
-        details: { dbPath: activeStore.dbPath, staleTodos, oldHandoffs, identityViolations, projectMigrationPreview },
+        details: { dbPath: store.dbPath, staleTodos, oldHandoffs, identityViolations, projectMigrationPreview },
       };
     },
   });
@@ -703,20 +639,14 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo todos" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
-      const identity = resolveToolIdentity(
+      const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
+      const identity = resolveWriteIdentity(
         { scope: params.scope as MemoryScope, projectId: params.projectId, repoPath: params.repoPath },
         turnContext,
         { requirePrimary: params.scope !== "global" },
       );
-      if (identity.error) {
-        return {
-          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
-          details: { dbPath: activeStore.dbPath },
-        };
-      }
-      const result = activeStore.listForTool({
+      if (identity.error) return identityErrorResponse(identity.error);
+      const result = store.listForTool({
         kind: ["todo"],
         scope: [params.scope as MemoryScope],
         status: "active",
@@ -727,8 +657,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         offset: 0,
       });
       return {
-        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatActiveList("todos", result.items, result.totalCount, activeStore.dbPath), params.scope as MemoryScope) }],
-        details: { dbPath: activeStore.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
+        content: [{ type: "text", text: withLegacyNotice(formatActiveList("todos", result.items, result.totalCount, store.dbPath), params.scope as MemoryScope) }],
+        details: { dbPath: store.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
       };
     },
   });
@@ -750,21 +680,15 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo handoffs" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
       const scope = params.scope as MemoryScope;
-      const identity = resolveToolIdentity(
+      const identity = resolveWriteIdentity(
         { scope, projectId: params.projectId, repoPath: params.repoPath },
         turnContext,
         { requirePrimary: scope !== "global" },
       );
-      if (identity.error) {
-        return {
-          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
-          details: { dbPath: activeStore.dbPath },
-        };
-      }
-      const result = listRelevantActiveHandoffsForScope(activeStore, {
+      if (identity.error) return identityErrorResponse(identity.error);
+      const result = listRelevantActiveHandoffsForScope(store, {
         scope,
         sessionId: identity.sessionId,
         repoPath: identity.repoPath,
@@ -772,8 +696,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         limit: 10,
       });
       return {
-        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatActiveList("handoffs", result.items, result.totalCount, activeStore.dbPath), scope) }],
-        details: { dbPath: activeStore.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
+        content: [{ type: "text", text: withLegacyNotice(formatActiveList("handoffs", result.items, result.totalCount, store.dbPath), scope) }],
+        details: { dbPath: store.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
       };
     },
   });
@@ -793,20 +717,14 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo stats" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const activeStore = getActiveStore(ctx.cwd);
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+      const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
       const scope = params.scope as MemoryScope;
-      const identity = resolveToolIdentity(
+      const identity = resolveWriteIdentity(
         { scope, projectId: params.projectId, repoPath: params.repoPath },
         turnContext,
         { requirePrimary: scope !== "global" },
       );
-      if (identity.error) {
-        return {
-          content: [{ type: "text", text: formatIdentityError(identity.error, activeStore.dbPath) }],
-          details: { dbPath: activeStore.dbPath },
-        };
-      }
+      if (identity.error) return identityErrorResponse(identity.error);
       const scopeFilter = { scope: [scope], sessionId: identity.sessionId, repoPath: identity.repoPath, projectId: identity.projectId };
 
       const kindStatuses: Array<{ kind: string; statuses: string[] }> = [
@@ -822,7 +740,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       for (const { kind, statuses } of kindStatuses) {
         counts[kind] = {};
         for (const status of statuses) {
-          counts[kind][status] = activeStore.count({ kind: [kind as MemoryKind], status: status as never, ...scopeFilter });
+          counts[kind][status] = store.count({ kind: [kind as MemoryKind], status: status as never, ...scopeFilter });
         }
       }
 
@@ -852,12 +770,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         `  active_todos: ${todoActive}/${todoCapPolicy?.activeHardMax ?? "n/a"}`,
         `  active_handoffs: ${handoffActive}/${handoffCapPolicy?.activeHardMax ?? "n/a"}`,
         ...(warnings.length > 0 ? [`warnings:`, ...warnings.map((w) => `  ${w}`)] : []),
-        `db_path: ${activeStore.dbPath}`,
+        `db_path: ${store.dbPath}`,
       ].join("\n");
 
       return {
-        content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(output, scope) }],
-        details: { dbPath: activeStore.dbPath, scope, counts, warnings },
+        content: [{ type: "text", text: withLegacyNotice(output, scope) }],
+        details: { dbPath: store.dbPath, scope, counts, warnings },
       };
     },
   });

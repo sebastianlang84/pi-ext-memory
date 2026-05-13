@@ -12,6 +12,12 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.6] - 2026-05-13
+
+### Changed
+- All Pi tool `execute` bodies now delegate store lookup, turn context, identity resolution, and legacy-project notice wrapping to a new `tool-shell` module; individual tools focus on memory operation behavior.
+- Runtime status metadata now reports `v3.3.6`.
+
 ## [3.3.5] - 2026-05-13
 
 ### Changed
