@@ -23,6 +23,30 @@ test("runTurnIntake returns undefined for empty prompt with clean audit and no h
   }
 });
 
+test("runTurnIntake returns handoff content for empty prompt when a handoff is present", () => {
+  const dbPath = join(createTempDir("pi-memory-turn-intake-empty-handoff-"), "memory.sqlite");
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    store.createMemory({
+      kind: "handoff",
+      scope: "session",
+      sessionId: "session-abc",
+      repoPath: "/repo",
+      title: "Empty prompt handoff",
+      summary: "Resume work after context reset — no user prompt yet.",
+    });
+
+    // Empty prompt simulates a fresh agent start before any user input.
+    // The handoff must still be injected.
+    const result = runTurnIntake(store, "", "/repo", "session-abc");
+    assert.ok(typeof result === "string", "Expected handoff to be injected even with empty prompt");
+    assert.match(result, /Empty prompt handoff/);
+  } finally {
+    store.close();
+  }
+});
+
 test("runTurnIntake returns handoff content when only a handoff is present", () => {
   const dbPath = join(createTempDir("pi-memory-turn-intake-handoff-"), "memory.sqlite");
   const store = initializeMemoryStore({ dbPath });
