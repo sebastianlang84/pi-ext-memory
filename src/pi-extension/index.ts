@@ -1,7 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
-import { createMemoryCore, type MemoryStore } from "../core/index.ts";
-import { ensureDefaultMemoryDbPath } from "./config.ts";
+import { createMemoryCore } from "../core/index.ts";
 import {
   buildTurnMemoryMessage,
   deriveMemoryTurnContext,
@@ -10,10 +9,11 @@ import {
 } from "./retrieval.ts";
 import { registerMemoryCommands } from "./commands.ts";
 import { buildHygieneLine, registerMemoryTools, runMemoryAudit } from "./tools.ts";
+import { createMemoryRuntimeStore } from "./runtime-store.ts";
 
 export default function registerPiMemoryExtension(pi: ExtensionAPI) {
   const core = createMemoryCore();
-  let store: MemoryStore | undefined;
+  const runtimeStore = createMemoryRuntimeStore(core);
 
   pi.on("session_start", async (_event, ctx) => {
     if (!ctx.hasUI) return;
@@ -22,8 +22,7 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
 
   pi.on("before_agent_start", async (event, ctx) => {
     try {
-      const activeStore = getStoreForCwd(core, store, ctx.cwd);
-      store = activeStore;
+      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
 
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const latestHandoff = findLatestHandoffForTurn(activeStore, turnContext);
@@ -53,32 +52,8 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
     }
   });
 
-  pi.on("session_shutdown", async (_event, _ctx) => {
-    store?.close();
-    store = undefined;
-  });
+  registerMemoryTools(pi, (cwd) => runtimeStore.getStoreForCwd(cwd));
 
-  registerMemoryTools(pi, (cwd) => {
-    const activeStore = getStoreForCwd(core, store, cwd);
-    store = activeStore;
-    return activeStore;
-  });
-
-  registerMemoryCommands(pi, core);
-}
-
-function getStoreForCwd(
-  core: ReturnType<typeof createMemoryCore>,
-  currentStore: MemoryStore | undefined,
-  _cwd: string,
-): MemoryStore {
-  const { dbPath } = ensureDefaultMemoryDbPath();
-
-  if (currentStore?.dbPath === dbPath) {
-    return currentStore;
-  }
-
-  currentStore?.close();
-  return core.initializeStore({ dbPath });
+  registerMemoryCommands(pi, core, runtimeStore);
 }
 

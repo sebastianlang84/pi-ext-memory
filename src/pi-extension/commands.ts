@@ -1,8 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
-import { type MemoryCore, type MemoryRecord, type MemorySearchResult, type MemoryStore, type SearchMemoriesInput } from "../core/index.ts";
+import { type MemoryCore, type MemoryRecord, type MemorySearchResult, type SearchMemoriesInput } from "../core/index.ts";
 import { formatAuditResults, runMemoryAudit } from "./audit.ts";
-import { ensureDefaultMemoryDbPath } from "./config.ts";
 import { findLatestExactSessionHandoff } from "./handoffs.ts";
 import { deriveMemoryTurnContext, findLatestHandoffForTurn, retrieveMemoriesForTurn } from "./retrieval.ts";
 import {
@@ -12,6 +11,7 @@ import {
   formatMemorySessionSaveUsage,
   formatSearchPlanStage,
 } from "./formatters.ts";
+import { createMemoryRuntimeStore, type MemoryRuntimeStore } from "./runtime-store.ts";
 import { formatMemoryStatus, getNextStatusWidgetLines } from "./status.ts";
 
 const MANUAL_SEARCH_RESULT_LIMIT = 8;
@@ -20,8 +20,11 @@ const MEMORY_REVIEW_QUERY = "decisions facts preferences todos risks next steps"
 const MEMORY_REVIEW_RESULT_LIMIT = 8;
 const MIN_SESSION_SUMMARY_LENGTH = 12;
 
-export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCommand">, core: MemoryCore): void {
-  let store: MemoryStore | undefined;
+export function registerMemoryCommands(
+  pi: Pick<ExtensionAPI, "on" | "registerCommand">,
+  core: MemoryCore,
+  runtimeStore: MemoryRuntimeStore = createMemoryRuntimeStore(core),
+): void {
   let isStatusWidgetVisible = false;
   let isReviewWidgetVisible = false;
 
@@ -36,8 +39,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
 
     isStatusWidgetVisible = false;
     isReviewWidgetVisible = false;
-    store?.close();
-    store = undefined;
+    runtimeStore.close();
   });
 
   pi.registerCommand("memory-status", {
@@ -67,8 +69,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
         return;
       }
 
-      const activeStore = getStoreForCwd(core, store, ctx.cwd);
-      store = activeStore;
+      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
 
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, query, turnContext, {
@@ -98,8 +99,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
         return;
       }
 
-      const activeStore = getStoreForCwd(core, store, ctx.cwd);
-      store = activeStore;
+      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
 
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const session = activeStore.getSession(turnContext.sessionId);
@@ -124,8 +124,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
     description: "Show or archive the active handoff for the current Pi session",
     handler: async (args, ctx) => {
       const action = args.trim() || "show";
-      const activeStore = getStoreForCwd(core, store, ctx.cwd);
-      store = activeStore;
+      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
 
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
 
@@ -174,8 +173,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
         return;
       }
 
-      const activeStore = getStoreForCwd(core, store, ctx.cwd);
-      store = activeStore;
+      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
 
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const session = activeStore.saveSessionSummary({
@@ -199,8 +197,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
   pi.registerCommand("memory-audit", {
     description: "Audit memory hygiene and preview legacy project-scope migration candidates without writing changes",
     handler: async (_args, ctx) => {
-      const activeStore = getStoreForCwd(core, store, ctx.cwd);
-      store = activeStore;
+      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
 
       const { staleTodos, oldHandoffs, identityViolations, projectMigrationPreview } = runMemoryAudit(activeStore);
       const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview);
@@ -208,17 +205,6 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
       writeCommandOutput(output, ctx);
     },
   });
-}
-
-function getStoreForCwd(core: MemoryCore, currentStore: MemoryStore | undefined, _cwd: string): MemoryStore {
-  const { dbPath } = ensureDefaultMemoryDbPath();
-
-  if (currentStore?.dbPath === dbPath) {
-    return currentStore;
-  }
-
-  currentStore?.close();
-  return core.initializeStore({ dbPath });
 }
 
 function formatMemoryHandoff(memory: MemoryRecord | undefined, dbPath: string, isFallback: boolean): string {

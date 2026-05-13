@@ -11,6 +11,7 @@ import {
   formatMemorySessionSaveUsage,
 } from "../../src/pi-extension/formatters.ts";
 import { registerMemoryCommands } from "../../src/pi-extension/commands.ts";
+import type { MemoryRuntimeStore } from "../../src/pi-extension/runtime-store.ts";
 
 type CommandHandler = (args: string, ctx: MockCommandContext) => Promise<void>;
 type EventHandler = (event: unknown, ctx: MockCommandContext) => Promise<void> | void;
@@ -151,6 +152,43 @@ test("formatMemorySessionSaved renders the persisted session summary", () => {
   assert.match(output, /summary: Captured the manual review helper/);
   assert.match(output, /project_id: @acme\/api/);
   assert.match(output, /repo_path: \/repo/);
+});
+
+test("commands shutdown clears widgets and closes the shared runtime store", async () => {
+  let closeCount = 0;
+  const runtimeStore: MemoryRuntimeStore = {
+    getStoreForCwd() {
+      throw new Error("shutdown should not open the runtime store");
+    },
+    close() {
+      closeCount += 1;
+    },
+    activeDbPath: undefined,
+  };
+  const { pi, eventHandlers } = createMockPi();
+  registerMemoryCommands(pi as never, createMemoryCore(), runtimeStore);
+  const shutdownHandlers = eventHandlers.get("session_shutdown");
+  assert.ok(shutdownHandlers?.length, "expected session_shutdown handler to be registered");
+
+  const { ctx, widgets } = createMockCommandContext("/workspace", "session-shutdown-123");
+  for (const widgetName of [
+    "pi-memory-status",
+    "pi-memory-search",
+    "pi-memory-review",
+    "pi-memory-session-save",
+    "pi-memory-handoff",
+  ]) {
+    ctx.ui.setWidget(widgetName, ["visible"]);
+  }
+
+  await shutdownHandlers[0]({}, ctx);
+
+  assert.equal(closeCount, 1);
+  assert.equal(widgets.get("pi-memory-status"), undefined);
+  assert.equal(widgets.get("pi-memory-search"), undefined);
+  assert.equal(widgets.get("pi-memory-review"), undefined);
+  assert.equal(widgets.get("pi-memory-session-save"), undefined);
+  assert.equal(widgets.get("pi-memory-handoff"), undefined);
 });
 
 test("/memory-review handler toggles review details in the UI", async () => {

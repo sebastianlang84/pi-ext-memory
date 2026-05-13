@@ -12,6 +12,15 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.4] - 2026-05-13
+
+### Added
+- Added direct regression coverage for the extension runtime store seam, including store reuse, replacement, close idempotence, and `PI_MEMORY_DB_PATH` resolution.
+
+### Changed
+- Extension hooks, tools, and commands now share one runtime store seam for SQLite store creation, reuse, and shutdown while preserving DB path behavior.
+- Runtime status metadata now reports `v3.3.4`.
+
 ## [3.3.3] - 2026-05-13
 
 ### Added
