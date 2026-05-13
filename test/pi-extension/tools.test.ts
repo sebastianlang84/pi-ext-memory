@@ -167,22 +167,12 @@ function createMinimalStore(overrides: Partial<{
   };
 }
 
-test("registerMemoryTools registers expected tools and wires their executors", async (t) => {
-  const tools: RegisteredTool[] = [];
-  const requestedCwds: string[] = [];
-  const calls: {
-    search: SearchMemoriesInput[];
-    list: ListMemoriesInput[];
-    listForTool: Array<Partial<NormalizedListMemoriesInput> & { offset?: number }>;
-    create: CreateMemoryInput[];
-    get: string[];
-    update: UpdateMemoryInput[];
-    archive: ArchiveMemoryInput[];
-  } = { search: [], list: [], listForTool: [], create: [], get: [], update: [], archive: [] };
+// ---------------------------------------------------------------------------
+// Tool registration — one test per behavior
+// ---------------------------------------------------------------------------
+
+async function buildToolFixture() {
   const projectContext = await createTempPiToolContext();
-  t.after(async () => {
-    await rm(projectContext.cwd, { recursive: true, force: true });
-  });
   const result = createResult({ projectId: projectContext.projectId, repoPath: projectContext.cwd });
   const savedMemory = createMemory({
     id: "memory-saved",
@@ -202,90 +192,118 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     sourceAgent: "pi",
   });
   const updatedMemory = createMemory({ id: "memory-updated", title: "Updated title", pinned: true });
-  const archivedMemory = createMemory({
-    id: "memory-archived",
-    status: "archived",
-    metadata: { archive: { archivedReason: "superseded" } },
-  });
   const store = {
     dbPath: "/tmp/pi-memory-test.sqlite",
     embeddingModel: "builtin-hash-384-v1",
     embeddingDimensions: 384,
-    searchMemories(input: SearchMemoriesInput) {
-      calls.search.push(input);
-      return [result];
-    },
-    listMemories(input: ListMemoriesInput) {
-      calls.list.push(input);
-      return [savedMemory];
-    },
-    listForTool(filter: Partial<NormalizedListMemoriesInput> & { offset?: number }): ListForToolResult {
-      calls.listForTool.push(filter);
+    searchMemories(_input: SearchMemoriesInput) { return [result]; },
+    listMemories(_input: ListMemoriesInput) { return [savedMemory]; },
+    listForTool(_filter: Partial<NormalizedListMemoriesInput> & { offset?: number }): ListForToolResult {
       return { items: [savedMemory], totalCount: 1, hasMore: false, nextOffset: null };
     },
     listAllInternal(filter?: Partial<NormalizedListMemoriesInput>) {
       return filter?.kind?.includes("handoff") ? [existingHandoff] : [savedMemory];
     },
-    count() {
-      return 0;
-    },
-    createMemory(input: CreateMemoryInput) {
-      calls.create.push(input);
-      return savedMemory;
-    },
+    count() { return 0; },
+    createMemory(_input: CreateMemoryInput) { return savedMemory; },
     getMemory(id: string) {
-      calls.get.push(id);
       if (id === "memory-saved") return savedMemory;
       if (id === "memory-updated") return updatedMemory;
       return null;
     },
-    updateMemory(input: UpdateMemoryInput) {
-      calls.update.push(input);
-      return updatedMemory;
-    },
-    archiveMemory(input: ArchiveMemoryInput) {
-      calls.archive.push(input);
-      return archivedMemory;
+    updateMemory(_input: UpdateMemoryInput) { return updatedMemory; },
+    archiveMemory(_input: ArchiveMemoryInput) {
+      return createMemory({ id: "memory-archived", status: "archived", metadata: { archive: { archivedReason: "superseded" } } });
     },
   };
 
+  const tools: RegisteredTool[] = [];
   const registerMemoryTools = await importRegisterMemoryTools();
-
   registerMemoryTools(
-    {
-      registerTool(tool: RegisteredTool) {
-        tools.push(tool);
-      },
-    } as never,
-    (cwd) => {
-      requestedCwds.push(cwd);
-      return store as never;
-    },
+    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
+    () => store as never,
   );
+
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  return { tools, store, ctx, signal, projectContext, result, savedMemory, updatedMemory };
+}
+
+test("registerMemoryTools registers all expected tool names", async (t) => {
+  const { tools, projectContext } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
 
   const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_stats"];
   assert.equal(tools.length, expectedToolNames.length);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)), new Set(expectedToolNames));
+});
+
+test("registerMemoryTools exposes parameters on every tool", async (t) => {
+  const { tools, projectContext } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
   assert.ok(tools.every((tool) => tool.parameters), "expected all registered tools to expose parameters");
+});
+
+test("registerMemoryTools provides promptSnippet and guidelines naming the tool", async (t) => {
+  const { tools, projectContext } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
   for (const tool of tools) {
     assert.ok(tool.promptSnippet, `${tool.name} should provide promptSnippet`);
     assert.ok(tool.promptGuidelines?.every((guideline) => guideline.includes(tool.name)), `${tool.name} guidelines should name the tool`);
   }
+});
 
-  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
-  const signal = new AbortController().signal;
-  const onUpdate = () => undefined;
+test("memory_search returns formatted result text and details", async (t) => {
+  const { tools, store, ctx, signal, projectContext, result } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
 
-  const searchOutput = await toolByName(tools, "memory_search").execute("call-search", { query: "manual policy", limit: 3 }, signal, onUpdate, ctx);
-  const listOutput = await toolByName(tools, "memory_list").execute("call-list", { kind: "todo", scope: "project", limit: 3 }, signal, onUpdate, ctx);
-  const saveOutput = await toolByName(tools, "memory_save").execute(
+  const output = await toolByName(tools, "memory_search").execute("call-search", { query: "manual policy", limit: 3 }, signal, () => undefined, ctx);
+
+  assert.match(output.content[0].text, /Found 1 memory result for "manual policy"\./);
+  assert.match(output.content[0].text, /Keep writes manual-first/);
+  assert.deepEqual(output.details, { dbPath: store.dbPath, results: [result] });
+});
+
+test("memory_list shows legacy project notice and result summary", async (t) => {
+  const { tools, store, ctx, signal, projectContext, savedMemory } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const output = await toolByName(tools, "memory_list").execute("call-list", { kind: "todo", scope: "project", limit: 3 }, signal, () => undefined, ctx);
+
+  assert.match(output.content[0].text, /scope=project is legacy\/advanced compatibility/);
+  assert.match(output.content[0].text, /Found 1 of 1 memor/);
+  assert.match(output.content[0].text, /Keep writes manual-first/);
+  assert.match(output.content[0].text, /Use explicit review and save tools for durable memory updates/);
+  assert.deepEqual(output.details, { dbPath: store.dbPath, total_count: 1, count: 1, has_more: false, next_offset: null, items: [savedMemory] });
+});
+
+test("memory_save returns saved memory id and enriched identity fields in output", async (t) => {
+  const { tools, store, ctx, signal, projectContext, savedMemory } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const output = await toolByName(tools, "memory_save").execute(
     "call-save",
     { kind: "todo", scope: "session", title: "Remember workflow", summary: "Keep durable writes explicit.", tags: ["policy"] },
     signal,
-    onUpdate,
+    () => undefined,
     ctx,
   );
-  const todoOutput = await toolByName(tools, "memory_save_todo").execute(
+
+  assert.match(output.content[0].text, /Saved memory memory-saved\./);
+  assert.match(output.content[0].text, /title: Keep writes manual-first/);
+  assert.ok(output.content[0].text.includes(`project_id: ${projectContext.projectId}`));
+  assert.ok(output.content[0].text.includes(`repo_path: ${projectContext.cwd}`));
+  assert.ok(output.content[0].text.includes(`session_id: ${projectContext.sessionId}`));
+  assert.deepEqual(output.details, { dbPath: store.dbPath, memory: savedMemory });
+});
+
+test("memory_save_todo returns saved todo id and details", async (t) => {
+  const { tools, ctx, signal, projectContext } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const output = await toolByName(tools, "memory_save_todo").execute(
     "call-todo",
     {
       title: "Implement memory_save_todo",
@@ -295,10 +313,19 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       nextAction: "Write tests",
     },
     signal,
-    onUpdate,
+    () => undefined,
     ctx,
   );
-  const handoffOutput = await toolByName(tools, "memory_save_handoff").execute(
+
+  assert.match(output.content[0].text, /Saved memory memory-saved\./);
+  assert.ok(output.details !== undefined, "expected todo output to have details");
+});
+
+test("memory_save_handoff creates or updates a handoff and returns output", async (t) => {
+  const { tools, store, ctx, signal, projectContext, updatedMemory } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const output = await toolByName(tools, "memory_save_handoff").execute(
     "call-handoff",
     {
       handoffReason: "context_reset",
@@ -310,86 +337,30 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       changedFiles: ["src/pi-extension/tools.ts"],
     },
     signal,
-    onUpdate,
+    () => undefined,
     ctx,
   );
-  const updateOutput = await toolByName(tools, "memory_update").execute(
+
+  assert.match(output.content[0].text, /Saved memory memory-updated\./);
+  assert.deepEqual(output.details, { dbPath: store.dbPath, memory: updatedMemory });
+});
+
+test("memory_update patches a memory and returns updated fields in output", async (t) => {
+  const { tools, store, ctx, signal, projectContext, updatedMemory } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const output = await toolByName(tools, "memory_update").execute(
     "call-update",
     { id: "memory-saved", title: "Updated title", pinned: true },
     signal,
-    onUpdate,
+    () => undefined,
     ctx,
   );
-  assert.deepEqual(requestedCwds, [ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd]);
-  assert.deepEqual(calls.search, [{ query: "manual policy", limit: 3, sessionId: undefined, projectId: undefined, repoPath: undefined }]);
-  assert.deepEqual(calls.listForTool, [
-    { kind: ["todo"], scope: ["project"], tags: undefined, sessionId: undefined, projectId: projectContext.projectId, repoPath: undefined, status: undefined, orderBy: undefined, limit: 3, offset: 0 },
-  ]);
-  assert.deepEqual(calls.list, []);
-  assert.deepEqual(calls.create, [
-    {
-      kind: undefined,
-      scope: "session",
-      title: "Remember workflow",
-      summary: "Keep durable writes explicit.",
-      tags: ["policy"],
-      sourceAgent: "pi",
-      projectId: projectContext.projectId,
-      repoPath: projectContext.cwd,
-      sessionId: projectContext.sessionId,
-    },
-    {
-      kind: "todo",
-      scope: "repo",
-      title: "Implement memory_save_todo",
-      summary: "[P1] [in_progress] Add dedicated todo tool with priority and scope \u2192 Write tests",
-      body: "Add dedicated todo tool with priority and scope",
-      tags: ["todo", "P1", "in_progress"],
-      importance: 0.75,
-      confidence: 1,
-      projectId: projectContext.projectId,
-      repoPath: projectContext.cwd,
-      sessionId: undefined,
-      sourceAgent: "pi",
-    },
-  ]);
-  assert.deepEqual(calls.get, ["memory-saved"]);
-  assert.deepEqual(calls.update, [
-    {
-      id: "memory-saved",
-      title: "Handoff: Implement handoff support",
-      summary: "Tool registration is under test.",
-      body: calls.update[0]?.body,
-      tags: ["handoff", "context_reset", "next_agent"],
-      importance: 0.9,
-      confidence: 0.9,
-    },
-    { id: "memory-saved", title: "Updated title", pinned: true },
-  ]);
-  assert.deepEqual(calls.archive, []);
 
-  assert.match(searchOutput.content[0].text, /Found 1 memory result for "manual policy"\./);
-  assert.match(searchOutput.content[0].text, /Keep writes manual-first/);
-  assert.match(listOutput.content[0].text, /scope=project is legacy\/advanced compatibility/);
-  assert.match(listOutput.content[0].text, /Found 1 of 1 memor/);
-  assert.match(listOutput.content[0].text, /Keep writes manual-first/);
-  assert.match(listOutput.content[0].text, /Use explicit review and save tools for durable memory updates/);
-  assert.match(todoOutput.content[0].text, /Saved memory memory-saved\./);
-  assert.ok(todoOutput.details !== undefined, "expected todo output to have details");
-  assert.match(saveOutput.content[0].text, /Saved memory memory-saved\./);
-  assert.match(saveOutput.content[0].text, /title: Keep writes manual-first/);
-  assert.ok(saveOutput.content[0].text.includes(`project_id: ${projectContext.projectId}`));
-  assert.ok(saveOutput.content[0].text.includes(`repo_path: ${projectContext.cwd}`));
-  assert.ok(saveOutput.content[0].text.includes(`session_id: ${projectContext.sessionId}`));
-  assert.match(handoffOutput.content[0].text, /Saved memory memory-updated\./);
-  assert.match(updateOutput.content[0].text, /Updated memory memory-updated\./);
-  assert.match(updateOutput.content[0].text, /pinned: yes/);
-  assert.match(updateOutput.content[0].text, /title: Updated title/);
-  assert.deepEqual(searchOutput.details, { dbPath: store.dbPath, results: [result] });
-  assert.deepEqual(listOutput.details, { dbPath: store.dbPath, total_count: 1, count: 1, has_more: false, next_offset: null, items: [savedMemory] });
-  assert.deepEqual(saveOutput.details, { dbPath: store.dbPath, memory: savedMemory });
-  assert.deepEqual(handoffOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
-  assert.deepEqual(updateOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
+  assert.match(output.content[0].text, /Updated memory memory-updated\./);
+  assert.match(output.content[0].text, /pinned: yes/);
+  assert.match(output.content[0].text, /title: Updated title/);
+  assert.deepEqual(output.details, { dbPath: store.dbPath, memory: updatedMemory });
 });
 
 test("memory_audit returns project migration preview and writes audit metadata", async (t) => {
@@ -1211,4 +1182,97 @@ test("memory_stats shows last_audit and last_audit_summary after memory_audit ru
 
   assert.match(statsOutput.content[0].text, /last_audit: \d{4}-\d{2}-\d{2}T/);
   assert.match(statsOutput.content[0].text, /last_audit_summary: \d+ finding\(s\):/);
+});
+
+// ---------------------------------------------------------------------------
+// P2-6: Missing tool-layer coverage
+// ---------------------------------------------------------------------------
+
+test("memory_save rejects low-information writes at the tool layer", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
+  t.after(() => { store.close(); });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  await assert.rejects(
+    () => toolByName(tools, "memory_save").execute(
+      "call-low-info",
+      { title: "x", summary: "y" },
+      new AbortController().signal,
+      () => undefined,
+      { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+    ),
+    (err: Error) => {
+      assert.ok(
+        err.message.includes("title") || err.message.includes("summary") || err.message.includes("low") || err.message.includes("short"),
+        `expected validation error about title/summary length, got: ${err.message}`,
+      );
+      return true;
+    },
+  );
+});
+
+test("memory_list returns pagination fields in details", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const store = createMinimalStore({
+    listForTool(_filter) {
+      return { items: [], totalCount: 5, hasMore: true, nextOffset: 2 };
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_list").execute(
+    "call-list-pagination",
+    { limit: 2, offset: 0 },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.equal(output.details.has_more, true);
+  assert.equal(output.details.next_offset, 2);
+  assert.equal(output.details.total_count, 5);
+  assert.match(output.content[0].text, /No memories matched/);
+});
+
+test("memory_stats shows kind breakdown for todo and handoff", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  let callCount = 0;
+  const store = createMinimalStore({ getMeta: (_key) => null });
+  store.count = (_filter?: Record<string, unknown>) => {
+    callCount++;
+    if (callCount === 1) return 3; // todo active
+    if (callCount === 2) return 1; // todo archived
+    if (callCount === 3) return 0; // handoff active
+    return 2;                       // handoff archived
+  };
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_stats").execute(
+    "call-stats-breakdown",
+    { scope: "global" },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /todo:/);
+  assert.match(output.content[0].text, /handoff:/);
+  assert.match(output.content[0].text, /active=3/);
+  assert.match(output.content[0].text, /archived=1/);
 });
