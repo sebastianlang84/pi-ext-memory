@@ -29,7 +29,7 @@ type MockCommandContext = {
 function createResult(): MemorySearchResult {
   return {
     id: "memory-1",
-    kind: "decision",
+    kind: "todo",
     scope: "project",
     title: "Keep writes manual-first",
     summary: "Use review helpers instead of autosaving every turn.",
@@ -198,10 +198,10 @@ test("/memory-review handler toggles review details in the UI", async () => {
 
   try {
     store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "session",
       title: "Keep writes manual-first for next steps",
-      summary: "decisions facts preferences todos risks next steps: use review helpers before saving new durable memory.",
+      summary: "decisions facts preferences todos handoffs risks next steps context: use review helpers before saving new durable memory.",
       sessionId: "session-review-123",
       projectId: "@acme/api",
       repoPath: repoRoot,
@@ -357,10 +357,10 @@ test("commands cover save -> search -> review -> session summary end to end", as
 
   try {
     const savedMemory = setupStore.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "session",
       title: "Close v0.8.1 manually",
-      summary: "decisions facts preferences todos risks next steps: use explicit review and session summary commands to close the manual-first v0.8.1 flow.",
+      summary: "decisions facts preferences todos handoffs risks next steps context: use explicit review and session summary commands to close the manual-first v0.8.1 flow.",
       tags: ["release", "policy"],
       sessionId: "session-e2e-123",
       projectId: "@acme/api",

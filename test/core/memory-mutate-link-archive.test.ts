@@ -17,7 +17,7 @@ test("updateMemory patches fields and refreshes the persisted embedding", async 
 
   try {
     const memory = store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "project",
       title: "Use lexical baseline",
       summary: "Keep lexical retrieval as the first quality gate for the initial rollout.",
@@ -62,7 +62,7 @@ test("updateMemory patches scope", () => {
   const store = initializeMemoryStore({ dbPath });
   try {
     const memory = store.createMemory({
-      kind: "fact",
+      kind: "todo",
       scope: "session",
       title: "Temporary session fact",
       summary: "This fact was captured during a session and should be promoted to project scope.",
@@ -82,7 +82,7 @@ test("archiveMemory keeps the record but removes it from active search results",
 
   try {
     const memory = store.createMemory({
-      kind: "episode",
+      kind: "todo",
       scope: "repo",
       title: "Legacy fallback investigation",
       summary: "Legacyneedle investigation tracked an older fallback path that should stop influencing retrieval now.",

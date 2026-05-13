@@ -216,8 +216,8 @@ export function formatTurnMemoryContext(results: MemorySearchResult[], latestHan
   return [
     ...handoffLines,
     ...contextLines,
-    "Memory triggers: use memory_search when prior decisions, durable preferences, project history, or workflow context materially affect the answer.",
-    "Memory writes: save or update only durable, reusable corrections, decisions, facts, preferences, progress snapshots, or persistent todos.",
+    "Memory triggers: use memory_search when prior context, project history, or workflow context materially affect the answer.",
+    "Memory writes: save or update only durable, reusable notes or persistent todos.",
     "Memory precedence: prefer current user instructions when they conflict with older memory.",
   ].join("\n");
 }
@@ -246,7 +246,8 @@ function formatLatestHandoffLines(latestHandoff: LatestHandoffResult): string[] 
 }
 
 function formatTurnMemoryLine(index: number, result: MemorySearchResult): string {
-  const metadata = [`${result.kind}/${result.scope}`];
+  const kindLabel = result.kind ?? "memory";
+  const metadata = [`${kindLabel}/${result.scope}`];
 
   if (result.projectId) {
     metadata.push(`project=${result.projectId}`);

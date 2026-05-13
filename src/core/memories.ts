@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { findScopeIdentityIssues } from "./identity-policy.ts";
 
-export const MEMORY_KINDS = ["fact", "preference", "decision", "episode", "artifact_ref", "todo", "progress_snapshot", "handoff"] as const;
+export const MEMORY_KINDS = ["todo", "handoff"] as const;
 export const MEMORY_SCOPES = ["global", "project", "repo", "session"] as const;
 export const MEMORY_STATUSES = ["active", "archived", "done", "superseded"] as const;
 export const MEMORY_LINK_RELATIONS = ["related_to", "supersedes", "caused_by", "implements", "blocks"] as const;
@@ -15,7 +15,7 @@ export type MemoryLinkRelation = (typeof MEMORY_LINK_RELATIONS)[number];
 export type MemoryListOrderBy = (typeof MEMORY_LIST_ORDER_BY)[number];
 
 export interface CreateMemoryInput {
-  kind: MemoryKind;
+  kind?: MemoryKind;
   scope: MemoryScope;
   title: string;
   summary: string;
@@ -129,7 +129,7 @@ export interface NormalizedUpdateMemoryInput {
 
 export interface MemoryRecord {
   id: string;
-  kind: MemoryKind;
+  kind: MemoryKind | null | undefined;
   scope: MemoryScope;
   sessionId?: string;
   title: string;
@@ -162,7 +162,7 @@ export interface MemoryLinkRecord {
 
 export interface MemorySearchResult {
   id: string;
-  kind: MemoryKind;
+  kind: MemoryKind | null | undefined;
   scope: MemoryScope;
   title: string;
   summary: string;
@@ -193,7 +193,7 @@ export class MemoryValidationError extends Error {
 export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryRecord {
   const issues: string[] = [];
 
-  const kind = normalizeEnum("kind", input.kind, MEMORY_KINDS, issues);
+  const kind = input.kind !== undefined ? normalizeEnum("kind", input.kind, MEMORY_KINDS, issues) : undefined;
   const scope = normalizeEnum("scope", input.scope, MEMORY_SCOPES, issues);
   const title = normalizeRequiredText("title", input.title, issues, 3);
   const summary = normalizeRequiredText("summary", input.summary, issues, 10);
@@ -215,7 +215,7 @@ export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryReco
   const tags = normalizeTags(input.tags, issues);
   const metadata = normalizeMetadata(input.metadata, issues);
 
-  if (issues.length > 0 || !kind || !scope || !title || !summary) {
+  if (issues.length > 0 || !scope || !title || !summary) {
     throw new MemoryValidationError(issues);
   }
 
@@ -223,7 +223,7 @@ export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryReco
 
   return {
     id: randomUUID(),
-    kind,
+    kind: kind ?? null,
     scope,
     sessionId,
     title,

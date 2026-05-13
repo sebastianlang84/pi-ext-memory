@@ -17,7 +17,7 @@ test("listMemories defaults to active memories ordered by newest update", async 
 
   try {
     const older = store.createMemory({
-      kind: "fact",
+      kind: "todo",
       scope: "repo",
       title: "Older active fact",
       summary: "Older active memory should be listed after the more recently updated record.",
@@ -31,7 +31,7 @@ test("listMemories defaults to active memories ordered by newest update", async 
     });
 
     const newer = store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "repo",
       title: "Newer active decision",
       summary: "Newer active memory should be listed before the older active record.",
@@ -67,10 +67,11 @@ test("listMemories filters active todos by kind without a query", () => {
     });
 
     store.createMemory({
-      kind: "decision",
-      scope: "project",
-      title: "Review decision",
-      summary: "Decision memory shares related wording but should not appear in todo listing.",
+      kind: "handoff",
+      scope: "session",
+      sessionId: "session-review-1",
+      title: "Review handoff",
+      summary: "Handoff memory shares related wording but should not appear in todo listing.",
       tags: ["review"],
     });
 
@@ -146,7 +147,7 @@ test("listMemories finds legacy project records by projectId without a repoPath 
 
   try {
     const legacyProject = store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "project",
       projectId: "legacy-project",
       repoPath: "/old/repo-path-metadata",
@@ -156,7 +157,7 @@ test("listMemories finds legacy project records by projectId without a repoPath 
     });
 
     store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "project",
       projectId: "other-project",
       repoPath: "/old/repo-path-metadata",
@@ -166,7 +167,7 @@ test("listMemories finds legacy project records by projectId without a repoPath 
     });
 
     store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "repo",
       projectId: "legacy-project",
       repoPath: "/new/repo",
@@ -176,7 +177,7 @@ test("listMemories finds legacy project records by projectId without a repoPath 
     });
 
     const results = store.listMemories({
-      kind: ["decision"],
+      kind: ["todo"],
       scope: ["project"],
       projectId: "legacy-project",
       tags: ["legacy-project"],

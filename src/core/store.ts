@@ -193,10 +193,8 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
               pinned,
               created_at,
               updated_at,
-              expires_at,
-              stale_after,
               metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `).run(
             memory.id,
             memory.kind,
@@ -216,8 +214,6 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
             memory.pinned ? 1 : 0,
             memory.createdAt,
             memory.updatedAt,
-            memory.expiresAt ?? null,
-            memory.staleAfter ?? null,
             JSON.stringify(memory.metadata),
           );
 
@@ -549,18 +545,20 @@ function applyMigrations(db: DatabaseSync): void {
 
   if (pendingMigrations.length === 0) return;
 
-  db.exec("BEGIN IMMEDIATE;");
-
-  try {
-    for (const migration of pendingMigrations) {
+  for (const migration of pendingMigrations) {
+    const needsFkOff = migration.requiresFkOff === true;
+    if (needsFkOff) db.exec("PRAGMA foreign_keys = OFF;");
+    db.exec("BEGIN IMMEDIATE;");
+    try {
       db.exec(migration.sql);
       db.exec(`PRAGMA user_version = ${migration.version};`);
+      db.exec("COMMIT;");
+    } catch (error) {
+      db.exec("ROLLBACK;");
+      if (needsFkOff) db.exec("PRAGMA foreign_keys = ON;");
+      throw error;
     }
-
-    db.exec("COMMIT;");
-  } catch (error) {
-    db.exec("ROLLBACK;");
-    throw error;
+    if (needsFkOff) db.exec("PRAGMA foreign_keys = ON;");
   }
 }
 
@@ -592,8 +590,6 @@ function readMemoryById(db: DatabaseSync, id: string): MemoryRecord | null {
         created_at,
         updated_at,
         last_accessed_at,
-        expires_at,
-        stale_after,
         metadata_json
       FROM memories
       WHERE id = ?;`,
@@ -623,8 +619,6 @@ const MEMORY_SELECT_COLUMNS = `
   created_at,
   updated_at,
   last_accessed_at,
-  expires_at,
-  stale_after,
   metadata_json`;
 
 function buildMemoryWhere(
@@ -829,8 +823,6 @@ function writeMemoryRow(db: DatabaseSync, memory: MemoryRecord): void {
       status = ?,
       pinned = ?,
       updated_at = ?,
-      expires_at = ?,
-      stale_after = ?,
       metadata_json = ?
     WHERE id = ?;
   `).run(
@@ -850,8 +842,6 @@ function writeMemoryRow(db: DatabaseSync, memory: MemoryRecord): void {
     memory.status,
     memory.pinned ? 1 : 0,
     memory.updatedAt,
-    memory.expiresAt ?? null,
-    memory.staleAfter ?? null,
     JSON.stringify(memory.metadata),
     memory.id,
   );

@@ -12,6 +12,14 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.8] - 2026-05-13
+
+### Removed
+- Schema migration v8: reduced memory kinds from 8 to 2 (`todo`, `handoff`); existing records with removed kinds are migrated to kind-less memories; `kind` column is now nullable.
+- `memory_save` tool no longer accepts `kind` or `progress` parameters; kind assignment is reserved for dedicated tools (`memory_save_todo`, `memory_save_handoff`).
+- Removed all `expires_at` and `stale_after` column references from store and mapper layer; columns were dropped in v7 but store queries still referenced them, causing a runtime crash.
+
+
 ## [3.3.7] - 2026-05-13
 
 ### Removed

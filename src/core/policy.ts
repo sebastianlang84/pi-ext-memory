@@ -44,7 +44,7 @@ export function getEffectiveLifecycleScope(scope: MemoryScope): Exclude<MemorySc
  * Caps only apply to "todo" and "handoff" kinds.
  * The "session" scope falls back to "repo" caps.
  */
-export function getCapForKindScope(kind: MemoryKind, scope: MemoryScope): CapPolicy | null {
+export function getCapForKindScope(kind: MemoryKind | null | undefined, scope: MemoryScope): CapPolicy | null {
   const effectiveScope = getEffectiveLifecycleScope(scope);
   const scopePolicy = MEMORY_POLICY[effectiveScope];
 
@@ -78,11 +78,11 @@ export function computeDefaultExpiresAt(scope: MemoryScope, now: Date = new Date
 }
 
 export function applyMemoryLifecycleDefaults(memory: MemoryRecord, now: Date = new Date()): MemoryRecord {
-  if (memory.kind === "todo" && !memory.staleAfter) {
+  if ((memory.kind as string | null | undefined) === "todo" && !memory.staleAfter) {
     return { ...memory, staleAfter: computeDefaultStaleAfter(memory.scope, now) };
   }
 
-  if (memory.kind === "handoff" && !memory.expiresAt) {
+  if ((memory.kind as string | null | undefined) === "handoff" && !memory.expiresAt) {
     return { ...memory, expiresAt: computeDefaultExpiresAt(memory.scope, now) };
   }
 
@@ -90,7 +90,7 @@ export function applyMemoryLifecycleDefaults(memory: MemoryRecord, now: Date = n
 }
 
 export function buildActiveCapCountFilter(memory: Pick<MemoryRecord, "kind" | "scope" | "repoPath" | "projectId">): ActiveCapCountFilter | null {
-  if (!getCapForKindScope(memory.kind, memory.scope)) return null;
+  if (!memory.kind || !getCapForKindScope(memory.kind, memory.scope)) return null;
 
   return {
     kind: [memory.kind],
@@ -110,15 +110,15 @@ export function isMemoryExpired(memory: Pick<MemoryRecord, "expiresAt">, now: Da
 }
 
 export function isTodoStale(memory: Pick<MemoryRecord, "kind" | "status" | "staleAfter">, now: Date = new Date()): boolean {
-  return memory.kind === "todo" && memory.status === "active" && isMemoryPastStaleAfter(memory, now);
+  return (memory.kind as string | null | undefined) === "todo" && memory.status === "active" && isMemoryPastStaleAfter(memory, now);
 }
 
 export function isHandoffExpired(memory: Pick<MemoryRecord, "kind" | "status" | "expiresAt">, now: Date = new Date()): boolean {
-  return memory.kind === "handoff" && memory.status === "active" && isMemoryExpired(memory, now);
+  return (memory.kind as string | null | undefined) === "handoff" && memory.status === "active" && isMemoryExpired(memory, now);
 }
 
 export function isActiveUnexpiredHandoff(memory: Pick<MemoryRecord, "kind" | "status" | "expiresAt">, now: Date = new Date()): boolean {
-  if (memory.kind !== "handoff" || memory.status !== "active") return false;
+  if ((memory.kind as string | null | undefined) !== "handoff" || memory.status !== "active") return false;
   if (!memory.expiresAt) return true;
 
   const expiresAtMs = Date.parse(memory.expiresAt);
@@ -127,7 +127,7 @@ export function isActiveUnexpiredHandoff(memory: Pick<MemoryRecord, "kind" | "st
 }
 
 export function classifyLifecycleAuditFinding(memory: MemoryRecord, now: Date = new Date()): LifecycleAuditFinding | null {
-  if (isTodoStale(memory, now)) {
+  if (isTodoStale(memory as Pick<MemoryRecord, "kind" | "status" | "staleAfter">, now)) {
     return {
       type: "stale_todo",
       reason: `Todo stale: stale_after=${memory.staleAfter ?? "not set"} passed`,
@@ -135,7 +135,7 @@ export function classifyLifecycleAuditFinding(memory: MemoryRecord, now: Date = 
     };
   }
 
-  if (isHandoffExpired(memory, now)) {
+  if (isHandoffExpired(memory as Pick<MemoryRecord, "kind" | "status" | "expiresAt">, now)) {
     return {
       type: "expired_handoff",
       reason: `Handoff expired: expires_at=${memory.expiresAt ?? "not set"} passed`,

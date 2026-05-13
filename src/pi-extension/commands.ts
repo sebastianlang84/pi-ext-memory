@@ -16,7 +16,7 @@ import { formatMemoryStatus, getNextStatusWidgetLines } from "./status.ts";
 
 const MANUAL_SEARCH_RESULT_LIMIT = 8;
 const MANUAL_SEARCH_STAGE_LIMIT = 6;
-const MEMORY_REVIEW_QUERY = "decisions facts preferences todos risks next steps";
+const MEMORY_REVIEW_QUERY = "todos handoffs risks next steps context";
 const MEMORY_REVIEW_RESULT_LIMIT = 8;
 const MIN_SESSION_SUMMARY_LENGTH = 12;
 

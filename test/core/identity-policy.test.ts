@@ -57,7 +57,7 @@ test("identity policy enriches create input with runtime metadata without weaken
   assert.deepEqual(
     applyRuntimeIdentityEnrichment(
       {
-        kind: "decision",
+        kind: "todo",
         scope: "project",
         title: "Project decision",
         summary: "Project scoped memory should only derive project identity.",
@@ -65,7 +65,7 @@ test("identity policy enriches create input with runtime metadata without weaken
       context,
     ),
     {
-      kind: "decision",
+      kind: "todo",
       scope: "project",
       title: "Project decision",
       summary: "Project scoped memory should only derive project identity.",

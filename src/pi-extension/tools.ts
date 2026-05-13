@@ -26,10 +26,6 @@ import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.
 import { type AuditCandidate, buildHygieneLine, formatAuditResults, runMemoryAudit } from "./audit.ts";
 import { createToolShell } from "./tool-shell.ts";
 
-const MEMORY_SAVE_KINDS = MEMORY_KINDS.filter(
-  (kind): kind is Exclude<(typeof MEMORY_KINDS)[number], "handoff" | "todo"> =>
-    kind !== "handoff" && kind !== "todo",
-) as readonly Exclude<(typeof MEMORY_KINDS)[number], "handoff" | "todo">[];
 
 function normalizeOptionalArray<T>(value?: T | T[]): T[] | undefined {
   if (value === undefined) return undefined;
@@ -42,7 +38,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     name: "memory_search",
     label: "Memory Search",
     description: "Search memory content in the local pi-memory store using hybrid lexical + semantic retrieval and compact filters.",
-    promptSnippet: "Search local durable memory when automatic retrieved context is insufficient and prior decisions, facts, or todos may matter.",
+    promptSnippet: "Search local durable memory when automatic retrieved context is insufficient and prior decisions or todos may matter.",
     promptGuidelines: [
       "Use memory_search with compact, concrete queries.",
       "Use memory_search filters to narrow results when kind, scope, repo, session, tags, or a legacy projectId are known.",
@@ -50,7 +46,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     ],
     parameters: Type.Object({
       query: Type.String({ description: "Content search query" }),
-      kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS, { description: "Memory kind" }))),
+      kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS, { description: "Memory kind" }), { description: "Memory kind" })),
       scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }))),
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
       projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo memory" })),
@@ -138,17 +134,15 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Save",
     description: "Create a structured memory in the local pi-memory store.",
     promptSnippet:
-      "Save durable facts, preferences, decisions, notes, or progress snapshots when the user explicitly wants something remembered or when a stable reusable fact should persist. Use kind=progress_snapshot for repo/task status, current state, decisions, and next steps.",
+      "Save durable notes or context when the user explicitly wants something remembered or when a stable reusable note should persist.",
     promptGuidelines: [
-      "Use memory_save for durable facts, preferences, decisions, notes, and progress snapshots.",
-      "Use memory_save with kind=progress_snapshot for repo/task status, current state, completed steps, next steps, or decisions — not memory_save_handoff.",
+      "Use memory_save for durable notes and context that should persist across sessions.",
       "Do not use memory_save for actionable open work; use memory_save_todo for todos.",
       "Do not use memory_save for handoff state; use memory_save_handoff only when context will be lost and another agent must resume.",
       "Avoid low-information memory_save scratch notes.",
       "Always give memory_save a compact but informative summary.",
     ],
     parameters: Type.Object({
-      kind: StringEnum(MEMORY_SAVE_KINDS as unknown as [string, ...string[]], { description: "Memory kind — use progress_snapshot for repo/task status, current state, done steps, and next steps" }),
       scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Memory scope; defaults to repo inside a Git repo, otherwise global; project is legacy/advanced compatibility" })),
       title: Type.String({ description: "Short title for the memory" }),
       summary: Type.String({ description: "Compact summary with enough detail to be useful later" }),
@@ -156,33 +150,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       tags: Type.Optional(Type.Array(Type.String({ description: "Tag" }))),
       importance: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
       confidence: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
-      progress: Type.Optional(Type.Object({
-        goal: Type.Optional(Type.String({ description: "Overall goal or task being tracked" })),
-        currentState: Type.Optional(Type.String({ description: "Where things stand right now" })),
-        done: Type.Optional(Type.Array(Type.String({ description: "Completed step" }))),
-        nextSteps: Type.Optional(Type.Array(Type.String({ description: "Planned next step" }))),
-        decisions: Type.Optional(Type.Array(Type.String({ description: "Decision made" }))),
-        openQuestions: Type.Optional(Type.Array(Type.String({ description: "Open question" }))),
-        changedFiles: Type.Optional(Type.Array(Type.String({ description: "Relevant file path" }))),
-      }, { description: "Structured snapshot fields — use when kind=progress_snapshot" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
-
-      // Safety-net guards (schema already excludes these kinds, but belt-and-suspenders)
-      if ((params.kind as string) === "handoff") {
-        return {
-          content: [{ type: "text", text: `Use memory_save_handoff for handoffs so the active session handoff is updated instead of duplicated.\ndb_path: ${store.dbPath}` }],
-          details: { dbPath: store.dbPath },
-        };
-      }
-
-      if ((params.kind as string) === "todo") {
-        return {
-          content: [{ type: "text", text: `Use memory_save_todo for actionable open tasks so they get the correct schema and priority/scope fields.\ndb_path: ${store.dbPath}` }],
-          details: { dbPath: store.dbPath },
-        };
-      }
 
       const requestedScope = (params.scope ?? (turnContext.repoPath ? "repo" : "global")) as MemoryScope;
       const rawIdentityParams = params as typeof params & { sessionId?: string; projectId?: string; repoPath?: string };
@@ -201,6 +171,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         ...decorateCreateMemoryInput(
           {
             ...params,
+            kind: undefined,
             scope: requestedScope,
             sessionId: identity.sessionId,
             projectId: identity.projectId,
@@ -225,7 +196,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       "Save or refresh a handoff only when the current context will be lost and another agent or future session must resume execution — context reset, compaction, or agent transfer.",
     promptGuidelines: [
       "Use memory_save_handoff only when context will be lost and execution must be resumable by another agent or future session.",
-      "Do not use memory_save_handoff for repo/task status notes or progress snapshots — use memory_save with kind=progress_snapshot for those.",
+      "Do not use memory_save_handoff for repo/task status notes — use memory_save for those.",
       "Include goal, current state, and concrete next steps in memory_save_handoff.",
       "Mention changed files, decisions, blockers, verification, and avoid-repeating notes in memory_save_handoff when relevant.",
     ],
@@ -508,7 +479,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     description: "Save an actionable open task that should persist across sessions.",
     promptSnippet: "Save an actionable open task that should persist across sessions. Use memory_update to update an existing todo.",
     promptGuidelines: [
-      "Use memory_save_todo for actionable open work, not passive facts or decisions.",
+      "Use memory_save_todo for actionable open work, not passive notes or decisions.",
       "Include the next concrete action in memory_save_todo whenever possible.",
       "Use memory_save_todo with repo scope inside repositories to avoid global todo noise; project scope is legacy/advanced compatibility.",
       "Prefer memory_update for an existing active todo over creating a duplicate with memory_save_todo.",
@@ -730,10 +701,6 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       const kindStatuses: Array<{ kind: string; statuses: string[] }> = [
         { kind: "todo", statuses: ["active", "done", "archived"] },
         { kind: "handoff", statuses: ["active", "archived"] },
-        { kind: "decision", statuses: ["active", "archived", "superseded"] },
-        { kind: "fact", statuses: ["active", "archived", "superseded"] },
-        { kind: "episode", statuses: ["active", "archived"] },
-        { kind: "progress_snapshot", statuses: ["active", "archived"] },
       ];
 
       const counts: Record<string, Record<string, number>> = {};
@@ -893,7 +860,7 @@ function appendMarkdownList(lines: string[], heading: string, values?: string[])
 function formatMemorySaved(memory: MemoryRecord, store: MemoryStore): string {
   const lines = [
     `Saved memory ${memory.id}.`,
-    `kind: ${memory.kind}`,
+    `kind: ${memory.kind ?? "unset"}`,
     `scope: ${memory.scope}`,
     `title: ${memory.title}`,
     `summary: ${memory.summary}`,
@@ -1004,7 +971,8 @@ function formatMemoryListResults(memories: MemoryRecord[], dbPath: string): stri
 
 function formatMemoryListResultLine(index: number, memory: MemoryRecord): string {
   const tags = memory.tags.length > 0 ? ` tags=${memory.tags.join(",")}` : "";
-  return `${index}. [${memory.kind}/${memory.scope}/${memory.status}] ${memory.title} (${memory.id}) — ${memory.summary}${tags} updated=${memory.updatedAt}`;
+  const kindLabel = memory.kind ?? "memory";
+  return `${index}. [${kindLabel}/${memory.scope}/${memory.status}] ${memory.title} (${memory.id}) — ${memory.summary}${tags} updated=${memory.updatedAt}`;
 }
 
 function formatActiveList(kind: string, items: MemoryRecord[], totalCount: number, dbPath: string): string {

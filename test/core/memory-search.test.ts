@@ -18,7 +18,7 @@ test("searchMemories returns lexical matches for an exact term", () => {
 
   try {
     store.createMemory({
-      kind: "fact",
+      kind: "todo",
       scope: "repo",
       title: "SQLite lexical baseline",
       summary: "Lexical retrieval should find the exact token alphaindex42 during tests.",
@@ -26,7 +26,7 @@ test("searchMemories returns lexical matches for an exact term", () => {
     });
 
     store.createMemory({
-      kind: "fact",
+      kind: "todo",
       scope: "repo",
       title: "Embedding follow-up",
       summary: "This note is about semantic ranking and should not match the lexical token.",
@@ -37,7 +37,7 @@ test("searchMemories returns lexical matches for an exact term", () => {
 
     assert.equal(results.length, 1);
     assert.equal(results[0]?.title, "SQLite lexical baseline");
-    assert.equal(results[0]?.kind, "fact");
+    assert.equal(results[0]?.kind, "todo");
     assert.equal(results[0]?.scope, "repo");
   } finally {
     store.close();
@@ -50,17 +50,18 @@ test("searchMemories applies kind and scope filters", () => {
 
   try {
     store.createMemory({
-      kind: "decision",
-      scope: "project",
-      title: "Project ranking decision",
-      summary: "Rankingpilot should stay in the project retrieval path for the current plan.",
+      kind: "handoff",
+      scope: "session",
+      sessionId: "session-rank-1",
+      title: "Project ranking handoff",
+      summary: "Rankingpilot should stay in the session retrieval path for the current plan.",
       tags: ["ranking"],
     });
 
     store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "repo",
-      title: "Repo ranking decision",
+      title: "Repo ranking todo",
       summary: "Rankingpilot also appears in repo-scoped notes for another case.",
       tags: ["ranking"],
     });
@@ -75,14 +76,15 @@ test("searchMemories applies kind and scope filters", () => {
 
     const results = store.searchMemories({
       query: "rankingpilot",
-      kind: ["decision"],
-      scope: ["project"],
+      kind: ["handoff"],
+      scope: ["session"],
+      sessionId: "session-rank-1",
     });
 
     assert.equal(results.length, 1);
-    assert.equal(results[0]?.title, "Project ranking decision");
-    assert.equal(results[0]?.kind, "decision");
-    assert.equal(results[0]?.scope, "project");
+    assert.equal(results[0]?.title, "Project ranking handoff");
+    assert.equal(results[0]?.kind, "handoff");
+    assert.equal(results[0]?.scope, "session");
   } finally {
     store.close();
   }
@@ -94,7 +96,7 @@ test("searchMemories finds legacy project records by projectId without a repoPat
 
   try {
     const legacyProject = store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "project",
       projectId: "legacy-project",
       repoPath: "/old/repo-path-metadata",
@@ -104,7 +106,7 @@ test("searchMemories finds legacy project records by projectId without a repoPat
     });
 
     store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "project",
       projectId: "other-project",
       repoPath: "/old/repo-path-metadata",
@@ -114,7 +116,7 @@ test("searchMemories finds legacy project records by projectId without a repoPat
     });
 
     store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "repo",
       projectId: "legacy-project",
       repoPath: "/new/repo",
@@ -199,7 +201,7 @@ test("searchMemories can reuse a precomputed query embedding", () => {
 
   try {
     store.createMemory({
-      kind: "fact",
+      kind: "todo",
       scope: "global",
       title: "Reusable query embedding",
       summary: "Reusable query should be found without regenerating the query vector for each staged search.",

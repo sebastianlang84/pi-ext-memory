@@ -21,7 +21,7 @@ const now = new Date("2026-05-13T12:00:00.000Z");
 function memory(overrides: Partial<MemoryRecord> = {}): MemoryRecord {
   return {
     id: "memory-1",
-    kind: "fact",
+    kind: "todo",
     scope: "repo",
     title: "Test memory",
     summary: "Test memory summary with enough detail.",
@@ -56,7 +56,7 @@ test("active cap count filters keep lifecycle identity inputs in policy", () => 
     buildActiveCapCountFilter(memory({ kind: "handoff", scope: "session", sessionId: "session-1", repoPath: "/repo/a", projectId: "project-a" })),
     { kind: ["handoff"], scope: ["session"], status: "active", repoPath: "/repo/a", projectId: "project-a" },
   );
-  assert.equal(buildActiveCapCountFilter(memory({ kind: "fact" })), null);
+  assert.equal(buildActiveCapCountFilter(memory({ kind: undefined })), null);
 });
 
 test("lifecycle classification handles stale todos, expired handoffs, and invalid timestamps", () => {

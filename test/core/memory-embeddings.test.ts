@@ -25,7 +25,7 @@ test("createMemory stores a deterministic embedding with the default adapter fal
 
   try {
     const memory = store.createMemory({
-      kind: "fact",
+      kind: "todo",
       scope: "repo",
       title: "Embedding baseline",
       summary: "Store a deterministic embedding so hybrid retrieval can build on persisted vectors later.",
@@ -78,7 +78,7 @@ test("createMemory stores a command-produced embedding when PI_MEMORY_BGE_M3_COM
       [
         `import { initializeMemoryStore } from ${JSON.stringify(runnerPath)};`,
         `const store = initializeMemoryStore({ dbPath: ${JSON.stringify(dbPath)} });`,
-        `const memory = store.createMemory({ kind: "fact", scope: "repo", title: "BGE command", summary: "Read embeddings from a local command.", tags: ["bge", "test"] });`,
+        `const memory = store.createMemory({ kind: "todo", scope: "repo", title: "BGE command", summary: "Read embeddings from a local command.", tags: ["bge", "test"] });`,
         `const embedding = store.getMemoryEmbedding(memory.id);`,
         `console.log(JSON.stringify({ embedding, model: store.embeddingModel, dimensions: store.embeddingDimensions, strategy: store.embeddingStrategy }));`,
         `store.close();`,
@@ -138,7 +138,7 @@ test("createDefaultMemoryEmbeddingAdapter accepts env-free BGE-M3 command config
 
   try {
     const memory = store.createMemory({
-      kind: "fact",
+      kind: "todo",
       scope: "repo",
       title: "Injected BGE command",
       summary: "Use explicit config instead of mutating process.env.",
@@ -252,7 +252,7 @@ test("initializeMemoryStore accepts a custom embedding adapter for deterministic
 
   try {
     const memory = store.createMemory({
-      kind: "decision",
+      kind: "todo",
       scope: "project",
       title: "Use injected adapter",
       summary: "Allow deterministic embedding tests without binding the suite to one builtin profile.",

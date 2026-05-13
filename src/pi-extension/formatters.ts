@@ -73,7 +73,8 @@ export function formatSearchPlanStage(stage: SearchMemoriesInput): string {
 }
 
 export function formatMemorySearchResultLine(index: number, result: MemorySearchResult): string {
-  const metadata: string[] = [`${result.kind}/${result.scope}`];
+  const kindLabel = result.kind ?? "memory";
+  const metadata: string[] = [`${kindLabel}/${result.scope}`];
 
   if (result.tags.length > 0) {
     metadata.push(`tags=${result.tags.join(",")}`);
