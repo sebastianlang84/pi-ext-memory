@@ -22,7 +22,14 @@ import {
   getCapForKindScope,
 } from "../core/index.ts";
 import { formatMemorySearchResultLine } from "./formatters.ts";
+import { findLatestExactSessionHandoff, listRelevantActiveHandoffsForScope } from "./handoffs.ts";
 import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
+import {
+  formatIdentityError,
+  formatWithLegacyProjectScopeNotice,
+  resolveSingleScopeSearchIdentity,
+  resolveToolIdentity,
+} from "./tool-identity.ts";
 import { type AuditCandidate, buildHygieneLine, formatAuditResults, runMemoryAudit } from "./audit.ts";
 
 const MEMORY_SAVE_KINDS = MEMORY_KINDS.filter(
@@ -30,100 +37,9 @@ const MEMORY_SAVE_KINDS = MEMORY_KINDS.filter(
     kind !== "handoff" && kind !== "todo",
 ) as readonly Exclude<(typeof MEMORY_KINDS)[number], "handoff" | "todo">[];
 
-type ToolIdentityParams = {
-  scope: MemoryScope;
-  sessionId?: string;
-  projectId?: string;
-  repoPath?: string;
-};
-
-type ToolIdentityResult = {
-  sessionId?: string;
-  projectId?: string;
-  repoPath?: string;
-  error?: string;
-};
-
-const LEGACY_PROJECT_SCOPE_NOTICE = "notice: scope=project is legacy/advanced compatibility; prefer scope=repo with repoPath for normal repository memory.";
-
-function formatWithLegacyProjectScopeNotice(text: string, scope?: MemoryScope | MemoryScope[]): string {
-  const scopes = Array.isArray(scope) ? scope : scope ? [scope] : [];
-  return scopes.includes("project") ? `${LEGACY_PROJECT_SCOPE_NOTICE}\n${text}` : text;
-}
-
 function normalizeOptionalArray<T>(value?: T | T[]): T[] | undefined {
   if (value === undefined) return undefined;
   return Array.isArray(value) ? value : [value];
-}
-
-function resolveToolIdentity(
-  params: ToolIdentityParams,
-  context: ReturnType<typeof deriveMemoryTurnContext>,
-  options: { requirePrimary?: boolean } = {},
-): ToolIdentityResult {
-  const sessionId = params.sessionId?.trim() || context.sessionId.trim() || undefined;
-  const projectId = params.projectId?.trim() || context.projectId;
-  const repoPath = params.repoPath?.trim() || context.repoPath;
-
-  if (params.scope === "global") {
-    if (params.sessionId || params.projectId || params.repoPath) {
-      return { error: "scope=global does not accept sessionId, projectId, or repoPath. Remove scope identifiers or choose repo/session; scope=project is legacy compatibility only." };
-    }
-    return {};
-  }
-
-  if (params.scope === "repo") {
-    if (params.sessionId || params.projectId) {
-      return { error: "scope=repo uses repoPath as its primary identity. Remove sessionId and projectId; the runtime can keep metadata internally." };
-    }
-    if (options.requirePrimary && !repoPath) {
-      return { error: "scope=repo requires repoPath, but no repository path was provided or derivable from cwd." };
-    }
-    return { repoPath };
-  }
-
-  if (params.scope === "project") {
-    if (params.sessionId || params.repoPath) {
-      return { error: "legacy scope=project uses projectId as its primary identity. Remove sessionId and repoPath, or prefer scope=repo for normal repository memory." };
-    }
-    if (options.requirePrimary && !projectId) {
-      return { error: "legacy scope=project requires projectId. Prefer scope=repo for normal repository memory." };
-    }
-    return { projectId };
-  }
-
-  if (params.projectId || params.repoPath) {
-    return { error: "scope=session uses sessionId as its primary identity. Remove projectId and repoPath; runtime context is attached internally." };
-  }
-  if (options.requirePrimary && !sessionId) {
-    return { error: "scope=session requires sessionId, but no session id was provided or derivable from the active Pi session." };
-  }
-  return { sessionId };
-}
-
-function resolveSingleScopeSearchIdentity(
-  params: { scope?: MemoryScope[]; sessionId?: string; projectId?: string; repoPath?: string },
-  context: ReturnType<typeof deriveMemoryTurnContext>,
-): ToolIdentityResult {
-  if (!params.scope || params.scope.length === 0) {
-    if ([params.sessionId, params.projectId, params.repoPath].filter((value) => value !== undefined).length > 1) {
-      return { error: "sessionId, projectId, and repoPath filters cannot be combined without a single compatible scope." };
-    }
-    return { sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath };
-  }
-
-  if (params.scope.length !== 1) {
-    if ([params.sessionId, params.projectId, params.repoPath].filter((value) => value !== undefined).length > 1) {
-      return { error: "sessionId, projectId, and repoPath filters cannot be combined across multiple scopes." };
-    }
-    return { sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath };
-  }
-
-  return resolveToolIdentity({ scope: params.scope[0]!, sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath }, context, { requirePrimary: true });
-}
-
-function formatIdentityError(error: string, dbPath: string): string {
-  return `Invalid memory scope identity: ${error}\ndb_path: ${dbPath}`;
 }
 
 export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getActiveStore: (cwd: string) => MemoryStore): void {
@@ -383,13 +299,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       }
 
       const handoffInput = buildHandoffMemoryInput(params, turnContext);
-      const [existingHandoff] = activeStore.listAllInternal({
-        kind: ["handoff"],
-        scope: ["session"],
-        sessionId,
-        status: "active",
-        orderBy: "updatedAt",
-      }).slice(0, 1);
+      const existingHandoff = findLatestExactSessionHandoff(activeStore, sessionId);
 
       const memory = existingHandoff
         ? activeStore.updateMemory({
@@ -400,6 +310,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
             tags: handoffInput.tags,
             importance: handoffInput.importance,
             confidence: handoffInput.confidence,
+            expiresAt: handoffInput.expiresAt ?? computeDefaultExpiresAt("session"),
           })
         : activeStore.createMemory({ ...handoffInput, sourceAgent: "pi" });
 
@@ -854,19 +765,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
           details: { dbPath: activeStore.dbPath },
         };
       }
-      const relatedScopes: MemoryScope[] =
-        (scope === "repo" && identity.repoPath) || (scope === "project" && identity.projectId)
-          ? [scope, "session"]
-          : [scope];
-      const result = activeStore.listForTool({
-        kind: ["handoff"],
-        scope: relatedScopes,
-        status: "active",
+      const result = listRelevantActiveHandoffsForScope(activeStore, {
+        scope,
         sessionId: identity.sessionId,
         repoPath: identity.repoPath,
         projectId: identity.projectId,
         limit: 10,
-        offset: 0,
       });
       return {
         content: [{ type: "text", text: formatWithLegacyProjectScopeNotice(formatActiveList("handoffs", result.items, result.totalCount, activeStore.dbPath), scope) }],

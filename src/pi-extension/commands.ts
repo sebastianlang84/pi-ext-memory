@@ -3,6 +3,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { type MemoryCore, type MemoryRecord, type MemorySearchResult, type MemoryStore, type SearchMemoriesInput } from "../core/index.ts";
 import { formatAuditResults, runMemoryAudit } from "./audit.ts";
 import { ensureDefaultMemoryDbPath } from "./config.ts";
+import { findLatestExactSessionHandoff } from "./handoffs.ts";
 import { deriveMemoryTurnContext, findLatestHandoffForTurn, retrieveMemoriesForTurn } from "./retrieval.ts";
 import {
   formatMemoryReview,
@@ -135,7 +136,7 @@ export function registerMemoryCommands(pi: Pick<ExtensionAPI, "on" | "registerCo
           return;
         }
 
-        const current = findLatestSessionHandoff(activeStore, sessionId);
+        const current = findLatestExactSessionHandoff(activeStore, sessionId);
         if (!current) {
           writeCommandOutput("No active handoff found for the current session.", ctx);
           return;
@@ -218,17 +219,6 @@ function getStoreForCwd(core: MemoryCore, currentStore: MemoryStore | undefined,
 
   currentStore?.close();
   return core.initializeStore({ dbPath });
-}
-
-function findLatestSessionHandoff(store: MemoryStore, sessionId: string): MemoryRecord | undefined {
-  return store.listAllInternal({
-    kind: ["handoff"],
-    scope: ["session"],
-    sessionId,
-    status: "active",
-    orderBy: "updatedAt",
-    limit: 1,
-  })[0];
 }
 
 function formatMemoryHandoff(memory: MemoryRecord | undefined, dbPath: string, isFallback: boolean): string {

@@ -324,6 +324,115 @@ test("findLatestHandoffForTurn prefers exact session handoff before repo fallbac
   }
 });
 
+test("findLatestHandoffForTurn orders exact session before repo fallback before project fallback", () => {
+  const dbPath = join(createTempDir("pi-memory-handoff-order-"), "memory.sqlite");
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    const projectFallback = store.createMemory({
+      kind: "handoff",
+      scope: "project",
+      projectId: "@acme/api",
+      title: "Project fallback handoff",
+      summary: "Project fallback should lose to repo fallback when both are relevant.",
+    });
+    const repoFallback = store.createMemory({
+      kind: "handoff",
+      scope: "repo",
+      repoPath: "/repo",
+      title: "Repo fallback handoff",
+      summary: "Repo fallback should win before project fallback.",
+    });
+    const exact = store.createMemory({
+      kind: "handoff",
+      scope: "session",
+      sessionId: "session-789",
+      projectId: "@acme/api",
+      repoPath: "/repo",
+      title: "Exact session handoff",
+      summary: "Exact session handoff wins over all fallbacks.",
+    });
+
+    const context = { cwd: "/repo/packages/api", sessionId: "session-789", projectId: "@acme/api", repoPath: "/repo" };
+    assert.equal(findLatestHandoffForTurn(store, context)?.memory.id, exact.id);
+
+    store.archiveMemory({ id: exact.id });
+    assert.equal(findLatestHandoffForTurn(store, context)?.memory.id, repoFallback.id);
+
+    store.archiveMemory({ id: repoFallback.id });
+    assert.equal(findLatestHandoffForTurn(store, context)?.memory.id, projectFallback.id);
+  } finally {
+    store.close();
+  }
+});
+
+test("findLatestHandoffForTurn excludes expired active handoffs", () => {
+  const dbPath = join(createTempDir("pi-memory-handoff-expired-"), "memory.sqlite");
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    store.createMemory({
+      kind: "handoff",
+      scope: "session",
+      sessionId: "session-789",
+      repoPath: "/repo",
+      title: "Expired exact handoff",
+      summary: "Expired exact handoff must not be preloaded.",
+      expiresAt: "2000-01-01T00:00:00.000Z",
+    });
+    const fallback = store.createMemory({
+      kind: "handoff",
+      scope: "repo",
+      repoPath: "/repo",
+      title: "Unexpired repo handoff",
+      summary: "Unexpired repo fallback remains relevant.",
+      expiresAt: "2999-01-01T00:00:00.000Z",
+    });
+
+    const latest = findLatestHandoffForTurn(store, { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" });
+    assert.equal(latest?.memory.id, fallback.id);
+    assert.equal(latest?.isFallback, true);
+
+    store.archiveMemory({ id: fallback.id });
+    assert.equal(findLatestHandoffForTurn(store, { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" }), undefined);
+  } finally {
+    store.close();
+  }
+});
+
+test("fallback handoff preload warns agents not to overwrite it", () => {
+  const message = buildTurnMemoryMessage(
+    "continue",
+    [],
+    { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" },
+    "/db.sqlite",
+    [],
+    {
+      memory: {
+        id: "handoff-fallback",
+        kind: "handoff",
+        scope: "session",
+        sessionId: "other-session",
+        repoPath: "/repo",
+        title: "Fallback handoff",
+        summary: "Fallback handoff should be read-only unless explicit.",
+        tags: ["handoff"],
+        importance: 0.9,
+        confidence: 0.9,
+        status: "active",
+        pinned: false,
+        createdAt: "2026-05-08T12:00:00.000Z",
+        updatedAt: "2026-05-08T12:30:00.000Z",
+        metadata: {},
+      },
+      isFallback: true,
+    },
+  );
+
+  assert.ok(message);
+  assert.match(message.content, /from another matching session\/repo\/project; do not overwrite unless explicit/);
+});
+
 test("buildTurnMemoryMessage injects latest handoff before normal memories", () => {
   const handoff = {
     memory: {

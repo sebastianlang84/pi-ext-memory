@@ -3,26 +3,7 @@ import { type DatabaseSync } from "node:sqlite";
 import { type GeneratedMemoryEmbedding } from "./embeddings.ts";
 import { parseNumberArray, parseStringArray } from "./mappers.ts";
 import { type MemoryRecord, type MemorySearchResult, type NormalizedSearchMemoriesInput } from "./memories.ts";
-
-const SEARCH_CANDIDATE_MULTIPLIER = 5;
-const SEARCH_MIN_CANDIDATES = 10;
-const MIN_VECTOR_SIMILARITY = 0.15;
-
-const HYBRID_RANKING_WEIGHTS = {
-  lexical: 0.35,
-  semantic: 0.35,
-  scope: 0.1,
-  recency: 0.08,
-  importance: 0.07,
-  confidence: 0.05,
-} as const;
-
-const BASE_SCOPE_SCORES: Record<MemoryRecord["scope"], number> = {
-  global: 0.55,
-  project: 0.8,
-  repo: 0.72,
-  session: 0.48,
-};
+import { DEFAULT_HYBRID_RETRIEVAL_POLICY } from "./retrieval-policy.ts";
 
 interface MemorySearchBaseRow {
   id: string;
@@ -76,7 +57,7 @@ export function searchMemoryResults(
   input: NormalizedSearchMemoriesInput,
   queryEmbedding: GeneratedMemoryEmbedding,
 ): MemorySearchResult[] {
-  const candidateLimit = Math.max(input.limit * SEARCH_CANDIDATE_MULTIPLIER, SEARCH_MIN_CANDIDATES);
+  const candidateLimit = Math.max(input.limit * DEFAULT_HYBRID_RETRIEVAL_POLICY.candidateMultiplier, DEFAULT_HYBRID_RETRIEVAL_POLICY.minCandidates);
   const lexicalRows = searchLexicalMemoryRows(db, input, candidateLimit);
   const semanticRows = searchSemanticMemoryRows(db, input, queryEmbedding, candidateLimit);
 
@@ -158,7 +139,7 @@ function searchSemanticMemoryRows(
       const similarity = calculateCosineSimilarity(queryEmbedding.vector, parseNumberArray(row.vector_json));
       return similarity === undefined ? undefined : { ...row, semantic_score: similarity };
     })
-    .filter((row): row is SemanticMemorySearchRow => row !== undefined && row.semantic_score >= MIN_VECTOR_SIMILARITY)
+    .filter((row): row is SemanticMemorySearchRow => row !== undefined && row.semantic_score >= DEFAULT_HYBRID_RETRIEVAL_POLICY.minVectorSimilarity)
     .sort((left, right) => right.semantic_score - left.semantic_score)
     .slice(0, limit);
 }
@@ -283,7 +264,7 @@ function calculateScopeScore(
   candidate: Pick<RankedMemorySearchCandidate, "scope" | "projectId" | "repoPath">,
   input: NormalizedSearchMemoriesInput,
 ): number {
-  let score = BASE_SCOPE_SCORES[candidate.scope];
+  let score = DEFAULT_HYBRID_RETRIEVAL_POLICY.baseScopeScores[candidate.scope];
 
   if (input.scope?.includes(candidate.scope)) {
     score += 0.15;
@@ -316,12 +297,12 @@ function calculateHybridMatchScore(
   recencyScore: number,
 ): number {
   const score =
-    candidate.lexicalScore * HYBRID_RANKING_WEIGHTS.lexical +
-    candidate.semanticScore * HYBRID_RANKING_WEIGHTS.semantic +
-    scopeScore * HYBRID_RANKING_WEIGHTS.scope +
-    recencyScore * HYBRID_RANKING_WEIGHTS.recency +
-    candidate.importance * HYBRID_RANKING_WEIGHTS.importance +
-    candidate.confidence * HYBRID_RANKING_WEIGHTS.confidence;
+    candidate.lexicalScore * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.lexical +
+    candidate.semanticScore * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.semantic +
+    scopeScore * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.scope +
+    recencyScore * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.recency +
+    candidate.importance * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.importance +
+    candidate.confidence * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.confidence;
 
   return Number(score.toFixed(6));
 }

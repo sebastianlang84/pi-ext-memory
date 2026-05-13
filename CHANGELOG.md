@@ -12,6 +12,20 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.1] - 2026-05-13
+
+### Added
+- Added focused regression coverage for tool-facing scope identity validation, filtered audit previews, handoff relevance, and retrieval-quality ranking/deduplication.
+- Added dedicated scope identity, handoff relevance, and retrieval policy modules to improve locality and agent navigability without changing public tool names.
+
+### Fixed
+- Expired active handoffs are now excluded from turn-start handoff preload, `/memory-handoff archive` lookup, and `memory_list_active_handoffs` compatibility listings.
+- `memory_save_handoff` coverage now guards against overwriting fallback handoffs from another matching session.
+
+### Changed
+- Runtime status metadata now reports `v3.3.1`.
+- Archived the completed memory quality review fixing plan.
+
 ## [3.3.0] - 2026-05-13
 
 ### Added

@@ -16,13 +16,7 @@ No active release tasks; add new tasks here only when fresh work is accepted.
 
 ## Quality Reviews
 
-### [REVIEW] Architecture review with `improve-codebase-architecture`
-
-Run an architecture review using the `improve-codebase-architecture` skill after the current scope-identity follow-ups are stable. Focus on retrieval/memory quality, module boundaries, testability, and agent-navigability.
-
-### [REVIEW] TDD review with `tdd`
-
-Run a TDD/test-coverage review using the `tdd` skill. Focus on missing red/green coverage, regression gaps around scope identity, audit behavior, handoffs, and tool-facing validation.
+No active quality-review tasks. Add new entries here only when fresh review work is accepted.
 
 ## Open Design Issues
 

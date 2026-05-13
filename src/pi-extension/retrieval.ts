@@ -4,12 +4,12 @@ import { basename, dirname, join, resolve } from "node:path";
 import type {
   CreateMemoryInput,
   GeneratedMemoryEmbedding,
-  MemoryRecord,
   MemorySearchResult,
   MemoryStore,
   SearchMemoriesInput,
   SearchMemoriesOptions,
 } from "../core/index.ts";
+import { findLatestHandoffForTurn, type LatestHandoffResult } from "./handoffs.ts";
 
 const PROJECT_MARKER_FILES = [
   "package.json",
@@ -141,67 +141,6 @@ export function buildTurnSearchPlan(
 type StagedMemorySearchStore = Pick<MemoryStore, "searchMemories"> & {
   createSearchQueryEmbedding?: (query: string) => GeneratedMemoryEmbedding;
 };
-
-type LatestHandoffStore = Pick<MemoryStore, "listAllInternal">;
-
-export interface LatestHandoffResult {
-  memory: MemoryRecord;
-  isFallback: boolean;
-}
-
-export function findLatestHandoffForTurn(store: LatestHandoffStore, context: MemoryTurnContext): LatestHandoffResult | undefined {
-  const sessionId = context.sessionId.trim();
-
-  if (sessionId.length > 0) {
-    const sessionHandoffs = store.listAllInternal({
-      kind: ["handoff"],
-      scope: ["session"],
-      sessionId,
-      status: "active",
-      orderBy: "updatedAt",
-      limit: 1,
-    });
-    const sessionHandoff = sessionHandoffs[0];
-
-    if (sessionHandoff) {
-      return { memory: sessionHandoff, isFallback: false };
-    }
-  }
-
-  if (context.repoPath) {
-    const repoHandoffs = store.listAllInternal({
-      kind: ["handoff"],
-      scope: ["repo", "session"],
-      repoPath: context.repoPath,
-      status: "active",
-      orderBy: "updatedAt",
-      limit: 1,
-    });
-    const repoHandoff = repoHandoffs[0];
-
-    if (repoHandoff) {
-      return { memory: repoHandoff, isFallback: true };
-    }
-  }
-
-  if (context.projectId) {
-    const projectHandoffs = store.listAllInternal({
-      kind: ["handoff"],
-      scope: ["project", "session"],
-      projectId: context.projectId,
-      status: "active",
-      orderBy: "updatedAt",
-      limit: 1,
-    });
-    const projectHandoff = projectHandoffs[0];
-
-    if (projectHandoff) {
-      return { memory: projectHandoff, isFallback: true };
-    }
-  }
-
-  return undefined;
-}
 
 export function retrieveMemoriesForTurn(
   store: StagedMemorySearchStore,
@@ -401,4 +340,5 @@ function readProjectId(projectPath: string): string {
   return basename(projectPath);
 }
 
-export { MEMORY_CONTEXT_CUSTOM_TYPE, TURN_MEMORY_RESULT_LIMIT };
+export { findLatestHandoffForTurn, MEMORY_CONTEXT_CUSTOM_TYPE, TURN_MEMORY_RESULT_LIMIT };
+export type { LatestHandoffResult } from "./handoffs.ts";

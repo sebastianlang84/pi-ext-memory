@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v3.3.0",
+        version: "v3.3.1",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
@@ -39,7 +39,7 @@ export function createMemoryCore(): MemoryCore {
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save", "/memory-audit"],
         availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit", "memory_list_active_todos", "memory_list_active_handoffs", "memory_stats"],
-        nextStep: "V3.3.0 keeps a smaller normal tool path: memory_list for structured listings and memory_update for archiving; specialized wrappers remain compatibility/admin tools.",
+        nextStep: "V3.3.1 hardens memory quality seams, identity validation coverage, handoff relevance, and retrieval policy locality while keeping the normal tool path stable.",
       };
     },
     initializeStore(input) {

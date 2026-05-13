@@ -66,3 +66,5 @@ export {
   getCapForKindScope,
 } from "./policy.ts";
 export type { CapPolicy } from "./policy.ts";
+export { DEFAULT_HYBRID_RETRIEVAL_POLICY } from "./retrieval-policy.ts";
+export type { HybridRetrievalPolicy } from "./retrieval-policy.ts";

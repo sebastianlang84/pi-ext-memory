@@ -81,6 +81,92 @@ test("memory audit builds read-only migration preview for legacy project records
   }
 });
 
+test("memory audit filters project migration preview by scope and repoPath", () => {
+  const { dbPath, tempRoot } = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    store.createMemory({
+      kind: "decision",
+      scope: "project",
+      projectId: "legacy-a",
+      repoPath: "/repo/a",
+      title: "Legacy repo A",
+      summary: "Legacy project record for repository A should appear only in repo A audits.",
+    });
+    store.createMemory({
+      kind: "decision",
+      scope: "project",
+      projectId: "legacy-b",
+      repoPath: "/repo/b",
+      title: "Legacy repo B",
+      summary: "Legacy project record for repository B should be excluded by repo A filter.",
+    });
+
+    const repoScopeSummary = runMemoryAuditFull(store, ["repo"]);
+    assert.equal(repoScopeSummary.projectMigrationPreviewCount, 0);
+    assert.deepEqual(repoScopeSummary.projectMigrationPreview, []);
+
+    const repoAProjectSummary = runMemoryAuditFull(store, ["project"], "/repo/a");
+    assert.equal(repoAProjectSummary.projectMigrationPreviewCount, 1);
+    assert.equal(repoAProjectSummary.projectMigrationPreview[0]?.title, "Legacy repo A");
+  } finally {
+    store.close();
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("formatAuditResults keeps migration preview read-only with mixed findings", () => {
+  const output = formatAuditResults(
+    [
+      {
+        id: "todo-1",
+        title: "Stale todo",
+        kind: "todo",
+        tags: ["todo"],
+        updatedAt: "2026-05-01T00:00:00.000Z",
+        scope: "repo",
+        reason: "Todo stale",
+        suggestedAction: "Review stale todo",
+      },
+    ],
+    [],
+    "/tmp/memory.sqlite",
+    [
+      {
+        id: "bad-1",
+        title: "Bad identity",
+        kind: "fact",
+        tags: [],
+        updatedAt: "2026-05-01T00:00:00.000Z",
+        scope: "repo",
+        reason: "scope=repo is missing primary identity repoPath",
+        suggestedAction: "Review identity",
+      },
+    ],
+    [
+      {
+        id: "legacy-1",
+        title: "Legacy project",
+        kind: "decision",
+        tags: [],
+        updatedAt: "2026-05-01T00:00:00.000Z",
+        scope: "project",
+        projectId: "legacy",
+        repoPath: "/repo/a",
+        recommendation: "repo",
+        reason: "Legacy project record carries repoPath metadata",
+        suggestedAction: "Preview only; no write performed",
+      },
+    ],
+  );
+
+  assert.match(output, /Stale todos \(1\):/);
+  assert.match(output, /Identity violations \(1\):/);
+  assert.match(output, /Project migration preview \(1, read-only\):/);
+  assert.match(output, /Preview only; no write performed/);
+});
+
 test("memory audit reports active scope identity violations", () => {
   const { dbPath, tempRoot } = createTempDbPath();
   const store = initializeMemoryStore({ dbPath });

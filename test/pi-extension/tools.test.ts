@@ -195,6 +195,15 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     sessionId: projectContext.sessionId,
     sourceAgent: "pi",
   });
+  const existingHandoff = createMemory({
+    id: "memory-saved",
+    kind: "handoff",
+    scope: "session",
+    projectId: projectContext.projectId,
+    repoPath: projectContext.cwd,
+    sessionId: projectContext.sessionId,
+    sourceAgent: "pi",
+  });
   const updatedMemory = createMemory({ id: "memory-updated", title: "Updated title", pinned: true });
   const archivedMemory = createMemory({
     id: "memory-archived",
@@ -225,7 +234,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       return { items: [savedMemory], totalCount: 1, hasMore: false, nextOffset: null };
     },
     listAllInternal(filter?: Partial<NormalizedListMemoriesInput>) {
-      return [savedMemory];
+      return filter?.kind?.includes("handoff") ? [existingHandoff] : [savedMemory];
     },
     count() {
       return 0;
@@ -383,6 +392,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       tags: ["handoff", "context_reset", "next_agent"],
       importance: 0.9,
       confidence: 0.9,
+      expiresAt: calls.update[0]?.expiresAt,
     },
     { id: "memory-saved", title: "Updated title", pinned: true },
   ]);
@@ -511,15 +521,143 @@ test("memory_list_active_handoffs returns session handoffs for matching repo met
   assert.deepEqual(output.details.items, [handoff]);
 });
 
+test("memory_list_active_handoffs excludes expired handoffs", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
+  t.after(() => { store.close(); });
+  store.createMemory({
+    kind: "handoff",
+    scope: "session",
+    sessionId: "old-session",
+    repoPath: projectContext.cwd,
+    title: "Expired handoff",
+    summary: "Expired handoff should not be returned by active handoff lists.",
+    expiresAt: "2000-01-01T00:00:00.000Z",
+  });
+  const active = store.createMemory({
+    kind: "handoff",
+    scope: "session",
+    sessionId: "new-session",
+    repoPath: projectContext.cwd,
+    title: "Active handoff",
+    summary: "Unexpired handoff should remain visible in active handoff lists.",
+    expiresAt: "2999-01-01T00:00:00.000Z",
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_list_active_handoffs").execute(
+    "call-repo-handoffs",
+    { scope: "repo", repoPath: projectContext.cwd },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.deepEqual(output.details.items, [active]);
+  assert.equal(output.details.total_count, 1);
+  assert.match(output.content[0].text, /Active handoff/);
+  assert.doesNotMatch(output.content[0].text, /Expired handoff/);
+});
+
+test("memory_save_handoff updates only the current session handoff", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
+  t.after(() => { store.close(); });
+  const fallback = store.createMemory({
+    kind: "handoff",
+    scope: "session",
+    sessionId: "previous-session",
+    projectId: projectContext.projectId,
+    repoPath: projectContext.cwd,
+    title: "Previous session handoff",
+    summary: "Fallback handoff must not be overwritten by current session save.",
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  const params = {
+    handoffReason: "context_reset",
+    resumeInstruction: "Continue current session work",
+    goal: "Protect current handoff save",
+    currentState: "First current-session save.",
+    nextSteps: ["Save again to update current session only"],
+  };
+
+  const first = await toolByName(tools, "memory_save_handoff").execute("call-handoff-first", params, signal, () => undefined, ctx);
+  const currentId = (first.details.memory as MemoryRecord).id;
+  const second = await toolByName(tools, "memory_save_handoff").execute(
+    "call-handoff-second",
+    { ...params, currentState: "Second current-session save." },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.equal((second.details.memory as MemoryRecord).id, currentId);
+  assert.equal(store.getMemory(fallback.id)?.summary, "Fallback handoff must not be overwritten by current session save.");
+  assert.equal(store.getMemory(currentId)?.summary, "Second current-session save.");
+});
+
+test("memory_save_handoff does not update an expired current-session handoff", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
+  t.after(() => { store.close(); });
+  const expired = store.createMemory({
+    kind: "handoff",
+    scope: "session",
+    sessionId: projectContext.sessionId,
+    projectId: projectContext.projectId,
+    repoPath: projectContext.cwd,
+    title: "Expired current handoff",
+    summary: "Expired current handoff must remain unchanged.",
+    expiresAt: "2000-01-01T00:00:00.000Z",
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_save_handoff").execute(
+    "call-handoff-expired",
+    {
+      handoffReason: "context_reset",
+      resumeInstruction: "Continue with fresh handoff",
+      goal: "Replace expired handoff",
+      currentState: "Fresh current-session handoff.",
+      nextSteps: ["Verify expired handoff was not overwritten"],
+    },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  const saved = output.details.memory as MemoryRecord;
+  assert.notEqual(saved.id, expired.id);
+  assert.equal(store.getMemory(expired.id)?.summary, "Expired current handoff must remain unchanged.");
+  assert.equal(store.getMemory(saved.id)?.summary, "Fresh current-session handoff.");
+});
+
 test("memory_list_active_handoffs widens repo and project lookups to matching session handoffs", async (t) => {
   const projectContext = await createTempPiToolContext();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
 
-  const calls: Array<Partial<NormalizedListMemoriesInput> & { offset?: number }> = [];
+  const calls: Array<Partial<NormalizedListMemoriesInput>> = [];
   const store = createMinimalStore({
-    listForTool(filter: Partial<NormalizedListMemoriesInput> & { offset?: number }): ListForToolResult {
-      calls.push(filter);
-      return { items: [], totalCount: 0, hasMore: false, nextOffset: null };
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      calls.push(filter ?? {});
+      return [];
     },
   });
 
@@ -539,9 +677,9 @@ test("memory_list_active_handoffs widens repo and project lookups to matching se
   await handoffs.execute("call-session-handoffs", { scope: "session" }, signal, () => undefined, ctx);
 
   assert.deepEqual(calls, [
-    { kind: ["handoff"], scope: ["repo", "session"], status: "active", sessionId: undefined, repoPath: projectContext.cwd, projectId: undefined, limit: 10, offset: 0 },
-    { kind: ["handoff"], scope: ["project", "session"], status: "active", sessionId: undefined, repoPath: undefined, projectId: projectContext.projectId, limit: 10, offset: 0 },
-    { kind: ["handoff"], scope: ["session"], status: "active", sessionId: projectContext.sessionId, repoPath: undefined, projectId: undefined, limit: 10, offset: 0 },
+    { kind: ["handoff"], scope: ["repo", "session"], status: "active", sessionId: undefined, repoPath: projectContext.cwd, projectId: undefined, orderBy: "updatedAt" },
+    { kind: ["handoff"], scope: ["project", "session"], status: "active", sessionId: undefined, repoPath: undefined, projectId: projectContext.projectId, orderBy: "updatedAt" },
+    { kind: ["handoff"], scope: ["session"], status: "active", sessionId: projectContext.sessionId, repoPath: undefined, projectId: undefined, orderBy: "updatedAt" },
   ]);
 });
 
@@ -980,6 +1118,107 @@ test("memory_save warns but accepts explicit legacy project scope", async (t) =>
   assert.equal(capturedCreates[0]?.projectId, projectContext.projectId);
   assert.match(output.content[0].text, /^notice: scope=project is legacy\/advanced compatibility/);
   assert.match(output.content[0].text, /Saved memory saved-project\./);
+});
+
+test("public tools consistently reject contradictory scope identity filters", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const capturedSearches: SearchMemoriesInput[] = [];
+  const capturedCreates: CreateMemoryInput[] = [];
+  const capturedCounts: Array<Record<string, unknown>> = [];
+  const store = createMinimalStore({
+    createMemory(input: CreateMemoryInput) {
+      capturedCreates.push(input);
+      return { ...createMemory({ id: "created", scope: input.scope, projectId: input.projectId, repoPath: input.repoPath, sessionId: input.sessionId }), tags: input.tags ?? [] };
+    },
+  });
+  store.searchMemories = (input: SearchMemoriesInput) => {
+    capturedSearches.push(input);
+    return [];
+  };
+  store.count = (filter?: Record<string, unknown>) => {
+    capturedCounts.push(filter ?? {});
+    return 0;
+  };
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+
+  const invalidTodo = await toolByName(tools, "memory_save_todo").execute(
+    "call-invalid-todo",
+    { title: "Bad todo", scope: "repo", projectId: "manual-project" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  const invalidList = await toolByName(tools, "memory_list").execute(
+    "call-invalid-list",
+    { scope: "session", repoPath: projectContext.cwd },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  const invalidTodos = await toolByName(tools, "memory_list_active_todos").execute(
+    "call-invalid-active-todos",
+    { scope: "global", repoPath: projectContext.cwd },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  const invalidHandoffs = await toolByName(tools, "memory_list_active_handoffs").execute(
+    "call-invalid-handoffs",
+    { scope: "project", repoPath: projectContext.cwd },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  const invalidStats = await toolByName(tools, "memory_stats").execute(
+    "call-invalid-stats",
+    { scope: "repo", projectId: "manual-project" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  const invalidSearch = await toolByName(tools, "memory_search").execute(
+    "call-invalid-search",
+    { query: "identity", repoPath: projectContext.cwd, projectId: projectContext.projectId },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.match(invalidTodo.content[0].text, /Invalid memory scope identity/);
+  assert.match(invalidTodo.content[0].text, /scope=repo uses repoPath/);
+  assert.match(invalidList.content[0].text, /scope=session uses sessionId/);
+  assert.match(invalidTodos.content[0].text, /scope=global does not accept/);
+  assert.match(invalidHandoffs.content[0].text, /legacy scope=project uses projectId/);
+  assert.match(invalidStats.content[0].text, /scope=repo uses repoPath/);
+  assert.match(invalidSearch.content[0].text, /cannot be combined without a single compatible scope/);
+
+  const validHandoffs = await toolByName(tools, "memory_list_active_handoffs").execute(
+    "call-valid-handoffs",
+    { scope: "project", projectId: projectContext.projectId },
+    signal,
+    () => undefined,
+    ctx,
+  );
+  await toolByName(tools, "memory_stats").execute("call-valid-stats", { scope: "repo" }, signal, () => undefined, ctx);
+  await toolByName(tools, "memory_search").execute(
+    "call-valid-search",
+    { query: "identity", repoPath: projectContext.cwd },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.match(validHandoffs.content[0].text, /^notice: scope=project is legacy\/advanced compatibility/);
+  assert.ok(capturedCounts.some((filter) => Array.isArray(filter.scope) && filter.scope[0] === "repo" && filter.repoPath === projectContext.cwd));
+  assert.deepEqual(capturedSearches.at(-1), { query: "identity", repoPath: projectContext.cwd, sessionId: undefined, projectId: undefined });
+  assert.deepEqual(capturedCreates, []);
 });
 
 test("memory_update derives primary identity when changing to repo scope", async (t) => {

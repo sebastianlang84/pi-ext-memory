@@ -63,7 +63,7 @@ Inside a Git repository, ordinary saves and todos default to `repo`; outside a r
 | global | 20 | 5 | 30 days | 14 days |
 | legacy project | 50 | 10 | 30 days | 14 days |
 
-Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup suggestions. Archive or complete existing todos/handoffs first.
+Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup suggestions. Archive or complete existing todos/handoffs first. Expired active handoffs are excluded from turn-start preload and active handoff listings.
 
 Optional configuration:
 

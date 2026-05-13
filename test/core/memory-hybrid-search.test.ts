@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  DEFAULT_HYBRID_RETRIEVAL_POLICY,
   initializeMemoryStore,
   type MemoryContentForEmbedding,
   type MemoryEmbeddingAdapter,
@@ -200,6 +201,76 @@ test("searchMemories uses recency to break semantic ties for mixed-language vect
     assert.equal(results[0]?.title, "Neuere Ruecknahme Notiz");
     assert.ok((results[0]?.recencyScore ?? 0) > (results[1]?.recencyScore ?? 0));
     assert.equal(results[0]?.semanticScore, results[1]?.semanticScore);
+  } finally {
+    store.close();
+  }
+});
+
+test("searchMemories keeps repo-filtered lexical hits ahead of unrelated global semantic matches", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: createMockHybridEmbeddingAdapter() });
+
+  try {
+    const repoHit = store.createMemory({
+      kind: "fact",
+      scope: "repo",
+      repoPath: "/repo/a",
+      title: "Cache rollout exact procedure",
+      summary: "Cache rollout exactneedle for the repository should win when repoPath is filtered.",
+      tags: ["cache"],
+    });
+    store.createMemory({
+      kind: "fact",
+      scope: "global",
+      title: "Global cache guidance",
+      summary: "General quickstart cache guidance unrelated to a repository-specific query.",
+      tags: ["cache"],
+      importance: 1,
+      confidence: 1,
+    });
+
+    const results = store.searchMemories({ query: "exactneedle cache", repoPath: "/repo/a", limit: 5 });
+
+    assert.equal(results[0]?.id, repoHit.id);
+    assert.ok(results.every((result) => result.repoPath === "/repo/a"));
+    assert.ok(DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.lexical > 0);
+  } finally {
+    store.close();
+  }
+});
+
+test("searchMemories near-duplicate suppression keeps actionable todos with different next actions", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: createMockHybridEmbeddingAdapter() });
+
+  try {
+    store.createMemory({
+      kind: "todo",
+      scope: "repo",
+      repoPath: "/repo/a",
+      title: "Cache rollout follow-up",
+      summary: "[P1] Validate cache rollout for quickstart → Check staging logs",
+      tags: ["todo", "cache", "P1"],
+    });
+    store.createMemory({
+      kind: "todo",
+      scope: "repo",
+      repoPath: "/repo/a",
+      title: "Cache rollout follow-up",
+      summary: "[P1] Validate cache rollout for quickstart → Notify release owner",
+      tags: ["todo", "cache", "P1"],
+    });
+
+    const results = store.searchMemories({ query: "cache rollout quickstart", kind: ["todo"], repoPath: "/repo/a", limit: 5 });
+
+    assert.equal(results.length, 2);
+    assert.deepEqual(
+      results.map((result) => result.summary).sort(),
+      [
+        "[P1] Validate cache rollout for quickstart → Check staging logs",
+        "[P1] Validate cache rollout for quickstart → Notify release owner",
+      ],
+    );
   } finally {
     store.close();
   }
