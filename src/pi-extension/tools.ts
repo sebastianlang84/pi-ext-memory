@@ -1,5 +1,3 @@
-import { hostname } from "node:os";
-
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { Type } from "typebox";
@@ -9,18 +7,23 @@ import {
   MEMORY_LIST_ORDER_BY,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
-  type ListForToolResult,
   type MemoryKind,
-  type MemoryRecord,
   type MemoryScope,
-  type MemorySearchResult,
   type MemoryStore,
   getCapForKindScope,
 } from "../core/index.ts";
-import { formatMemorySearchResultLine } from "./formatters.ts";
+import {
+  buildHandoffMemoryInput,
+  buildTodoSummary,
+  formatListResult,
+  formatMemoryArchived,
+  formatMemorySearchResults,
+  formatMemorySaved,
+  formatMemoryUpdated,
+} from "./formatters.ts";
 import { findLatestExactSessionHandoff } from "./handoffs.ts";
-import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
-import { type AuditCandidate, buildHygieneLine, formatAuditResults, runMemoryAudit } from "./audit.ts";
+import { decorateCreateMemoryInput } from "./retrieval.ts";
+import { formatAuditResults, runMemoryAudit } from "./audit.ts";
 import { createToolShell } from "./tool-shell.ts";
 
 
@@ -618,246 +621,4 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     },
   });
 }
-
-type TodoSaveParams = {
-  title: string;
-  description?: string;
-  priority?: "P0" | "P1" | "P2";
-  status?: "open" | "in_progress" | "blocked";
-  nextAction?: string;
-};
-
-function buildTodoSummary(params: TodoSaveParams): string {
-  const parts: string[] = [];
-  if (params.priority) parts.push(`[${params.priority}]`);
-  if (params.status && params.status !== "open") parts.push(`[${params.status}]`);
-  parts.push(params.description?.trim() || params.title.trim());
-  if (params.nextAction) parts.push(`→ ${params.nextAction.trim()}`);
-  return parts.join(" ");
-}
-
-type HandoffSaveParams = {
-  title?: string;
-  handoffReason: "context_reset" | "agent_transfer" | "compaction" | "session_end";
-  recipient?: "same_agent" | "next_agent" | "human";
-  resumeInstruction: string;
-  goal: string;
-  currentState: string;
-  nextSteps: string[];
-  done?: string[];
-  changedFiles?: string[];
-  decisions?: string[];
-  blockers?: string[];
-  openQuestions?: string[];
-  verification?: string[];
-  risks?: string[];
-  avoidRepeating?: string[];
-};
-
-type HandoffTurnContext = ReturnType<typeof deriveMemoryTurnContext>;
-
-function buildHandoffMemoryInput(params: HandoffSaveParams, context: HandoffTurnContext) {
-  const reason = params.handoffReason;
-  const title = params.title?.trim() || `Handoff: ${params.goal.trim().slice(0, 80)}`;
-  const body = renderHandoffMarkdown(params, context, reason, title);
-
-  return decorateCreateMemoryInput(
-    {
-      kind: "handoff",
-      scope: "session",
-      title,
-      summary: params.currentState.trim(),
-      body,
-      tags: ["handoff", reason, ...(params.recipient ? [params.recipient] : [])],
-      importance: 0.9,
-      confidence: 0.9,
-      metadata: {
-        handoff: {
-          reason,
-          recipient: params.recipient ?? "next_agent",
-          resumeInstruction: params.resumeInstruction,
-          pid: process.pid,
-          hostname: hostname(),
-          cwd: context.cwd,
-          savedAt: new Date().toISOString(),
-        },
-      },
-    },
-    context,
-  );
-}
-
-function renderHandoffMarkdown(params: HandoffSaveParams, context: HandoffTurnContext, reason: string, title: string): string {
-  const lines = [
-    `# ${title}`,
-    "",
-    `Reason: ${reason}`,
-    `Recipient: ${params.recipient ?? "next_agent"}`,
-    `Resume: ${params.resumeInstruction.trim()}`,
-    `Session: ${context.sessionId}`,
-    `Project: ${context.projectId ?? "none"}`,
-    `Repo: ${context.repoPath ?? "none"}`,
-    `CWD: ${context.cwd}`,
-    `PID: ${process.pid}`,
-    `Host: ${hostname()}`,
-    "",
-    "## Goal",
-    params.goal.trim(),
-    "",
-    "## Current state",
-    params.currentState.trim(),
-  ];
-
-  appendMarkdownList(lines, "Done", params.done);
-  appendMarkdownList(lines, "Changed files", params.changedFiles);
-  appendMarkdownList(lines, "Decisions", params.decisions);
-  appendMarkdownList(lines, "Blockers", params.blockers);
-  appendMarkdownList(lines, "Open questions", params.openQuestions);
-  appendMarkdownList(lines, "Next steps", params.nextSteps);
-  appendMarkdownList(lines, "Verification", params.verification);
-  appendMarkdownList(lines, "Risks", params.risks);
-  appendMarkdownList(lines, "Avoid repeating", params.avoidRepeating);
-
-  return lines.join("\n");
-}
-
-function appendMarkdownList(lines: string[], heading: string, values?: string[]): void {
-  const cleaned = values?.map((value) => value.trim()).filter(Boolean) ?? [];
-  if (cleaned.length === 0) return;
-
-  lines.push("", `## ${heading}`, ...cleaned.map((value) => `- ${value}`));
-}
-
-function formatMemorySaved(memory: MemoryRecord, store: MemoryStore): string {
-  const lines = [
-    `Saved memory ${memory.id}.`,
-    `kind: ${memory.kind ?? "unset"}`,
-    `scope: ${memory.scope}`,
-    `title: ${memory.title}`,
-    `summary: ${memory.summary}`,
-    `tags: ${memory.tags.join(", ") || "none"}`,
-  ];
-
-  if (memory.sessionId) {
-    lines.push(`session_id: ${memory.sessionId}`);
-  }
-
-  if (memory.projectId) {
-    lines.push(`project_id: ${memory.projectId}`);
-  }
-
-  if (memory.repoPath) {
-    lines.push(`repo_path: ${memory.repoPath}`);
-  }
-
-  lines.push(
-    `embedding_model: ${store.embeddingModel}`,
-    `embedding_dimensions: ${store.embeddingDimensions}`,
-    `db_path: ${store.dbPath}`,
-  );
-
-  return lines.join("\n");
-}
-
-function formatMemoryUpdated(memory: MemoryRecord, store: MemoryStore): string {
-  const lines = [
-    `Updated memory ${memory.id}.`,
-    `status: ${memory.status}`,
-    `pinned: ${memory.pinned ? "yes" : "no"}`,
-    `title: ${memory.title}`,
-    `summary: ${memory.summary}`,
-    `tags: ${memory.tags.join(", ") || "none"}`,
-    `updated_at: ${memory.updatedAt}`,
-    `db_path: ${store.dbPath}`,
-  ];
-
-  return lines.join("\n");
-}
-
-function formatMemoryArchived(memory: MemoryRecord, dbPath: string): string {
-  const archiveMetadata =
-    typeof memory.metadata.archive === "object" && memory.metadata.archive !== null && !Array.isArray(memory.metadata.archive)
-      ? (memory.metadata.archive as Record<string, unknown>)
-      : undefined;
-
-  const lines = [
-    `Archived memory ${memory.id}.`,
-    `status: ${memory.status}`,
-    `title: ${memory.title}`,
-    `updated_at: ${memory.updatedAt}`,
-  ];
-
-  if (typeof archiveMetadata?.archivedReason === "string") {
-    lines.push(`reason: ${archiveMetadata.archivedReason}`);
-  }
-
-  lines.push(`db_path: ${dbPath}`);
-  return lines.join("\n");
-}
-
-function formatListResult(result: ListForToolResult, dbPath: string): string {
-  const { items, totalCount, hasMore, nextOffset } = result;
-  if (items.length === 0) {
-    return [`No memories matched the list filters.`, `total_count: ${totalCount}`, `db_path: ${dbPath}`].join("\n");
-  }
-
-  const lines = [
-    `Found ${items.length} of ${totalCount} memor${totalCount === 1 ? "y" : "ies"}.`,
-    ...items.map((memory, index) => formatMemoryListResultLine(index + 1, memory)),
-  ];
-
-  if (hasMore) {
-    lines.push(`has_more: true — use offset=${nextOffset} to continue`);
-  }
-
-  lines.push(`db_path: ${dbPath}`);
-  return lines.join("\n");
-}
-
-function formatMemoryListResults(memories: MemoryRecord[], dbPath: string): string {
-  if (memories.length === 0) {
-    return [`No memories matched the list filters.`, `db_path: ${dbPath}`].join("\n");
-  }
-
-  return [
-    `Found ${memories.length} memor${memories.length === 1 ? "y" : "ies"}.`,
-    ...memories.map((memory, index) => formatMemoryListResultLine(index + 1, memory)),
-    `db_path: ${dbPath}`,
-  ].join("\n");
-}
-
-function formatMemoryListResultLine(index: number, memory: MemoryRecord): string {
-  const tags = memory.tags.length > 0 ? ` tags=${memory.tags.join(",")}` : "";
-  const kindLabel = memory.kind ?? "memory";
-  return `${index}. [${kindLabel}/${memory.scope}/${memory.status}] ${memory.title} (${memory.id}) — ${memory.summary}${tags} updated=${memory.updatedAt}`;
-}
-
-function formatActiveList(kind: string, items: MemoryRecord[], totalCount: number, dbPath: string): string {
-  if (items.length === 0) {
-    return [`No active ${kind}.`, `db_path: ${dbPath}`].join("\n");
-  }
-  return [
-    `Active ${kind}: ${totalCount}`,
-    ...items.map((memory, index) => formatMemoryListResultLine(index + 1, memory)),
-    `db_path: ${dbPath}`,
-  ].join("\n");
-}
-
-function formatMemorySearchResults(query: string, results: MemorySearchResult[], dbPath: string): string {
-  if (results.length === 0) {
-    return [`No memories matched \"${query}\".`, `db_path: ${dbPath}`].join("\n");
-  }
-
-  return [
-    `Found ${results.length} memory result${results.length === 1 ? "" : "s"} for \"${query}\".`,
-    ...results.map((result, index) => formatMemorySearchResultLine(index + 1, result)),
-    `db_path: ${dbPath}`,
-  ].join("\n");
-}
-
-// ─── Re-exports for consumers that import from tools.ts ─────────────────────
-
-export type { AuditCandidate } from "./audit.ts";
-export { buildHygieneLine, formatAuditResults, runMemoryAudit } from "./audit.ts";
-
 

@@ -12,6 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-05-13
+
+### Changed
+- Moved all string-builder/formatter functions from `tools.ts` into `formatters.ts`; deleted dead code (`formatMemoryListResults`, `formatActiveList`); removed unused re-export block from `tools.ts`.
+
 ## [2.0.1] - 2026-05-13
 
 ### Fixed

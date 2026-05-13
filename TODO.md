@@ -40,7 +40,6 @@ No open design issues. Add new entries here only when fresh design work is accep
 
 From improve-codebase-architecture skill review (2026-05-13). Each item is a deepening opportunity — resolve by grilling before implementing.
 
-- [ ] **B. `tools.ts` Kitchen Sink (~700 Zeilen)** — Typebox-Schemas, execute-Lambdas, Identity-Guards und Output-Formatierung gemischt; Formatter-Helpers werden von `commands.ts` importiert (Cross-Module-Leakage). → Alle String-Builder in `formatters.ts` konsolidieren (~150 Zeilen aus `tools.ts` entfernen).
 - [ ] **C. `tool-identity.ts` Pass-Through** — Re-exportiert 3 Core-Funktionen + 2 triviale Formatter-Zeilen. Deletion test: shallow. → Formatter in `tools.ts`/`formatters.ts` einziehen, Modul löschen.
 - [ ] **D. `store.ts` Interface unsichtbar (~450 Zeilen Closure)** — `MemoryStore`-Interface nur durch Scrollen aller Closures erkennbar; SQL, Embedding, Normalisierung, Session-Mgmt gemischt. → `MemoryStore`-TypeScript-Interface explizit an die Spitze stellen (kein Verhaltens-Rewrite).
 - [ ] **E. Migration v8 dupliziert gesamtes Schema (~180 Zeilen)** — Vollständige Tabellen-/Index-/Trigger-Redefinition; `artifacts`-Tabelle nie im Code verwendet. → Shared DDL-Builder für canonical Schema; `artifacts` kommentieren oder droppen.
