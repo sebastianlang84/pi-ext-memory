@@ -7,6 +7,16 @@ import test from "node:test";
 import { initializeMemoryStore } from "../../src/core/index.ts";
 import { runTurnIntake } from "../../src/pi-extension/turn-intake.ts";
 
+function assertTurnMessage(result: ReturnType<typeof runTurnIntake>): NonNullable<ReturnType<typeof runTurnIntake>> {
+  assert.ok(result, "Expected a turn memory message");
+  assert.equal(typeof result, "object");
+  assert.equal(result.customType, "pi-memory-context");
+  assert.equal(result.display, false);
+  assert.equal(typeof result.content, "string");
+  assert.ok(result.details);
+  return result;
+}
+
 function createTempDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
@@ -39,9 +49,10 @@ test("runTurnIntake returns handoff content for empty prompt when a handoff is p
 
     // Empty prompt simulates a fresh agent start before any user input.
     // The handoff must still be injected.
-    const result = runTurnIntake(store, "", "/repo", "session-abc");
-    assert.ok(typeof result === "string", "Expected handoff to be injected even with empty prompt");
-    assert.match(result, /Empty prompt handoff/);
+    const result = assertTurnMessage(runTurnIntake(store, "", "/repo", "session-abc"));
+    assert.match(result.content, /Empty prompt handoff/);
+    assert.equal(result.details.sessionId, "session-abc");
+    assert.equal(result.details.latestHandoffId !== undefined, true);
   } finally {
     store.close();
   }
@@ -61,9 +72,10 @@ test("runTurnIntake returns handoff content when only a handoff is present", () 
       summary: "Resume the handoffonly feature work.",
     });
 
-    const result = runTurnIntake(store, "handoffonly", "/repo", "session-abc");
-    assert.ok(typeof result === "string", "Expected a string result");
-    assert.match(result, /Handoff only/);
+    const result = assertTurnMessage(runTurnIntake(store, "handoffonly", "/repo", "session-abc"));
+    assert.match(result.content, /Handoff only/);
+    assert.equal(result.details.sessionId, "session-abc");
+    assert.equal(result.details.latestHandoffId !== undefined, true);
   } finally {
     store.close();
   }
@@ -82,9 +94,9 @@ test("runTurnIntake returns memory content when only search results are present"
       summary: "The memoryonlyneedle decision was made in Q1.",
     });
 
-    const result = runTurnIntake(store, "memoryonlyneedle", "/repo", "session-abc");
-    assert.ok(typeof result === "string", "Expected a string result");
-    assert.match(result, /Memory only fact|Relevant memory context/);
+    const result = assertTurnMessage(runTurnIntake(store, "memoryonlyneedle", "/repo", "session-abc"));
+    assert.match(result.content, /Memory only fact|Relevant memory context/);
+    assert.equal(result.details.query, "memoryonlyneedle");
   } finally {
     store.close();
   }
@@ -133,12 +145,12 @@ test("runTurnIntake combines handoff, memories, and hygiene line correctly", () 
       summary: "The combinedneedle was decided in Q2.",
     });
 
-    const result = runTurnIntake(store, "combinedneedle", "/repo", "session-abc");
-    assert.ok(typeof result === "string", "Expected a combined string result");
+    const result = assertTurnMessage(runTurnIntake(store, "combinedneedle", "/repo", "session-abc"));
     // Should contain handoff content
-    assert.match(result, /Combined handoff/);
+    assert.match(result.content, /Combined handoff/);
+    assert.equal(result.details.latestHandoffId !== undefined, true);
     // staleAfter removed in slice5 — no hygiene line is generated
-    assert.doesNotMatch(result, /Memory hygiene|stale todo/i);
+    assert.doesNotMatch(result.content, /Memory hygiene|stale todo/i);
   } finally {
     store.close();
   }

@@ -12,6 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.8] - 2026-05-13
+
+### Fixed
+- Fixed turn-start memory injection to return Pi's expected custom-message object instead of a plain string, preventing crashes when pi-memory is enabled and injects context.
+
 ## [2.0.7] - 2026-05-13
 
 ### Added

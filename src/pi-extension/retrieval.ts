@@ -56,6 +56,13 @@ export interface MemoryTurnMessageDetails {
   searchPlan: SearchMemoriesInput[];
 }
 
+export interface TurnMemoryMessage {
+  customType: string;
+  content: string;
+  display: false;
+  details: MemoryTurnMessageDetails;
+}
+
 export function deriveMemoryTurnContext(cwd: string, sessionId: string): MemoryTurnContext {
   const resolvedCwd = resolve(cwd);
   const repoPath = findGitRoot(resolvedCwd);
@@ -175,12 +182,7 @@ export function buildTurnMemoryMessage(
   dbPath: string,
   searchPlan: SearchMemoriesInput[],
   latestHandoff?: LatestHandoffResult,
-): {
-  customType: string;
-  content: string;
-  display: false;
-  details: MemoryTurnMessageDetails;
-} | null {
+): TurnMemoryMessage | null {
   if (query.trim().length < 2 && !latestHandoff) {
     return null;
   }
