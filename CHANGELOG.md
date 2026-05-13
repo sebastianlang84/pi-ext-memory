@@ -12,6 +12,15 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-05-13
+
+### Added
+- Added a core memory identity policy Module with direct regression coverage for scope identity validation, primary identity derivation, and runtime create-input enrichment.
+
+### Changed
+- Core list/search validation, Pi tool identity resolution, and runtime memory enrichment now share the same identity policy seam while preserving scope-first behavior and legacy project compatibility.
+- Runtime status metadata now reports `v3.3.2`.
+
 ## [3.3.1] - 2026-05-13
 
 ### Added

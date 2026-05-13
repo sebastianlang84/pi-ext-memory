@@ -1,4 +1,11 @@
 export {
+  applyRuntimeIdentityEnrichment,
+  findScopeIdentityIssues,
+  isLegacyProjectScopeSelected,
+  LEGACY_PROJECT_SCOPE_NOTICE,
+  resolveMemoryIdentityForScope,
+} from "./identity-policy.ts";
+export {
   DEFAULT_BGE_M3_COMMAND_TIMEOUT_MS,
   DEFAULT_EMBEDDING_MODEL,
   FALLBACK_EMBEDDING_MODEL,
@@ -22,6 +29,13 @@ export {
   normalizeUpdateMemoryInput,
 } from "./memories.ts";
 export { initializeMemoryStore } from "./store.ts";
+export type {
+  MemoryIdentityContext,
+  MemoryIdentityFields,
+  ScopeIdentityIssueOptions,
+  ScopeIdentityIssueStyle,
+  ScopeIdentityResolution,
+} from "./identity-policy.ts";
 export type {
   BuiltinEmbeddingProfile,
   GeneratedMemoryEmbedding,

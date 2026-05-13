@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
+import { applyRuntimeIdentityEnrichment } from "../core/identity-policy.ts";
 import type {
   CreateMemoryInput,
   GeneratedMemoryEmbedding,
@@ -71,21 +72,7 @@ export function deriveMemoryTurnContext(cwd: string, sessionId: string): MemoryT
 }
 
 export function decorateCreateMemoryInput(input: CreateMemoryInput, context: MemoryTurnContext): CreateMemoryInput {
-  const enriched: CreateMemoryInput = { ...input };
-
-  if ((input.scope === "project" || input.scope === "repo" || input.scope === "session") && context.projectId) {
-    enriched.projectId ??= context.projectId;
-  }
-
-  if ((input.scope === "repo" || input.scope === "session") && context.repoPath) {
-    enriched.repoPath ??= context.repoPath;
-  }
-
-  if (input.scope === "session") {
-    enriched.sessionId ??= context.sessionId;
-  }
-
-  return enriched;
+  return applyRuntimeIdentityEnrichment(input, context);
 }
 
 export function buildTurnSearchPlan(

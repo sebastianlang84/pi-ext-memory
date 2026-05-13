@@ -16,7 +16,12 @@ No active release tasks; add new tasks here only when fresh work is accepted.
 
 ## Quality Reviews
 
-No active quality-review tasks. Add new entries here only when fresh review work is accepted.
+Architecture deepening program: follow [Plan — Architecture Deepening](docs/plans/architecture-deepening.md). Remove each slice item after its verified commit.
+
+1. Deepen memory lifecycle policy.
+2. Deepen extension runtime store seam.
+3. Deepen turn intake.
+4. Deepen Pi tool execution shell.
 
 ## Open Design Issues
 

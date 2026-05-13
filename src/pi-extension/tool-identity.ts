@@ -1,3 +1,9 @@
+import {
+  findScopeIdentityIssues,
+  isLegacyProjectScopeSelected,
+  LEGACY_PROJECT_SCOPE_NOTICE,
+  resolveMemoryIdentityForScope,
+} from "../core/identity-policy.ts";
 import type { MemoryScope } from "../core/index.ts";
 import type { MemoryTurnContext } from "./retrieval.ts";
 
@@ -15,11 +21,10 @@ export type ToolIdentityResult = {
   error?: string;
 };
 
-export const LEGACY_PROJECT_SCOPE_NOTICE = "notice: scope=project is legacy/advanced compatibility; prefer scope=repo with repoPath for normal repository memory.";
+export { LEGACY_PROJECT_SCOPE_NOTICE };
 
 export function formatWithLegacyProjectScopeNotice(text: string, scope?: MemoryScope | MemoryScope[]): string {
-  const scopes = Array.isArray(scope) ? scope : scope ? [scope] : [];
-  return scopes.includes("project") ? `${LEGACY_PROJECT_SCOPE_NOTICE}\n${text}` : text;
+  return isLegacyProjectScopeSelected(scope) ? `${LEGACY_PROJECT_SCOPE_NOTICE}\n${text}` : text;
 }
 
 export function resolveToolIdentity(
@@ -27,44 +32,7 @@ export function resolveToolIdentity(
   context: MemoryTurnContext,
   options: { requirePrimary?: boolean } = {},
 ): ToolIdentityResult {
-  const sessionId = params.sessionId?.trim() || context.sessionId.trim() || undefined;
-  const projectId = params.projectId?.trim() || context.projectId;
-  const repoPath = params.repoPath?.trim() || context.repoPath;
-
-  if (params.scope === "global") {
-    if (params.sessionId || params.projectId || params.repoPath) {
-      return { error: "scope=global does not accept sessionId, projectId, or repoPath. Remove scope identifiers or choose repo/session; scope=project is legacy compatibility only." };
-    }
-    return {};
-  }
-
-  if (params.scope === "repo") {
-    if (params.sessionId || params.projectId) {
-      return { error: "scope=repo uses repoPath as its primary identity. Remove sessionId and projectId; the runtime can keep metadata internally." };
-    }
-    if (options.requirePrimary && !repoPath) {
-      return { error: "scope=repo requires repoPath, but no repository path was provided or derivable from cwd." };
-    }
-    return { repoPath };
-  }
-
-  if (params.scope === "project") {
-    if (params.sessionId || params.repoPath) {
-      return { error: "legacy scope=project uses projectId as its primary identity. Remove sessionId and repoPath, or prefer scope=repo for normal repository memory." };
-    }
-    if (options.requirePrimary && !projectId) {
-      return { error: "legacy scope=project requires projectId. Prefer scope=repo for normal repository memory." };
-    }
-    return { projectId };
-  }
-
-  if (params.projectId || params.repoPath) {
-    return { error: "scope=session uses sessionId as its primary identity. Remove projectId and repoPath; runtime context is attached internally." };
-  }
-  if (options.requirePrimary && !sessionId) {
-    return { error: "scope=session requires sessionId, but no session id was provided or derivable from the active Pi session." };
-  }
-  return { sessionId };
+  return resolveMemoryIdentityForScope(params, context, options);
 }
 
 export function resolveSingleScopeSearchIdentity(
@@ -72,16 +40,14 @@ export function resolveSingleScopeSearchIdentity(
   context: MemoryTurnContext,
 ): ToolIdentityResult {
   if (!params.scope || params.scope.length === 0) {
-    if ([params.sessionId, params.projectId, params.repoPath].filter((value) => value !== undefined).length > 1) {
-      return { error: "sessionId, projectId, and repoPath filters cannot be combined without a single compatible scope." };
-    }
+    const [error] = findScopeIdentityIssues(params, { style: "tool" });
+    if (error) return { error: `${error}.` };
     return { sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath };
   }
 
   if (params.scope.length !== 1) {
-    if ([params.sessionId, params.projectId, params.repoPath].filter((value) => value !== undefined).length > 1) {
-      return { error: "sessionId, projectId, and repoPath filters cannot be combined across multiple scopes." };
-    }
+    const [error] = findScopeIdentityIssues(params, { style: "tool" });
+    if (error) return { error: `${error}.` };
     return { sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath };
   }
 

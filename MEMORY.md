@@ -7,14 +7,14 @@ write-when: Stable truth, project state, open decisions, next steps, or durable 
 
 # MEMORY
 
-last_updated: 2026-05-12
+last_updated: 2026-05-13
 scope: always-loaded bootstrap; keep lean
 
 ## 1) Current State
 - GitHub/local repo identity is `pi-ext-memory`; package/runtime identity remains `pi-memory`, a lightweight local memory system for coding agents.
 - Root living docs and `docs/` baseline were aligned to the `~/agentic-coding` governance structure.
 - Product direction for V1 is documented in `docs/prd-lightweight-local-memory-system.md`.
-- The original Pi Extension V1 working plan is archived at `docs/archive/plans/pi-extension-v1.md`; the scope-first identity implementation plan is archived at `docs/archive/plans/memory-scope-identity.md`; the lifecycle/tooling design plan is archived at `docs/archive/plans/tool-and-lifecycle-design.md`; the completed memory quality review fixing plan is archived at `docs/archive/plans/memory-quality-review-fixing-plan.md`; current active planning lives in `docs/plans/memory-scope-simplification.md`.
+- The original Pi Extension V1 working plan is archived at `docs/archive/plans/pi-extension-v1.md`; the scope-first identity implementation plan is archived at `docs/archive/plans/memory-scope-identity.md`; the lifecycle/tooling design plan is archived at `docs/archive/plans/tool-and-lifecycle-design.md`; the completed memory quality review fixing plan is archived at `docs/archive/plans/memory-quality-review-fixing-plan.md`; current active planning lives in `docs/plans/architecture-deepening.md`.
 - The historical project-local Pi extension shim under `.pi/extensions/pi-memory/` has been removed; pi-memory is intended to load once via the global Pi package install, backed by the thin local core under `src/core/` and Pi-facing modules under `src/pi-extension/`.
 - The local core now supports SQLite store initialization, schema migrations via `PRAGMA user_version`, schema v2 FTS5 lexical indexing, schema v3 persisted embeddings, and schema v4 FTS trigger fixes for reliable memory updates/archives.
 - v0.3 implemented validated memory creation: the core normalizes and persists memory records with immediate readback, and the Pi extension registers a `memory_save` tool.
@@ -41,6 +41,7 @@ scope: always-loaded bootstrap; keep lean
 - v3.2.0 extends `memory_audit` and `/memory-audit` with a read-only migration preview that classifies active legacy project-scoped records before any approved migration.
 - v3.3.0 simplifies the recommended agent-facing tool path: `memory_list` now covers optional kind/scope catalog-style listing, `memory_update(status="archived", archiveReason=...)` covers normal archiving, and specialized wrappers remain callable as advanced/compatibility tools.
 - v3.3.1 completes the memory quality review fixing pass: scope identity and handoff relevance now have dedicated Pi-extension modules, retrieval ranking constants live behind a default policy module, expired active handoffs are excluded from preload/archive/list flows, and regression coverage was added for tool validation, audit filters, handoff ordering, and retrieval quality.
+- v3.3.2 deepens memory identity policy: core list/search validation, Pi tool identity resolution, and runtime create-input enrichment now share one core identity policy Module while preserving scope-first behavior and legacy project compatibility.
 - `package.json` now exposes a normal Pi package manifest pointing at `src/pi-extension/index.ts`; smoke scripts cover the global install path and package manifest path without relying on a project-local dev shim.
 - ADR 001 records the v0.5 embedding baseline decision; ADR 002 records the global memory store default; ADR 004 records scope-first memory identity; ADR 005 records the simplified normal scope model and soft-deprecates `project`/`projectId` for normal agent-facing use; ADR 006 records the normal-vs-advanced tool surface.
 - Verification paths now exist via `npm test` for fresh DB, migration, save-validation, persisted-readback, lexical retrieval, session-filtered retrieval, hybrid retrieval/ranking, handoff save/preload behavior, patch updates, relations, archive semantics, embedding persistence, retrieval-hook injection checks, command-level handoff/review/session-summary checks, save -> search -> review -> session-summary end-to-end coverage, default embedding fallback status, and command-backed embedding persistence, plus global/package smoke checks with `npm run smoke:memory-status` and `npm run smoke:package-status`, and manual `/memory-search` and `/memory-handoff` smoke paths for the extension.
@@ -86,6 +87,8 @@ scope: always-loaded bootstrap; keep lean
 - 2026-05-13 — Extended `memory_audit` and `/memory-audit` with a read-only migration preview that classifies active legacy project-scoped records as repo/global/archive/legacy-read-only/needs-human-review candidates and bumped package/runtime metadata to v3.2.0.
 - 2026-05-13 — Accepted ADR 006 and simplified the recommended tool surface for v3.3.0: normal listing goes through `memory_list`, normal archiving goes through `memory_update`, and specialized wrappers are advanced/compatibility only.
 - 2026-05-13 — Completed the memory quality review fixing plan for v3.3.1: added focused regression tests, extracted scope identity and handoff relevance seams, localized the default retrieval policy, excluded expired handoffs from active relevance flows, archived the plan, and cleared the TODO item.
+- 2026-05-13 — Added `docs/plans/architecture-deepening.md` and linked its five-slice refactor queue from `TODO.md`.
+- 2026-05-13 — Completed architecture-deepening slice 1: added the core memory identity policy Module, routed core/Pi/runtime identity handling through it, added policy-level tests, removed the completed TODO slice, and bumped package/runtime metadata to v3.3.2.
 - 2026-04-30 — Renamed the GitHub/local repository from `pi-memory` to `pi-ext-memory`; package/runtime names remain `pi-memory`.
 
 ## 4) Open Decisions

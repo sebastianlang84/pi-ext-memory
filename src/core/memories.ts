@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { findScopeIdentityIssues } from "./identity-policy.ts";
+
 export const MEMORY_KINDS = ["fact", "preference", "decision", "episode", "artifact_ref", "todo", "progress_snapshot", "handoff"] as const;
 export const MEMORY_SCOPES = ["global", "project", "repo", "session"] as const;
 export const MEMORY_STATUSES = ["active", "archived", "done", "superseded"] as const;
@@ -361,7 +363,7 @@ export function normalizeListMemoriesInput(input: ListMemoriesInput): Normalized
   const limit = normalizeLimit(input.limit, issues);
   const orderBy = input.orderBy === undefined ? "updatedAt" : normalizeEnum("orderBy", input.orderBy, MEMORY_LIST_ORDER_BY, issues);
 
-  validateScopeIdentityFilters(scope, sessionId, projectId, repoPath, issues);
+  issues.push(...findScopeIdentityIssues({ scope, sessionId, projectId, repoPath }));
 
   if (issues.length > 0 || !status || !orderBy) {
     throw new MemoryValidationError(issues);
@@ -393,7 +395,7 @@ export function normalizeSearchMemoriesInput(input: SearchMemoriesInput): Normal
   const limit = normalizeLimit(input.limit, issues);
   const matchQuery = query ? buildFtsMatchQuery(query, issues) : undefined;
 
-  validateScopeIdentityFilters(scope, sessionId, projectId, repoPath, issues);
+  issues.push(...findScopeIdentityIssues({ scope, sessionId, projectId, repoPath }));
 
   if (issues.length > 0 || !query || !matchQuery) {
     throw new MemoryValidationError(issues);
@@ -410,49 +412,6 @@ export function normalizeSearchMemoriesInput(input: SearchMemoriesInput): Normal
     repoPath,
     limit,
   };
-}
-
-function validateScopeIdentityFilters(
-  scope: MemoryScope[] | undefined,
-  sessionId: string | undefined,
-  projectId: string | undefined,
-  repoPath: string | undefined,
-  issues: string[],
-): void {
-  if (!scope || scope.length === 0) {
-    if (countProvidedIdentities(sessionId, projectId, repoPath) > 1) {
-      issues.push("sessionId, projectId, and repoPath filters cannot be combined without a single compatible scope");
-    }
-    return;
-  }
-
-  if (scope.length !== 1) {
-    if (countProvidedIdentities(sessionId, projectId, repoPath) > 1) {
-      issues.push("sessionId, projectId, and repoPath filters cannot be combined across multiple scopes");
-    }
-    return;
-  }
-
-  const [singleScope] = scope;
-  if (singleScope === "global" && (sessionId || projectId || repoPath)) {
-    issues.push("scope=global does not accept sessionId, projectId, or repoPath filters");
-  }
-
-  if (singleScope === "repo" && (sessionId || projectId)) {
-    issues.push("scope=repo uses repoPath as its primary identity; remove sessionId and projectId from the filter");
-  }
-
-  if (singleScope === "project" && (sessionId || repoPath)) {
-    issues.push("scope=project uses projectId as its primary identity; remove sessionId and repoPath from the filter");
-  }
-
-  if (singleScope === "session" && (projectId || repoPath)) {
-    issues.push("scope=session uses sessionId as its primary identity; remove projectId and repoPath from the filter");
-  }
-}
-
-function countProvidedIdentities(sessionId: string | undefined, projectId: string | undefined, repoPath: string | undefined): number {
-  return [sessionId, projectId, repoPath].filter((value) => value !== undefined).length;
 }
 
 function normalizeEnum<T extends string>(
