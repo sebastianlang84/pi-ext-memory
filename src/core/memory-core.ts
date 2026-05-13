@@ -39,7 +39,7 @@ export function createMemoryCore(): MemoryCore {
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save", "/memory-audit"],
         availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit", "memory_list_active_todos", "memory_list_active_handoffs", "memory_stats"],
-        nextStep: "V3.3.4 deepens the extension runtime store seam while keeping store lifecycle behavior stable.",
+        nextStep: "Architecture Deepening Program complete at v3.3.6. Next: monitor BGE-M3 retrieval quality in production.",
       };
     },
     initializeStore(input) {
