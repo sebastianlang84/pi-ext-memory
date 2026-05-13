@@ -57,50 +57,6 @@ test("updateMemory patches fields and refreshes the persisted embedding", async 
   }
 });
 
-test("linkMemories persists simple V1 relations idempotently", () => {
-  const dbPath = createTempDbPath();
-  const store = initializeMemoryStore({ dbPath });
-
-  try {
-    const decision = store.createMemory({
-      kind: "decision",
-      scope: "project",
-      title: "Adopt staged retrieval",
-      summary: "Stage session, project, repo, and global retrieval to keep memory injection compact.",
-    });
-
-    const todo = store.createMemory({
-      kind: "todo",
-      scope: "project",
-      title: "Ship debug command",
-      summary: "Add a manual retrieval command so ranking quality can be inspected during rollout.",
-    });
-
-    const firstLink = store.linkMemories({
-      fromId: todo.id,
-      toId: decision.id,
-      relation: "implements",
-    });
-
-    const secondLink = store.linkMemories({
-      fromId: todo.id,
-      toId: decision.id,
-      relation: "implements",
-    });
-
-    const links = store.listMemoryLinks(todo.id);
-
-    assert.equal(firstLink.fromId, todo.id);
-    assert.equal(firstLink.toId, decision.id);
-    assert.equal(firstLink.relation, "implements");
-    assert.equal(secondLink.id, firstLink.id);
-    assert.equal(links.length, 1);
-    assert.equal(links[0]?.id, firstLink.id);
-  } finally {
-    store.close();
-  }
-});
-
 test("updateMemory patches scope", () => {
   const dbPath = createTempDbPath();
   const store = initializeMemoryStore({ dbPath });

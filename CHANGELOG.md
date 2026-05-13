@@ -12,6 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.7] - 2026-05-13
+
+### Removed
+- Schema migration v7: dropped `expires_at` and `stale_after` columns from `memories` table, dropped `links` table, and collapsed `done`/`superseded` status values to `archived` in existing records.
+
 ## [3.3.6] - 2026-05-13
 
 ### Changed

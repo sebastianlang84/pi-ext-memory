@@ -164,6 +164,17 @@ export const memoryMigrations: MemoryMigration[] = [
       CREATE INDEX IF NOT EXISTS idx_memories_stale_after ON memories(stale_after);
     `,
   },
+  {
+    version: 7,
+    name: "memory_model_minimisation",
+    sql: `
+      DROP INDEX IF EXISTS idx_memories_stale_after;
+      ALTER TABLE memories DROP COLUMN expires_at;
+      ALTER TABLE memories DROP COLUMN stale_after;
+      DROP TABLE IF EXISTS links;
+      UPDATE memories SET status = 'archived' WHERE status IN ('done', 'superseded');
+    `,
+  },
 ];
 
 export const LATEST_MEMORY_SCHEMA_VERSION = memoryMigrations.at(-1)?.version ?? 0;

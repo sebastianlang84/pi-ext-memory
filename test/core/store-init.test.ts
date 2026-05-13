@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { initializeMemoryStore } from "../../src/core/index.ts";
 
-test("initializeMemoryStore creates a fresh database and applies schema v6", () => {
+test("initializeMemoryStore creates a fresh database and applies schema v7", () => {
   const tempRoot = mkdtempSync(join(tmpdir(), "pi-memory-store-"));
   const dbPath = join(tempRoot, "memory.sqlite");
 
@@ -16,8 +16,8 @@ test("initializeMemoryStore creates a fresh database and applies schema v6", () 
 
   assert.equal(existsSync(dbPath), true);
   assert.equal(store.dbPath, dbPath);
-  assert.equal(store.schemaVersion, 6);
-  assert.equal(store.latestSchemaVersion, 6);
+  assert.equal(store.schemaVersion, 7);
+  assert.equal(store.latestSchemaVersion, 7);
   assert.equal(store.embeddingModel, "builtin-hash-384-v1");
   assert.equal(store.fallbackEmbeddingModel, "builtin-hash-384-v1");
   assert.equal(store.embeddingDimensions, 384);
@@ -27,18 +27,23 @@ test("initializeMemoryStore creates a fresh database and applies schema v6", () 
 
   try {
     const schemaVersion = db.prepare("PRAGMA user_version;").get() as { user_version: number };
-    assert.equal(schemaVersion.user_version, 6);
+    assert.equal(schemaVersion.user_version, 7);
 
     const coreTables = db
       .prepare(
-        `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts', 'links', 'memories', 'memory_embeddings', 'sessions') ORDER BY name;`,
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts', 'memories', 'memory_embeddings', 'sessions') ORDER BY name;`,
       )
       .all() as Array<{ name: string }>;
 
     assert.deepEqual(
       coreTables.map((table) => table.name),
-      ["artifacts", "links", "memories", "memory_embeddings", "sessions"],
+      ["artifacts", "memories", "memory_embeddings", "sessions"],
     );
+
+    const linksTable = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'links';")
+      .get();
+    assert.equal(linksTable, undefined);
 
     const metaTable = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta';")
@@ -84,9 +89,7 @@ test("initializeMemoryStore creates a fresh database and applies schema v6", () 
         "created_at",
         "updated_at",
         "last_accessed_at",
-        "expires_at",
         "metadata_json",
-        "stale_after",
       ],
     );
 
@@ -110,8 +113,8 @@ test("initializeMemoryStore is idempotent for an already-migrated database", () 
   const secondStore = initializeMemoryStore({ dbPath, preferLowFootprintEmbeddings: true });
 
   try {
-    assert.equal(secondStore.schemaVersion, 6);
-    assert.equal(secondStore.latestSchemaVersion, 6);
+    assert.equal(secondStore.schemaVersion, 7);
+    assert.equal(secondStore.latestSchemaVersion, 7);
     assert.equal(secondStore.embeddingModel, "builtin-hash-64-v1");
     assert.equal(secondStore.fallbackEmbeddingModel, "builtin-hash-64-v1");
     assert.equal(secondStore.embeddingDimensions, 64);

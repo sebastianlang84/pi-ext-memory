@@ -59,6 +59,7 @@ scope: always-loaded bootstrap; keep lean
 - `pi-memory` should be globally useful across repos; avoid designs that fragment durable memory into per-repo databases by default.
 
 ## 3) Recent Tasks
+- 2026-05-13 — Completed memory-model-minimisation Slice 1: added schema migration v7 that drops `expires_at`, `stale_after`, `links` table, and collapses `done`/`superseded` → `archived`; bumped package metadata to v3.3.7.
 - 2026-04-16 — Bootstrapped repo living-doc structure and added the initial PRD under `docs/`.
 - 2026-04-16 — Added `docs/plans/pi-extension-v1.md` with the proposed V1 extension tools, commands, hooks, and write-policy shape.
 - 2026-04-16 — Implemented the v0.1 Pi extension/core bootstrap skeleton with a working `/memory-status` smoke path.
@@ -104,8 +105,9 @@ scope: always-loaded bootstrap; keep lean
 - How much post-V1 memory creation should become assisted beyond the current manual-first write policy.
 
 ## 5) Next Steps
-1. Monitor real-machine BGE-M3 command-adapter retrieval quality and latency in normal use; keep the shipped deterministic fallback unless evidence supports a different lighter semantic fallback.
-2. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
+1. Continue memory-model-minimisation v2.0.0: next is Slice 2 — Kind reduction (remove fact/preference/decision/episode/artifact_ref/progress_snapshot from MEMORY_KINDS).
+2. Monitor real-machine BGE-M3 command-adapter retrieval quality and latency in normal use; keep the shipped deterministic fallback unless evidence supports a different lighter semantic fallback.
+3. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
 
 ## 6) Known Risks / Blockers
 - Application-layer vector search may need a specialized local index if stores grow much larger.
