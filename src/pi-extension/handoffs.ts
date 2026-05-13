@@ -1,4 +1,4 @@
-import { isActiveUnexpiredHandoff, type ListForToolResult, type MemoryRecord, type MemoryScope, type MemoryStore, type NormalizedListMemoriesInput } from "../core/index.ts";
+import { isActiveHandoff, type ListForToolResult, type MemoryRecord, type MemoryScope, type MemoryStore, type NormalizedListMemoriesInput } from "../core/index.ts";
 
 export type HandoffLookupStore = Pick<MemoryStore, "listAllInternal">;
 
@@ -132,5 +132,5 @@ function listActiveUnexpiredHandoffs(
 ): MemoryRecord[] {
   return store
     .listAllInternal(filter)
-    .filter((memory) => isActiveUnexpiredHandoff(memory, now));
+    .filter((memory) => isActiveHandoff(memory, now));
 }

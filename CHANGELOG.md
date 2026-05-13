@@ -12,6 +12,16 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-05-13
+
+### Fixed
+- `classifyLifecycleAuditFinding` now returns real stale-todo/expired-handoff findings based on `updatedAt` age (was always returning null).
+- Cap enforcement extracted from `store.ts` into `checkActiveCap` in `policy.ts`; identical throw behavior.
+- Renamed `isActiveUnexpiredHandoff` → `isActiveHandoff` (name was misleading; no expiry check was ever performed).
+- Removed no-op `applyMemoryLifecycleDefaults` function.
+- Added `staleAfterDays` / `expireAfterDays` thresholds to `MEMORY_POLICY` per kind.
+- Audit `runMemoryAuditFull` now surfaces stale todos and expired handoffs in results.
+
 ## [2.0.0] - 2026-05-13
 
 ### Breaking Changes

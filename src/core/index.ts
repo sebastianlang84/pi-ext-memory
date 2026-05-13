@@ -70,12 +70,12 @@ export type {
 } from "./store.ts";
 export {
   MEMORY_POLICY,
-  applyMemoryLifecycleDefaults,
   buildActiveCapCountFilter,
+  checkActiveCap,
   classifyLifecycleAuditFinding,
   getCapForKindScope,
   getEffectiveLifecycleScope,
-  isActiveUnexpiredHandoff,
+  isActiveHandoff,
 } from "./policy.ts";
 export type { ActiveCapCountFilter, CapPolicy, LifecycleAuditFinding, LifecycleAuditFindingType } from "./policy.ts";
 export { DEFAULT_HYBRID_RETRIEVAL_POLICY } from "./retrieval-policy.ts";

@@ -61,8 +61,8 @@ export function runMemoryAuditFull(
   store: MemoryStore,
   scopeFilter?: string[],
   repoPathFilter?: string,
+  now: Date = new Date(),
 ): AuditSummary {
-  const now = new Date();
 
   const internalFilter = {
     status: "active" as const,

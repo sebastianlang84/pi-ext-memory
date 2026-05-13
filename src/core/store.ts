@@ -25,7 +25,7 @@ import {
   normalizeSearchMemoriesInput,
   normalizeUpdateMemoryInput,
 } from "./memories.ts";
-import { applyMemoryLifecycleDefaults, buildActiveCapCountFilter, getCapForKindScope } from "./policy.ts";
+import { buildActiveCapCountFilter, checkActiveCap } from "./policy.ts";
 import {
   type MemoryEmbeddingRow,
   type MemoryRow,
@@ -131,17 +131,12 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
       createMemory(input) {
         assertStoreOpen(isClosed);
 
-        const memory = applyMemoryLifecycleDefaults(normalizeCreateMemoryInput(input));
+        const memory = normalizeCreateMemoryInput(input);
 
-        const cap = getCapForKindScope(memory.kind, memory.scope);
         const capCountFilter = buildActiveCapCountFilter(memory);
-        if (cap && capCountFilter) {
+        if (capCountFilter) {
           const activeCount = readMemoryCount(db, capCountFilter);
-          if (activeCount >= cap.activeHardMax) {
-            throw new MemoryValidationError([
-              `active_${memory.kind}_cap_exceeded: ${activeCount} active ${memory.kind}s (hard cap: ${cap.activeHardMax}) for scope=${memory.scope}. Archive or complete existing ${memory.kind}s first.`,
-            ]);
-          }
+          checkActiveCap(memory.kind, memory.scope, activeCount);
         }
 
         // Exact duplicate check

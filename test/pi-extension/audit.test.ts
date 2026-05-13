@@ -223,3 +223,66 @@ test("memory audit reports active scope identity violations", () => {
     rmSync(tempRoot, { recursive: true, force: true });
   }
 });
+
+test("memory audit detects stale todos in staleTodos list", () => {
+  const { dbPath, tempRoot } = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    const freshTodo = store.createMemory({
+      kind: "todo",
+      scope: "repo",
+      repoPath: "/repo/a",
+      title: "Fresh todo",
+      summary: "This todo was updated recently and should not appear as stale.",
+    });
+
+    const staleTodo = store.createMemory({
+      kind: "todo",
+      scope: "repo",
+      repoPath: "/repo/a",
+      title: "Stale todo",
+      summary: "This todo was not updated for over 30 days and should appear as stale.",
+    });
+
+    // Manually backdate the stale todo's updatedAt by patching via update
+    store.updateMemory({ id: staleTodo.id, summary: staleTodo.summary + " (backdated)" });
+    // Use store internals aren't available so we work around it: run the audit with a future "now"
+    const futureNow = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
+    const summary = runMemoryAuditFull(store, undefined, undefined, futureNow);
+
+    // Both todos are older than 30 days relative to futureNow
+    assert.ok(summary.staleTodosCount >= 2, `expected at least 2 stale todos, got ${summary.staleTodosCount}`);
+    const titles = summary.staleTodos.map((c) => c.title);
+    assert.ok(titles.includes("Stale todo"), "expected Stale todo in staleTodos");
+    assert.ok(titles.includes("Fresh todo"), "expected Fresh todo to be stale relative to futureNow");
+  } finally {
+    store.close();
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("memory audit detects expired handoffs in oldHandoffs list", () => {
+  const { dbPath, tempRoot } = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    store.createMemory({
+      kind: "handoff",
+      scope: "repo",
+      repoPath: "/repo/a",
+      title: "Active handoff",
+      summary: "This handoff was created recently and should not appear as expired.",
+    });
+
+    const futureNow = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000);
+    const summary = runMemoryAuditFull(store, undefined, undefined, futureNow);
+
+    assert.ok(summary.expiredHandoffsCount >= 1, `expected at least 1 expired handoff, got ${summary.expiredHandoffsCount}`);
+    assert.ok(summary.oldHandoffs.some((c) => c.title === "Active handoff"), "expected Active handoff in oldHandoffs");
+    assert.ok(summary.warnings.some((w) => w.includes("expired")), "expected expired warning");
+  } finally {
+    store.close();
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
