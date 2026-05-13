@@ -15,7 +15,7 @@ write-when: A behavior rule, gate, guardrail, or document-role summary changes
 - Treat code/config as source of truth; use docs to capture decisions, plans, and durable memory.
 
 ## 2) Rules
-- Read `MEMORY.md` first, then `TODO.md`.
+- At session start: retrieve repo memories, then read `TODO.md`.
 - No secrets in repo/commits/docs.
 - Do not silently guess architecture, performance, or platform constraints.
 - Follow Semantic Versioning 2.0.0 repo-wide.
@@ -27,13 +27,12 @@ write-when: A behavior rule, gate, guardrail, or document-role summary changes
 - Dirty worktree with unrelated changes: stop and ask before commit or revert.
 
 ## 3) Bootstrap Sequence
-On session start: **read `MEMORY.md` first, then `TODO.md`**. Load deeper docs only when relevant.
+On session start: **retrieve repo memories, then read `TODO.md`**. Load deeper docs only when relevant.
 
 ## 4) Document Roles
 
 | File | Role | Write when |
 | --- | --- | --- |
-| `MEMORY.md` | Stable current truth, reset-resilient project memory | Stable truth changes; review every task |
 | `TODO.md` | Active open work only | Work or priorities change |
 | `CHANGELOG.md` | Outward-facing change history | User/operator-relevant changes land |
 | `README.md` | Project guide and navigation | Setup, usage, or repo orientation changes |
@@ -44,7 +43,7 @@ On session start: **read `MEMORY.md` first, then `TODO.md`**. Load deeper docs o
 | `.agents/skills/*` | Optional repo-local skills | A reusable repo-local skill is curated |
 
 ## 5) Routing
-- Stable truth -> `MEMORY.md`
+- Stable truth -> memory store (repo scope)
 - Active work -> `TODO.md`
 - Durable decisions -> `docs/adr/*`
 - Detailed plans -> `docs/plans/*`
@@ -73,6 +72,6 @@ Before the first write, briefly state:
 ### Gate D: Verification
 - Verify after every change.
 - Without verification, the task is not complete.
-- Review `MEMORY.md`, `TODO.md`, `README.md`, and `CHANGELOG.md` when affected.
+- Review `TODO.md`, `README.md`, and `CHANGELOG.md` when affected.
 - Bump `version` in `package.json` per Semantic Versioning 2.0.0 and add a `CHANGELOG.md` entry for every commit.
 - Create a commit unless the user explicitly says otherwise.

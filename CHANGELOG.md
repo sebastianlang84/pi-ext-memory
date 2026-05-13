@@ -12,6 +12,18 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.7] - 2026-05-13
+
+### Added
+- Added test coverage for `runTurnIntake` with empty prompt and active handoff (handoff must be injected even before any user input).
+
+## [2.0.6] - 2026-05-13
+
+### Changed
+- Migrated repo-level memory from `MEMORY.md` to pi-ext-memory (repo scope); `MEMORY.md` removed.
+- Archived completed plan files (`memory-model-minimisation.md`, `memory-scope-simplification.md`) to `docs/archive/plans/`.
+- Updated `AGENTS.md` bootstrap sequence and routing rules to reference pi-ext-memory instead of `MEMORY.md`.
+
 ## [2.0.4] - 2026-05-13
 
 ### Changed
