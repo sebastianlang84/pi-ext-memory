@@ -12,6 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-05-13
+
+### Changed
+- Deleted pass-through module `tool-identity.ts`; formatters moved to `formatters.ts`, identity wrappers inlined into `tool-shell.ts`.
+
 ## [2.0.2] - 2026-05-13
 
 ### Changed

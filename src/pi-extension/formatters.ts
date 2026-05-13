@@ -1,6 +1,7 @@
 import { hostname } from "node:os";
 
-import type { ListForToolResult, MemoryRecord, MemorySearchResult, MemoryStore, SearchMemoriesInput, SessionRecord } from "../core/index.ts";
+import type { ListForToolResult, MemoryRecord, MemoryScope, MemorySearchResult, MemoryStore, SearchMemoriesInput, SessionRecord } from "../core/index.ts";
+import { isLegacyProjectScopeSelected, LEGACY_PROJECT_SCOPE_NOTICE } from "../core/index.ts";
 import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
 
 export function formatMemorySessionSaveUsage(minSummaryLength: number): string {
@@ -310,4 +311,12 @@ export function formatMemorySearchResultLine(index: number, result: MemorySearch
   }
 
   return `${index}. [${metadata.join(" | ")}] ${result.title} — ${result.summary}`;
+}
+
+export function formatWithLegacyProjectScopeNotice(text: string, scope?: MemoryScope | MemoryScope[]): string {
+  return isLegacyProjectScopeSelected(scope) ? `${LEGACY_PROJECT_SCOPE_NOTICE}\n${text}` : text;
+}
+
+export function formatIdentityError(error: string, dbPath: string): string {
+  return `Invalid memory scope identity: ${error}\ndb_path: ${dbPath}`;
 }

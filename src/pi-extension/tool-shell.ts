@@ -1,11 +1,49 @@
 import type { MemoryScope, MemoryStore } from "../core/index.ts";
+import { findScopeIdentityIssues, resolveMemoryIdentityForScope } from "../core/index.ts";
 import { deriveMemoryTurnContext } from "./retrieval.ts";
-import {
-  formatIdentityError,
-  formatWithLegacyProjectScopeNotice,
-  resolveSingleScopeSearchIdentity,
-  resolveToolIdentity,
-} from "./tool-identity.ts";
+import { formatIdentityError, formatWithLegacyProjectScopeNotice } from "./formatters.ts";
+import type { MemoryTurnContext } from "./retrieval.ts";
+
+type ToolIdentityParams = {
+  scope: MemoryScope;
+  sessionId?: string;
+  projectId?: string;
+  repoPath?: string;
+};
+
+type ToolIdentityResult = {
+  sessionId?: string;
+  projectId?: string;
+  repoPath?: string;
+  error?: string;
+};
+
+function resolveToolIdentity(
+  params: ToolIdentityParams,
+  context: MemoryTurnContext,
+  options: { requirePrimary?: boolean } = {},
+): ToolIdentityResult {
+  return resolveMemoryIdentityForScope(params, context, options);
+}
+
+function resolveSingleScopeSearchIdentity(
+  params: { scope?: MemoryScope[]; sessionId?: string; projectId?: string; repoPath?: string },
+  context: MemoryTurnContext,
+): ToolIdentityResult {
+  if (!params.scope || params.scope.length === 0) {
+    const [error] = findScopeIdentityIssues(params, { style: "tool" });
+    if (error) return { error: `${error}.` };
+    return { sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath };
+  }
+
+  if (params.scope.length !== 1) {
+    const [error] = findScopeIdentityIssues(params, { style: "tool" });
+    if (error) return { error: `${error}.` };
+    return { sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath };
+  }
+
+  return resolveToolIdentity({ scope: params.scope[0]!, sessionId: params.sessionId, projectId: params.projectId, repoPath: params.repoPath }, context, { requirePrimary: true });
+}
 
 /**
  * Common execution context provided to every tool by the shell.
