@@ -530,6 +530,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const { store, withLegacyNotice } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
       const { staleTodos, oldHandoffs, identityViolations, projectMigrationPreview } = runMemoryAudit(store, params.scope, params.repoPath);
+      const now = new Date().toISOString();
+      const totalFindings = staleTodos.length + oldHandoffs.length + identityViolations.length + projectMigrationPreview.length;
+      store.setMeta("lastAuditAt", now);
+      store.setMeta("lastAuditSummary", `${totalFindings} finding(s): ${staleTodos.length} stale_todo, ${oldHandoffs.length} old_handoff, ${identityViolations.length} identity_violation, ${projectMigrationPreview.length} migration_preview`);
       const output = withLegacyNotice(formatAuditResults(staleTodos, oldHandoffs, store.dbPath, identityViolations, projectMigrationPreview), params.scope as MemoryScope[] | undefined);
       return {
         content: [{ type: "text", text: output }],
@@ -602,6 +606,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         `  active_todos: ${todoActive}/${todoCapPolicy?.activeHardMax ?? "n/a"}`,
         `  active_handoffs: ${handoffActive}/${handoffCapPolicy?.activeHardMax ?? "n/a"}`,
         ...(warnings.length > 0 ? [`warnings:`, ...warnings.map((w) => `  ${w}`)] : []),
+        `last_audit: ${store.getMeta("lastAuditAt") ?? "never"}`,
+        `last_audit_summary: ${store.getMeta("lastAuditSummary") ?? "n/a"}`,
         `db_path: ${store.dbPath}`,
       ].join("\n");
 

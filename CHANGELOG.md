@@ -12,6 +12,12 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.13] - 2026-05-13
+
+### Added
+- `memory_audit` writes `lastAuditAt` and `lastAuditSummary` to the meta table after every run.
+- `memory_stats` output now includes `last_audit` and `last_audit_summary` lines from the meta table.
+
 ## [3.3.12] - 2026-05-13
 
 ### Added

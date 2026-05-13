@@ -143,6 +143,7 @@ function createMinimalStore(overrides: Partial<{
   listForTool: (filter: Partial<NormalizedListMemoriesInput> & { offset?: number }) => ListForToolResult;
   listAllInternal: (filter?: Partial<NormalizedListMemoriesInput>) => MemoryRecord[];
   setMeta: (key: string, value: string) => void;
+  getMeta: (key: string) => string | null;
 }> = {}) {
   const base = createMemory();
   return {
@@ -160,6 +161,8 @@ function createMinimalStore(overrides: Partial<{
     count() { return 0; },
     createMemory(_input: CreateMemoryInput) { return base; },
     archiveMemory(_input: ArchiveMemoryInput) { return base; },
+    setMeta(_key: string, _value: string) { return; },
+    getMeta(_key: string): string | null { return null; },
     ...overrides,
   };
 }
@@ -389,7 +392,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.deepEqual(updateOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
 });
 
-test("memory_audit returns project migration preview without writing audit metadata", async (t) => {
+test("memory_audit returns project migration preview and writes audit metadata", async (t) => {
   const projectContext = await createTempPiToolContext();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
 
@@ -401,13 +404,14 @@ test("memory_audit returns project migration preview without writing audit metad
     title: "Legacy project record",
   });
   const filters: Array<Partial<NormalizedListMemoriesInput> | undefined> = [];
+  const metaWrites: Array<{ key: string; value: string }> = [];
   const store = createMinimalStore({
     listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
       filters.push(filter);
       return filter?.scope?.includes("project") || !filter?.scope ? [legacyProject] : [];
     },
-    setMeta() {
-      throw new Error("memory_audit must be read-only");
+    setMeta(key: string, value: string) {
+      metaWrites.push({ key, value });
     },
   });
 
@@ -443,6 +447,11 @@ test("memory_audit returns project migration preview without writing audit metad
     },
   ]);
   assert.ok(filters.every((filter) => filter?.projectId === undefined), "audit preview must not add projectId+repoPath filters");
+  assert.equal(metaWrites.length, 2, "memory_audit must write lastAuditAt and lastAuditSummary");
+  assert.equal(metaWrites[0]?.key, "lastAuditAt");
+  assert.match(metaWrites[0]?.value ?? "", /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(metaWrites[1]?.key, "lastAuditSummary");
+  assert.match(metaWrites[1]?.value ?? "", /finding\(s\)/);
 });
 
 test("memory_save_handoff updates only the current session handoff", async (t) => {
@@ -1151,4 +1160,55 @@ test("memory_save_handoff omits warning when active handoff count < 3", async (t
   );
 
   assert.doesNotMatch(output.content[0].text, /warning:.*active handoffs/);
+});
+
+test("memory_stats shows last_audit: never when memory_audit has not run", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
+  t.after(() => { store.close(); });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+
+  const output = await toolByName(tools, "memory_stats").execute(
+    "call-stats-no-audit",
+    { scope: "repo", repoPath: projectContext.cwd },
+    new AbortController().signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.match(output.content[0].text, /last_audit: never/);
+  assert.match(output.content[0].text, /last_audit_summary: n\/a/);
+});
+
+test("memory_stats shows last_audit and last_audit_summary after memory_audit runs", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
+  t.after(() => { store.close(); });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+
+  await toolByName(tools, "memory_audit").execute("call-audit-meta", {}, signal, () => undefined, ctx);
+
+  const statsOutput = await toolByName(tools, "memory_stats").execute(
+    "call-stats-after-audit",
+    { scope: "repo", repoPath: projectContext.cwd },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.match(statsOutput.content[0].text, /last_audit: \d{4}-\d{2}-\d{2}T/);
+  assert.match(statsOutput.content[0].text, /last_audit_summary: \d+ finding\(s\):/);
 });
