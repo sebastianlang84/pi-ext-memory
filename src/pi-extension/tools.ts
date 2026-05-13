@@ -246,8 +246,17 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
           })
         : store.createMemory({ ...handoffInput, sourceAgent: "pi" });
 
+      const activeHandoffCount = store.count({
+        kind: ["handoff"],
+        status: "active",
+        ...(turnContext.repoPath ? { repoPath: turnContext.repoPath } : {}),
+      });
+      const handoffWarning = activeHandoffCount >= 3
+        ? `\nwarning: ${activeHandoffCount} active handoffs for this repo — consider archiving old ones.`
+        : "";
+
       return {
-        content: [{ type: "text", text: formatMemorySaved(memory, store) }],
+        content: [{ type: "text", text: formatMemorySaved(memory, store) + handoffWarning }],
         details: { dbPath: store.dbPath, memory },
       };
     },

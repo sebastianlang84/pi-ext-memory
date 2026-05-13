@@ -1071,3 +1071,84 @@ test("memory_update rejects scope changes that would leave stale session identit
   assert.deepEqual(capturedUpdates, []);
   assert.match(output.content[0].text, /cannot change a session memory to repo\/project\/global/);
 });
+
+test("memory_save_handoff appends warning when active handoff count >= 3", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const savedHandoff = createMemory({
+    id: "handoff-new",
+    kind: "handoff",
+    scope: "session",
+    projectId: projectContext.projectId,
+    repoPath: projectContext.cwd,
+    sessionId: projectContext.sessionId,
+    sourceAgent: "pi",
+  });
+  const store = createMinimalStore({
+    listAllInternal() { return []; }, // no existing handoff for this session
+    createMemory(_input: CreateMemoryInput) { return savedHandoff; },
+    count() { return 3; },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_save_handoff").execute(
+    "call-handoff-warn",
+    {
+      handoffReason: "context_reset",
+      resumeInstruction: "Resume from warning test",
+      goal: "Test handoff warning",
+      currentState: "Running test.",
+      nextSteps: ["Verify warning appears"],
+    },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /warning: 3 active handoffs for this repo/);
+  assert.match(output.content[0].text, /consider archiving old ones/);
+});
+
+test("memory_save_handoff omits warning when active handoff count < 3", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const savedHandoff = createMemory({
+    id: "handoff-ok",
+    kind: "handoff",
+    scope: "session",
+    projectId: projectContext.projectId,
+    repoPath: projectContext.cwd,
+    sessionId: projectContext.sessionId,
+    sourceAgent: "pi",
+  });
+  const store = createMinimalStore({
+    listAllInternal() { return []; },
+    createMemory(_input: CreateMemoryInput) { return savedHandoff; },
+    count() { return 2; },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_save_handoff").execute(
+    "call-handoff-no-warn",
+    {
+      handoffReason: "session_end",
+      resumeInstruction: "Resume from no-warning test",
+      goal: "Test no handoff warning",
+      currentState: "Running test.",
+      nextSteps: ["Verify no warning"],
+    },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.doesNotMatch(output.content[0].text, /warning:.*active handoffs/);
+});

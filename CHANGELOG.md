@@ -12,6 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.12] - 2026-05-13
+
+### Added
+- `memory_save_handoff` now warns when ≥ 3 active handoffs exist for the same repoPath.
+
 ## [3.3.11] - 2026-05-13
 
 ### Removed

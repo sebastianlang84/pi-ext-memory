@@ -59,6 +59,7 @@ scope: always-loaded bootstrap; keep lean
 - `pi-memory` should be globally useful across repos; avoid designs that fragment durable memory into per-repo databases by default.
 
 ## 3) Recent Tasks
+- 2026-05-13 — Completed memory-model-minimisation Slice 6: memory_save_handoff warns when ≥3 active handoffs; bumped to v3.3.12.
 - 2026-05-13 — Completed memory-model-minimisation Slice 5: removed expiresAt/staleAfter from all inputs, outputs, store methods, policy functions, and tools; bumped to v3.3.11.
 - 2026-05-13 — Completed memory-model-minimisation Slice 4: removed `memory_archive`, `memory_link`, `memory_list_active_todos`, `memory_list_active_handoffs` tools; removed all link-related store methods, types, and exports; updated available-tools list and formatters; bumped package to v3.3.10.
 - 2026-05-13 — Completed memory-model-minimisation Slice 3: removed `done` and `superseded` from `MEMORY_STATUSES` (now `active`+`archived` only), updated `memory_stats` tool description and kindStatuses, updated handoff test to use `archived` instead of `superseded`, updated lifecycle-policy test; bumped package metadata to v3.3.9.
@@ -109,7 +110,7 @@ scope: always-loaded bootstrap; keep lean
 - How much post-V1 memory creation should become assisted beyond the current manual-first write policy.
 
 ## 5) Next Steps
-1. Continue memory-model-minimisation v2.0.0: next is Slice 6 — Handoff count warning.
+1. Continue memory-model-minimisation v2.0.0: next is Slice 7 — Meta-table audit logging.
 2. Monitor real-machine BGE-M3 command-adapter retrieval quality and latency in normal use; keep the shipped deterministic fallback unless evidence supports a different lighter semantic fallback.
 3. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
 
