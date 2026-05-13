@@ -59,6 +59,7 @@ scope: always-loaded bootstrap; keep lean
 - `pi-memory` should be globally useful across repos; avoid designs that fragment durable memory into per-repo databases by default.
 
 ## 3) Recent Tasks
+- 2026-05-13 — Completed memory-model-minimisation v2.0.0 (Slice 9): final CHANGELOG entry written, version bumped to v2.0.0. Plan complete.
 - 2026-05-13 — Completed memory-model-minimisation Slice 8: agent guidelines updated, README caps table cleaned; bumped to v3.3.14.
 - 2026-05-13 — Completed memory-model-minimisation Slice 7: memory_audit writes lastAuditAt/lastAuditSummary to meta table; memory_stats exposes them; bumped to v3.3.13.
 - 2026-05-13 — Completed memory-model-minimisation Slice 6: memory_save_handoff warns when ≥3 active handoffs; bumped to v3.3.12.
@@ -112,7 +113,7 @@ scope: always-loaded bootstrap; keep lean
 - How much post-V1 memory creation should become assisted beyond the current manual-first write policy.
 
 ## 5) Next Steps
-1. Continue memory-model-minimisation v2.0.0: next is Slice 9 — final tests, CHANGELOG, and v2.0.0 release.
+1. memory-model-minimisation v2.0.0 complete. Backlog: provenance/sourceAgent exposure.
 2. Monitor real-machine BGE-M3 command-adapter retrieval quality and latency in normal use; keep the shipped deterministic fallback unless evidence supports a different lighter semantic fallback.
 3. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
 

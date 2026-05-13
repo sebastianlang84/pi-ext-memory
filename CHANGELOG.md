@@ -12,6 +12,23 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-05-13
+
+### Breaking Changes
+- **Schema**: Dropped `expires_at`, `stale_after` columns and `links` table (migration v7). Collapsed `done`/`superseded` status values to `archived`.
+- **Kinds**: Reduced from 8 to 2 — `todo` and `handoff` only (migration v8). `progress_snapshot`, `fact`, `preference`, `decision`, `episode`, `artifact_ref` kinds removed.
+- **Status**: Only `active` and `archived` remain. Use `archiveReason` for semantic nuance.
+- **Fields removed**: `expiresAt`, `staleAfter` removed from all inputs, outputs, store methods, and policy functions.
+- **Tools removed**: `memory_archive`, `memory_link`, `memory_list_active_todos`, `memory_list_active_handoffs`.
+- **Policy functions removed**: `computeDefaultExpiresAt`, `computeDefaultStaleAfter`, `isTodoStale`, `isHandoffExpired`, `isMemoryExpired`, `isMemoryPastStaleAfter`.
+- **`memory_save`**: No longer accepts `kind` or `progress` parameters.
+- **`memory_update`**: No longer accepts `expiresAt` parameter.
+
+### Added
+- `memory_save_handoff` warns when ≥ 3 active handoffs exist for the same repoPath.
+- `memory_audit` writes `lastAuditAt` and `lastAuditSummary` to the meta table after every run.
+- `memory_stats` output includes `last_audit` and `last_audit_summary` lines.
+
 ## [3.3.14] - 2026-05-13
 
 ### Changed

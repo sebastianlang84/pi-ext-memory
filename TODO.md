@@ -24,7 +24,7 @@ Follow [Plan — Memory Model Minimisation](docs/plans/memory-model-minimisation
 - [x] 6. Handoff count warning (≥3 active handoffs in same repo → warn)
 - [x] 7. Meta-table audit logging (lastAuditAt + lastAuditSummary after every audit)
 - [x] 8. Agent guidelines update (promptSnippets, README, AGENTS.md)
-- [ ] 9. Tests and CHANGELOG
+- [x] 9. Tests and CHANGELOG
 
 ## Quality Reviews
 
