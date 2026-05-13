@@ -12,6 +12,12 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.14] - 2026-05-13
+
+### Changed
+- Removed stale/expired detection references from `memory_audit` promptSnippet and promptGuidelines.
+- README active caps table: dropped `Todo stale after` and `Handoff expires after` columns; removed expired-handoff exclusion note.
+
 ## [3.3.13] - 2026-05-13
 
 ### Added

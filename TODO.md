@@ -23,7 +23,7 @@ Follow [Plan — Memory Model Minimisation](docs/plans/memory-model-minimisation
 - [x] 5. Field removal (expiresAt, staleAfter, progress object)
 - [x] 6. Handoff count warning (≥3 active handoffs in same repo → warn)
 - [x] 7. Meta-table audit logging (lastAuditAt + lastAuditSummary after every audit)
-- [ ] 8. Agent guidelines update (promptSnippets, README, AGENTS.md)
+- [x] 8. Agent guidelines update (promptSnippets, README, AGENTS.md)
 - [ ] 9. Tests and CHANGELOG
 
 ## Quality Reviews

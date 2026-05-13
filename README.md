@@ -32,7 +32,7 @@ memory_save                  — save facts, decisions, notes, progress snapshot
 memory_save_todo             — save actionable open tasks (priority, status, scope)
 memory_save_handoff          — save/refresh resumable agent handoff state
 memory_update                — patch, close, or archive an existing memory by id; use archiveReason with status=archived when archiving
-memory_audit                 — report stale todos, old handoffs, scope identity issues, and read-only legacy project migration preview
+memory_audit                 — report scope identity issues and read-only legacy project migration preview
 /memory-status               — show extension status and config
 /memory-search <query>       — manual memory search
 /memory-handoff              — show or archive the active session handoff
@@ -57,13 +57,13 @@ Inside a Git repository, ordinary saves and todos default to `repo`; outside a r
 
 ### Active caps
 
-| Scope | Todo hard cap | Handoff hard cap | Todo stale after | Handoff expires after |
-|---|---|---|---|---|
-| repo / session | 50 | 10 | 30 days | 14 days |
-| global | 20 | 5 | 30 days | 14 days |
-| legacy project | 50 | 10 | 30 days | 14 days |
+| Scope | Todo hard cap | Handoff hard cap |
+|---|---|---|
+| repo / session | 50 | 10 |
+| global | 20 | 5 |
+| legacy project | 50 | 10 |
 
-Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup suggestions. Archive or complete existing todos/handoffs first. Expired active handoffs are excluded from turn-start preload and active handoff listings.
+Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup suggestions. Archive or complete existing todos/handoffs first.
 
 Optional configuration:
 

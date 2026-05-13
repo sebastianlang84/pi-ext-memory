@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v3.3.13",
+        version: "v3.3.14",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
@@ -39,7 +39,7 @@ export function createMemoryCore(): MemoryCore {
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save", "/memory-audit"],
         availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_stats"],
-        nextStep: "memory-model-minimisation in progress (v2.0.0 target). Next: Slice 8 — agent guidelines update.",
+        nextStep: "memory-model-minimisation in progress (v2.0.0 target). Next: Slice 9 — final tests, CHANGELOG, and v2.0.0 release.",
       };
     },
     initializeStore(input) {

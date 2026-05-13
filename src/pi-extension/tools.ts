@@ -517,9 +517,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     name: "memory_audit",
     label: "Memory Audit",
     description: "Audit memory hygiene and show a read-only migration preview for legacy project-scoped records.",
-    promptSnippet: "Run memory_audit to inspect stale todos, old handoffs, scope identity issues, and legacy project-scope migration preview candidates. Returns candidates with id, title, reason, and suggested action.",
+    promptSnippet: "Run memory_audit to inspect scope identity issues and legacy project-scope migration preview candidates. Returns candidates with id, title, reason, and suggested action.",
     promptGuidelines: [
-      "Run memory_audit when the session-start hygiene warning mentions stale items or after scope-identity changes.",
+      "Run memory_audit when the session-start hygiene warning fires or after scope-identity changes.",
       "Use memory_audit to preview legacy project-scope records before any migration; the preview is read-only.",
       "Use memory_audit optional scope or repoPath filters to narrow the audit.",
     ],
