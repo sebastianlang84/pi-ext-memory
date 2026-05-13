@@ -12,9 +12,7 @@ import {
 import {
   type ArchiveMemoryInput,
   type CreateMemoryInput,
-  type LinkMemoriesInput,
   type ListMemoriesInput,
-  type MemoryLinkRecord,
   type MemoryRecord,
   type MemorySearchResult,
   type NormalizedListMemoriesInput,
@@ -23,7 +21,6 @@ import {
   MemoryValidationError,
   normalizeArchiveMemoryInput,
   normalizeCreateMemoryInput,
-  normalizeLinkMemoriesInput,
   normalizeListMemoriesInput,
   normalizeSearchMemoriesInput,
   normalizeUpdateMemoryInput,
@@ -99,21 +96,11 @@ export interface MemoryStore extends MemoryStoreStatus {
   getMemoryEmbedding(id: string): MemoryEmbeddingRecord | null;
   getSession(sessionId: string): SessionRecord | null;
   saveSessionSummary(input: SaveSessionSummaryInput): SessionRecord;
-  linkMemories(input: LinkMemoriesInput): MemoryLinkRecord;
-  listMemoryLinks(memoryId: string): MemoryLinkRecord[];
   createSearchQueryEmbedding(query: string): GeneratedMemoryEmbedding;
   searchMemories(input: SearchMemoriesInput, options?: SearchMemoriesOptions): MemorySearchResult[];
   getMeta(key: string): string | null;
   setMeta(key: string, value: string): void;
   close(): void;
-}
-
-interface MemoryLinkRow {
-  id: number;
-  from_memory_id: string;
-  to_memory_id: string;
-  relation: MemoryLinkRecord["relation"];
-  created_at: string;
 }
 
 export function initializeMemoryStore(input: InitializeMemoryStoreInput): MemoryStore {
@@ -456,48 +443,6 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
 
         return session;
       },
-      linkMemories(input) {
-        assertStoreOpen(isClosed);
-
-        const normalizedInput = normalizeLinkMemoriesInput(input);
-
-        if (!readMemoryById(db, normalizedInput.fromId)) {
-          throw new Error(`Memory ${normalizedInput.fromId} was not found`);
-        }
-
-        if (!readMemoryById(db, normalizedInput.toId)) {
-          throw new Error(`Memory ${normalizedInput.toId} was not found`);
-        }
-
-        const timestamp = new Date().toISOString();
-
-        db.prepare(`
-          INSERT INTO links (
-            from_memory_id,
-            to_memory_id,
-            relation,
-            created_at
-          ) VALUES (?, ?, ?, ?)
-          ON CONFLICT(from_memory_id, to_memory_id, relation) DO NOTHING;
-        `).run(normalizedInput.fromId, normalizedInput.toId, normalizedInput.relation, timestamp);
-
-        const link = readMemoryLink(db, normalizedInput.fromId, normalizedInput.toId, normalizedInput.relation);
-        if (!link) {
-          throw new Error(
-            `Failed to read back persisted link ${normalizedInput.fromId} -> ${normalizedInput.toId} (${normalizedInput.relation})`,
-          );
-        }
-
-        return link;
-      },
-      listMemoryLinks(memoryId) {
-        assertStoreOpen(isClosed);
-
-        const normalizedId = memoryId.trim();
-        if (normalizedId.length === 0) return [];
-
-        return readMemoryLinksForMemory(db, normalizedId);
-      },
       createSearchQueryEmbedding(query) {
         assertStoreOpen(isClosed);
 
@@ -763,46 +708,6 @@ function readSessionById(db: DatabaseSync, sessionId: string): SessionRecord | n
   return row ? mapSessionRow(row) : null;
 }
 
-function readMemoryLink(
-  db: DatabaseSync,
-  fromId: string,
-  toId: string,
-  relation: MemoryLinkRecord["relation"],
-): MemoryLinkRecord | null {
-  const row = db
-    .prepare(
-      `SELECT
-        id,
-        from_memory_id,
-        to_memory_id,
-        relation,
-        created_at
-      FROM links
-      WHERE from_memory_id = ? AND to_memory_id = ? AND relation = ?;`,
-    )
-    .get(fromId, toId, relation) as MemoryLinkRow | undefined;
-
-  return row ? mapMemoryLinkRow(row) : null;
-}
-
-function readMemoryLinksForMemory(db: DatabaseSync, memoryId: string): MemoryLinkRecord[] {
-  const rows = db
-    .prepare(
-      `SELECT
-        id,
-        from_memory_id,
-        to_memory_id,
-        relation,
-        created_at
-      FROM links
-      WHERE from_memory_id = ? OR to_memory_id = ?
-      ORDER BY created_at DESC, id DESC;`,
-    )
-    .all(memoryId, memoryId) as MemoryLinkRow[];
-
-  return rows.map(mapMemoryLinkRow);
-}
-
 function writeMemoryRow(db: DatabaseSync, memory: MemoryRecord): void {
   db.prepare(`
     UPDATE memories
@@ -897,16 +802,6 @@ function writeMemoryEmbedding(
     timestamp,
     timestamp,
   );
-}
-
-function mapMemoryLinkRow(row: MemoryLinkRow): MemoryLinkRecord {
-  return {
-    id: row.id,
-    fromId: row.from_memory_id,
-    toId: row.to_memory_id,
-    relation: row.relation,
-    createdAt: row.created_at,
-  };
 }
 
 function buildArchivedMetadata(

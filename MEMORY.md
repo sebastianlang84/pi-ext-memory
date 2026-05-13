@@ -59,6 +59,8 @@ scope: always-loaded bootstrap; keep lean
 - `pi-memory` should be globally useful across repos; avoid designs that fragment durable memory into per-repo databases by default.
 
 ## 3) Recent Tasks
+- 2026-05-13 — Completed memory-model-minimisation Slice 4: removed `memory_archive`, `memory_link`, `memory_list_active_todos`, `memory_list_active_handoffs` tools; removed all link-related store methods, types, and exports; updated available-tools list and formatters; bumped package to v3.3.10.
+- 2026-05-13 — Completed memory-model-minimisation Slice 3: removed `done` and `superseded` from `MEMORY_STATUSES` (now `active`+`archived` only), updated `memory_stats` tool description and kindStatuses, updated handoff test to use `archived` instead of `superseded`, updated lifecycle-policy test; bumped package metadata to v3.3.9.
 - 2026-05-13 — Completed memory-model-minimisation Slice 2: added schema migration v8 making `kind` nullable, migrated removed kinds to NULL, reduced MEMORY_KINDS to `["todo","handoff"]`, removed `kind`/`progress` from `memory_save`, updated migration runner for FK-safe table recreation; bumped package metadata to v3.3.8.
 - 2026-05-13 — Completed memory-model-minimisation Slice 1: added schema migration v7 that drops `expires_at`, `stale_after`, `links` table, and collapses `done`/`superseded` → `archived`; bumped package metadata to v3.3.7.
 - 2026-04-16 — Bootstrapped repo living-doc structure and added the initial PRD under `docs/`.
@@ -106,7 +108,7 @@ scope: always-loaded bootstrap; keep lean
 - How much post-V1 memory creation should become assisted beyond the current manual-first write policy.
 
 ## 5) Next Steps
-1. Continue memory-model-minimisation v2.0.0: next is Slice 3 — Status reduction (active + archived only).
+1. Continue memory-model-minimisation v2.0.0: next is Slice 5 — Field removal (expiresAt, staleAfter, progress object).
 2. Monitor real-machine BGE-M3 command-adapter retrieval quality and latency in normal use; keep the shipped deterministic fallback unless evidence supports a different lighter semantic fallback.
 3. Keep the runtime-boundary decision explicit as an ADR if later evidence pushes beyond the current in-process extension plan.
 

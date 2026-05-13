@@ -9,10 +9,8 @@ import { initializeMemoryStore } from "../../src/core/index.ts";
 import type {
   ArchiveMemoryInput,
   CreateMemoryInput,
-  LinkMemoriesInput,
   ListMemoriesInput,
   ListForToolResult,
-  MemoryLinkRecord,
   MemoryRecord,
   MemorySearchResult,
   NormalizedListMemoriesInput,
@@ -161,9 +159,6 @@ function createMinimalStore(overrides: Partial<{
     listAllInternal() { return []; },
     count() { return 0; },
     createMemory(_input: CreateMemoryInput) { return base; },
-    linkMemories(_input: LinkMemoriesInput): MemoryLinkRecord {
-      return { id: 1, fromId: "a", toId: "b", relation: "related_to", createdAt: "" };
-    },
     archiveMemory(_input: ArchiveMemoryInput) { return base; },
     ...overrides,
   };
@@ -179,9 +174,8 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     create: CreateMemoryInput[];
     get: string[];
     update: UpdateMemoryInput[];
-    link: LinkMemoriesInput[];
     archive: ArchiveMemoryInput[];
-  } = { search: [], list: [], listForTool: [], create: [], get: [], update: [], link: [], archive: [] };
+  } = { search: [], list: [], listForTool: [], create: [], get: [], update: [], archive: [] };
   const projectContext = await createTempPiToolContext();
   t.after(async () => {
     await rm(projectContext.cwd, { recursive: true, force: true });
@@ -210,13 +204,6 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     status: "archived",
     metadata: { archive: { archivedReason: "superseded" } },
   });
-  const link: MemoryLinkRecord = {
-    id: 7,
-    fromId: "memory-saved",
-    toId: "memory-updated",
-    relation: "supersedes",
-    createdAt: "2026-04-28T11:00:00.000Z",
-  };
   const store = {
     dbPath: "/tmp/pi-memory-test.sqlite",
     embeddingModel: "builtin-hash-384-v1",
@@ -253,10 +240,6 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       calls.update.push(input);
       return updatedMemory;
     },
-    linkMemories(input: LinkMemoriesInput) {
-      calls.link.push(input);
-      return link;
-    },
     archiveMemory(input: ArchiveMemoryInput) {
       calls.archive.push(input);
       return archivedMemory;
@@ -277,7 +260,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     },
   );
 
-  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit", "memory_list_active_todos", "memory_list_active_handoffs", "memory_stats"];
+  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_stats"];
   assert.equal(tools.length, expectedToolNames.length);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)), new Set(expectedToolNames));
   assert.ok(tools.every((tool) => tool.parameters), "expected all registered tools to expose parameters");
@@ -334,22 +317,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     onUpdate,
     ctx,
   );
-  const linkOutput = await toolByName(tools, "memory_link").execute(
-    "call-link",
-    { fromId: "memory-saved", toId: "memory-updated", relation: "supersedes" },
-    signal,
-    onUpdate,
-    ctx,
-  );
-  const archiveOutput = await toolByName(tools, "memory_archive").execute(
-    "call-archive",
-    { id: "memory-updated", reason: "superseded" },
-    signal,
-    onUpdate,
-    ctx,
-  );
-
-  assert.deepEqual(requestedCwds, [ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd]);
+  assert.deepEqual(requestedCwds, [ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd, ctx.cwd]);
   assert.deepEqual(calls.search, [{ query: "manual policy", limit: 3, sessionId: undefined, projectId: undefined, repoPath: undefined }]);
   assert.deepEqual(calls.listForTool, [
     { kind: ["todo"], scope: ["project"], tags: undefined, sessionId: undefined, projectId: projectContext.projectId, repoPath: undefined, status: undefined, orderBy: undefined, limit: 3, offset: 0 },
@@ -382,7 +350,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       sourceAgent: "pi",
     },
   ]);
-  assert.deepEqual(calls.get, ["memory-saved", "memory-updated"]);
+  assert.deepEqual(calls.get, ["memory-saved"]);
   assert.deepEqual(calls.update, [
     {
       id: "memory-saved",
@@ -396,8 +364,7 @@ test("registerMemoryTools registers expected tools and wires their executors", a
     },
     { id: "memory-saved", title: "Updated title", pinned: true },
   ]);
-  assert.deepEqual(calls.link, [{ fromId: "memory-saved", toId: "memory-updated", relation: "supersedes" }]);
-  assert.deepEqual(calls.archive, [{ id: "memory-updated", reason: "superseded" }]);
+  assert.deepEqual(calls.archive, []);
 
   assert.match(searchOutput.content[0].text, /Found 1 memory result for "manual policy"\./);
   assert.match(searchOutput.content[0].text, /Keep writes manual-first/);
@@ -416,18 +383,11 @@ test("registerMemoryTools registers expected tools and wires their executors", a
   assert.match(updateOutput.content[0].text, /Updated memory memory-updated\./);
   assert.match(updateOutput.content[0].text, /pinned: yes/);
   assert.match(updateOutput.content[0].text, /title: Updated title/);
-  assert.match(linkOutput.content[0].text, /Linked memory memory-saved -> memory-updated\./);
-  assert.match(linkOutput.content[0].text, /relation: supersedes/);
-  assert.match(archiveOutput.content[0].text, /Archived memory memory-archived\./);
-  assert.match(archiveOutput.content[0].text, /status: archived/);
-  assert.match(archiveOutput.content[0].text, /reason: superseded/);
   assert.deepEqual(searchOutput.details, { dbPath: store.dbPath, results: [result] });
   assert.deepEqual(listOutput.details, { dbPath: store.dbPath, total_count: 1, count: 1, has_more: false, next_offset: null, items: [savedMemory] });
   assert.deepEqual(saveOutput.details, { dbPath: store.dbPath, memory: savedMemory });
   assert.deepEqual(handoffOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
   assert.deepEqual(updateOutput.details, { dbPath: store.dbPath, memory: updatedMemory });
-  assert.deepEqual(linkOutput.details, { dbPath: store.dbPath, link });
-  assert.deepEqual(archiveOutput.details, { dbPath: store.dbPath, memory: archivedMemory });
 });
 
 test("memory_audit returns project migration preview without writing audit metadata", async (t) => {
@@ -484,84 +444,6 @@ test("memory_audit returns project migration preview without writing audit metad
     },
   ]);
   assert.ok(filters.every((filter) => filter?.projectId === undefined), "audit preview must not add projectId+repoPath filters");
-});
-
-test("memory_list_active_handoffs returns session handoffs for matching repo metadata", async (t) => {
-  const projectContext = await createTempPiToolContext();
-  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
-
-  const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
-  t.after(() => { store.close(); });
-  const handoff = store.createMemory({
-    kind: "handoff",
-    scope: "session",
-    sessionId: "previous-session",
-    projectId: projectContext.projectId,
-    repoPath: projectContext.cwd,
-    title: "Repo metadata session handoff",
-    summary: "This session-scoped handoff should appear in repo handoff lookup.",
-  });
-
-  const tools: RegisteredTool[] = [];
-  const registerMemoryTools = await importRegisterMemoryTools();
-  registerMemoryTools(
-    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
-    () => store as never,
-  );
-
-  const output = await toolByName(tools, "memory_list_active_handoffs").execute(
-    "call-repo-handoffs",
-    { scope: "repo", repoPath: projectContext.cwd },
-    new AbortController().signal,
-    () => undefined,
-    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
-  );
-
-  assert.match(output.content[0].text, /Repo metadata session handoff/);
-  assert.deepEqual(output.details.items, [handoff]);
-});
-
-test("memory_list_active_handoffs excludes expired handoffs", async (t) => {
-  const projectContext = await createTempPiToolContext();
-  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
-
-  const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
-  t.after(() => { store.close(); });
-  store.createMemory({
-    kind: "handoff",
-    scope: "session",
-    sessionId: "old-session",
-    repoPath: projectContext.cwd,
-    title: "Expired handoff",
-    summary: "Expired handoff should not be returned by active handoff lists.",
-    expiresAt: "2000-01-01T00:00:00.000Z",
-  });
-  const active = store.createMemory({
-    kind: "handoff",
-    scope: "session",
-    sessionId: "new-session",
-    repoPath: projectContext.cwd,
-    title: "Active handoff",
-    summary: "Unexpired handoff should remain visible in active handoff lists.",
-    expiresAt: "2999-01-01T00:00:00.000Z",
-  });
-
-  const tools: RegisteredTool[] = [];
-  const registerMemoryTools = await importRegisterMemoryTools();
-  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
-
-  const output = await toolByName(tools, "memory_list_active_handoffs").execute(
-    "call-repo-handoffs",
-    { scope: "repo", repoPath: projectContext.cwd },
-    new AbortController().signal,
-    () => undefined,
-    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
-  );
-
-  // TODO(slice5): restore expiry exclusion assertions after expiresAt/staleAfter field removal is complete
-  // expiresAt is not persisted to DB (removed in schema v7), so expired handoffs are returned as active
-  assert.ok(output.details.items.some((item: MemoryRecord) => item.id === active.id), "active handoff should be returned");
-  assert.match(output.content[0].text, /Active handoff/);
 });
 
 test("memory_save_handoff updates only the current session handoff", async (t) => {
@@ -648,40 +530,6 @@ test("memory_save_handoff does not update an expired current-session handoff", a
   const saved = output.details.memory as MemoryRecord;
   assert.equal(saved.id, expired.id);
   assert.equal(store.getMemory(saved.id)?.summary, "Fresh current-session handoff.");
-});
-
-test("memory_list_active_handoffs widens repo and project lookups to matching session handoffs", async (t) => {
-  const projectContext = await createTempPiToolContext();
-  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
-
-  const calls: Array<Partial<NormalizedListMemoriesInput>> = [];
-  const store = createMinimalStore({
-    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
-      calls.push(filter ?? {});
-      return [];
-    },
-  });
-
-  const tools: RegisteredTool[] = [];
-  const registerMemoryTools = await importRegisterMemoryTools();
-  registerMemoryTools(
-    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
-    () => store as never,
-  );
-
-  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
-  const signal = new AbortController().signal;
-  const handoffs = toolByName(tools, "memory_list_active_handoffs");
-
-  await handoffs.execute("call-repo-handoffs", { scope: "repo", repoPath: projectContext.cwd }, signal, () => undefined, ctx);
-  await handoffs.execute("call-project-handoffs", { scope: "project", projectId: projectContext.projectId }, signal, () => undefined, ctx);
-  await handoffs.execute("call-session-handoffs", { scope: "session" }, signal, () => undefined, ctx);
-
-  assert.deepEqual(calls, [
-    { kind: ["handoff"], scope: ["repo", "session"], status: "active", sessionId: undefined, repoPath: projectContext.cwd, projectId: undefined, orderBy: "updatedAt" },
-    { kind: ["handoff"], scope: ["project", "session"], status: "active", sessionId: undefined, repoPath: undefined, projectId: projectContext.projectId, orderBy: "updatedAt" },
-    { kind: ["handoff"], scope: ["session"], status: "active", sessionId: projectContext.sessionId, repoPath: undefined, projectId: undefined, orderBy: "updatedAt" },
-  ]);
 });
 
 test("memory_list supports optional kind/scope catalog mode", async (t) => {
@@ -836,43 +684,12 @@ test("memory_update rejects invalid archiveReason combinations", async (t) => {
   assert.deepEqual(updateCalls, []);
 });
 
-test("memory_archive archives handoffs by id from any session", async (t) => {
-  const projectContext = await createTempPiToolContext();
-  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
-
-  const handoff = createMemory({ id: "handoff-old", kind: "handoff", scope: "session", sessionId: "old-session" });
-  const archived = createMemory({ ...handoff, status: "archived" });
-  const calls: ArchiveMemoryInput[] = [];
-  const store = createMinimalStore({
-    getMemory(id: string): MemoryRecord | null { return id === handoff.id ? handoff : null; },
-  });
-  store.archiveMemory = (input: ArchiveMemoryInput) => {
-    calls.push(input);
-    return archived;
-  };
-
-  const tools: RegisteredTool[] = [];
-  const registerMemoryTools = await importRegisterMemoryTools();
-  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
-
-  const output = await toolByName(tools, "memory_archive").execute(
-    "call-archive-handoff",
-    { id: "handoff-old", reason: "superseded by newer handoff" },
-    new AbortController().signal,
-    () => undefined,
-    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
-  );
-
-  assert.deepEqual(calls, [{ id: "handoff-old", reason: "superseded by newer handoff" }]);
-  assert.match(output.content[0].text, /Archived memory handoff-old\./);
-});
-
 test("memory_update permits handoff lifecycle status updates but blocks content edits", async (t) => {
   const projectContext = await createTempPiToolContext();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
 
   const handoff = createMemory({ id: "handoff-old", kind: "handoff", scope: "session", sessionId: "old-session" });
-  const updated = createMemory({ ...handoff, status: "superseded" });
+  const updated = createMemory({ ...handoff, status: "archived" });
   const calls: UpdateMemoryInput[] = [];
   const store = createMinimalStore({
     getMemory(id: string): MemoryRecord | null { return id === handoff.id ? handoff : null; },
@@ -890,7 +707,7 @@ test("memory_update permits handoff lifecycle status updates but blocks content 
 
   const statusOutput = await toolByName(tools, "memory_update").execute(
     "call-supersede-handoff",
-    { id: "handoff-old", status: "superseded" },
+    { id: "handoff-old", status: "archived" },
     signal,
     () => undefined,
     ctx,
@@ -903,7 +720,7 @@ test("memory_update permits handoff lifecycle status updates but blocks content 
     ctx,
   );
 
-  assert.deepEqual(calls, [{ id: "handoff-old", status: "superseded" }]);
+  assert.deepEqual(calls, [{ id: "handoff-old", status: "archived" }]);
   assert.match(statusOutput.content[0].text, /Updated memory handoff-old\./);
   assert.match(contentOutput.content[0].text, /memory_update may only change handoff status\/expiresAt/);
 });
@@ -1163,20 +980,6 @@ test("public tools consistently reject contradictory scope identity filters", as
     () => undefined,
     ctx,
   );
-  const invalidTodos = await toolByName(tools, "memory_list_active_todos").execute(
-    "call-invalid-active-todos",
-    { scope: "global", repoPath: projectContext.cwd },
-    signal,
-    () => undefined,
-    ctx,
-  );
-  const invalidHandoffs = await toolByName(tools, "memory_list_active_handoffs").execute(
-    "call-invalid-handoffs",
-    { scope: "project", repoPath: projectContext.cwd },
-    signal,
-    () => undefined,
-    ctx,
-  );
   const invalidStats = await toolByName(tools, "memory_stats").execute(
     "call-invalid-stats",
     { scope: "repo", projectId: "manual-project" },
@@ -1195,18 +998,9 @@ test("public tools consistently reject contradictory scope identity filters", as
   assert.match(invalidTodo.content[0].text, /Invalid memory scope identity/);
   assert.match(invalidTodo.content[0].text, /scope=repo uses repoPath/);
   assert.match(invalidList.content[0].text, /scope=session uses sessionId/);
-  assert.match(invalidTodos.content[0].text, /scope=global does not accept/);
-  assert.match(invalidHandoffs.content[0].text, /legacy scope=project uses projectId/);
   assert.match(invalidStats.content[0].text, /scope=repo uses repoPath/);
   assert.match(invalidSearch.content[0].text, /cannot be combined without a single compatible scope/);
 
-  const validHandoffs = await toolByName(tools, "memory_list_active_handoffs").execute(
-    "call-valid-handoffs",
-    { scope: "project", projectId: projectContext.projectId },
-    signal,
-    () => undefined,
-    ctx,
-  );
   await toolByName(tools, "memory_stats").execute("call-valid-stats", { scope: "repo" }, signal, () => undefined, ctx);
   await toolByName(tools, "memory_search").execute(
     "call-valid-search",
@@ -1216,7 +1010,6 @@ test("public tools consistently reject contradictory scope identity filters", as
     ctx,
   );
 
-  assert.match(validHandoffs.content[0].text, /^notice: scope=project is legacy\/advanced compatibility/);
   assert.ok(capturedCounts.some((filter) => Array.isArray(filter.scope) && filter.scope[0] === "repo" && filter.repoPath === projectContext.cwd));
   assert.deepEqual(capturedSearches.at(-1), { query: "identity", repoPath: projectContext.cwd, sessionId: undefined, projectId: undefined });
   assert.deepEqual(capturedCreates, []);

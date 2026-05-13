@@ -82,5 +82,5 @@ test("lifecycle classification handles stale todos, expired handoffs, and invali
     reason: "Handoff expired: expires_at=2026-05-01T00:00:00.000Z passed",
     suggestedAction: "Archive if the task is complete or no longer relevant",
   });
-  assert.equal(classifyLifecycleAuditFinding(memory({ kind: "todo", status: "done", staleAfter: "2026-05-01T00:00:00.000Z" }), now), null);
+  assert.equal(classifyLifecycleAuditFinding(memory({ kind: "todo", status: "archived", staleAfter: "2026-05-01T00:00:00.000Z" }), now), null);
 });

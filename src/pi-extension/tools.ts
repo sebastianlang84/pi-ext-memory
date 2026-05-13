@@ -6,13 +6,11 @@ import { Type } from "typebox";
 
 import {
   MEMORY_KINDS,
-  MEMORY_LINK_RELATIONS,
   MEMORY_LIST_ORDER_BY,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
   type ListForToolResult,
   type MemoryKind,
-  type MemoryLinkRecord,
   type MemoryRecord,
   type MemoryScope,
   type MemorySearchResult,
@@ -21,7 +19,7 @@ import {
   getCapForKindScope,
 } from "../core/index.ts";
 import { formatMemorySearchResultLine } from "./formatters.ts";
-import { findLatestExactSessionHandoff, listRelevantActiveHandoffsForScope } from "./handoffs.ts";
+import { findLatestExactSessionHandoff } from "./handoffs.ts";
 import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
 import { type AuditCandidate, buildHygieneLine, formatAuditResults, runMemoryAudit } from "./audit.ts";
 import { createToolShell } from "./tool-shell.ts";
@@ -265,7 +263,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     promptGuidelines: [
       "Use memory_update to patch only the fields that actually changed.",
       "Prefer memory_update over writing a weaker duplicate memory.",
-      "Use memory_update(status=\"archived\", archiveReason=...) instead of memory_archive for normal archive flows.",
+      "Use memory_update(status=\"archived\", archiveReason=...) for normal archive flows.",
       "Use memory_update only when the target memory id is known from memory_search, memory_list, or retrieved context.",
     ],
     parameters: Type.Object({
@@ -448,32 +446,6 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   });
 
   pi.registerTool({
-    name: "memory_link",
-    label: "Memory Link",
-    description: "Advanced/admin tool: link related memories in the local pi-memory store.",
-    promptSnippet: "Use memory_link only for advanced relation maintenance when an explicit relation changes future retrieval or prevents duplicated context.",
-    promptGuidelines: [
-      "Use memory_link only as an advanced/admin tool, not for normal memory capture.",
-      "Use memory_link with simple V1 relations like related_to, supersedes, caused_by, implements, and blocks.",
-      "Use memory_link to connect existing memories instead of copying the same context into multiple records.",
-      "Use memory_link only when the relation changes future retrieval or prevents duplicated context.",
-    ],
-    parameters: Type.Object({
-      fromId: Type.String({ description: "Source memory id" }),
-      toId: Type.String({ description: "Target memory id" }),
-      relation: StringEnum(MEMORY_LINK_RELATIONS, { description: "Relationship type" }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const { store } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
-      const link = store.linkMemories(params);
-      return {
-        content: [{ type: "text", text: formatMemoryLinked(link, store.dbPath) }],
-        details: { dbPath: store.dbPath, link },
-      };
-    },
-  });
-
-  pi.registerTool({
     name: "memory_save_todo",
     label: "Memory Save Todo",
     description: "Save an actionable open task that should persist across sessions.",
@@ -539,37 +511,6 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   });
 
   pi.registerTool({
-    name: "memory_archive",
-    label: "Memory Archive",
-    description: "Compatibility wrapper: archive a short-lived or superseded memory without hard-deleting it.",
-    promptSnippet: "Use memory_archive only for compatibility; prefer memory_update(status=\"archived\", archiveReason=...) for normal archive flows.",
-    promptGuidelines: [
-      "Use memory_archive only as a compatibility wrapper; prefer memory_update(status=\"archived\", archiveReason=...) when possible.",
-      "Use memory_archive instead of deleting memories in V1.",
-      "Use memory_archive with a short reason when a future reader would benefit from the context.",
-    ],
-    parameters: Type.Object({
-      id: Type.String({ description: "Memory id to archive" }),
-      reason: Type.Optional(Type.String({ description: "Optional archive reason" })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const { store } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
-      const existingMemory = store.getMemory(params.id);
-      if (!existingMemory) {
-        return {
-          content: [{ type: "text", text: `Memory ${params.id} was not found.\ndb_path: ${store.dbPath}` }],
-          details: { dbPath: store.dbPath },
-        };
-      }
-      const memory = store.archiveMemory(params);
-      return {
-        content: [{ type: "text", text: formatMemoryArchived(memory, store.dbPath) }],
-        details: { dbPath: store.dbPath, memory },
-      };
-    },
-  });
-
-  pi.registerTool({
     name: "memory_audit",
     label: "Memory Audit",
     description: "Audit memory hygiene and show a read-only migration preview for legacy project-scoped records.",
@@ -595,88 +536,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   });
 
   pi.registerTool({
-    name: "memory_list_active_todos",
-    label: "Memory Active Todos",
-    description: "Compatibility wrapper: list active todos for one scope. Prefer memory_list(kind=\"todo\", status=\"active\") for normal use.",
-    promptSnippet: "Use memory_list_active_todos only when a bounded compatibility wrapper is preferable to memory_list(kind=\"todo\", status=\"active\").",
-    promptGuidelines: [
-      "Prefer memory_list(kind=\"todo\", status=\"active\") over memory_list_active_todos for normal todo inspection.",
-      "Use memory_list_active_todos with repo scope inside repositories only when the bounded no-pagination wrapper is useful; project scope is legacy/advanced compatibility.",
-      "For content-based todo search, use memory_search instead of memory_list_active_todos.",
-    ],
-    parameters: Type.Object({
-      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }),
-      repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
-      projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo todos" })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
-      const identity = resolveWriteIdentity(
-        { scope: params.scope as MemoryScope, projectId: params.projectId, repoPath: params.repoPath },
-        turnContext,
-        { requirePrimary: params.scope !== "global" },
-      );
-      if (identity.error) return identityErrorResponse(identity.error);
-      const result = store.listForTool({
-        kind: ["todo"],
-        scope: [params.scope as MemoryScope],
-        status: "active",
-        sessionId: identity.sessionId,
-        repoPath: identity.repoPath,
-        projectId: identity.projectId,
-        limit: 50,
-        offset: 0,
-      });
-      return {
-        content: [{ type: "text", text: withLegacyNotice(formatActiveList("todos", result.items, result.totalCount, store.dbPath), params.scope as MemoryScope) }],
-        details: { dbPath: store.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
-      };
-    },
-  });
-
-  pi.registerTool({
-    name: "memory_list_active_handoffs",
-    label: "Memory Active Handoffs",
-    description: "Compatibility wrapper: list active handoffs relevant to one scope, including matching session handoffs for repo/legacy project lookups.",
-    promptSnippet: "Use memory_list_active_handoffs only when its repo/session widening is needed; otherwise prefer memory_list(kind=\"handoff\", status=\"active\").",
-    promptGuidelines: [
-      "Prefer memory_list(kind=\"handoff\", status=\"active\") over memory_list_active_handoffs for normal handoff listing.",
-      "Use memory_list_active_handoffs only when bounded active handoff inspection or repo/session widening is specifically needed.",
-      "Use memory_list_active_handoffs with repoPath for repo handoff state; projectId is legacy/advanced compatibility.",
-      "For content-based handoff search, use memory_search instead of memory_list_active_handoffs.",
-    ],
-    parameters: Type.Object({
-      scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }),
-      repoPath: Type.Optional(Type.String({ description: "Optional repository path filter" })),
-      projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier filter; prefer repoPath for normal repo handoffs" })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
-      const scope = params.scope as MemoryScope;
-      const identity = resolveWriteIdentity(
-        { scope, projectId: params.projectId, repoPath: params.repoPath },
-        turnContext,
-        { requirePrimary: scope !== "global" },
-      );
-      if (identity.error) return identityErrorResponse(identity.error);
-      const result = listRelevantActiveHandoffsForScope(store, {
-        scope,
-        sessionId: identity.sessionId,
-        repoPath: identity.repoPath,
-        projectId: identity.projectId,
-        limit: 10,
-      });
-      return {
-        content: [{ type: "text", text: withLegacyNotice(formatActiveList("handoffs", result.items, result.totalCount, store.dbPath), scope) }],
-        details: { dbPath: store.dbPath, count: result.items.length, total_count: result.totalCount, items: result.items },
-      };
-    },
-  });
-
-  pi.registerTool({
     name: "memory_stats",
     label: "Memory Stats",
-    description: "Advanced/admin tool: summarize active/archived/done counts per kind and scope with cap warnings.",
+    description: "Advanced/admin tool: summarize active/archived counts per kind and scope with cap warnings.",
     promptSnippet: "Use memory_stats only for memory-store health, caps, and warnings; use memory_list for normal listing.",
     promptGuidelines: [
       "Use memory_stats as an advanced/admin health overview, not for normal memory navigation.",
@@ -699,7 +561,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       const scopeFilter = { scope: [scope], sessionId: identity.sessionId, repoPath: identity.repoPath, projectId: identity.projectId };
 
       const kindStatuses: Array<{ kind: string; statuses: string[] }> = [
-        { kind: "todo", statuses: ["active", "done", "archived"] },
+        { kind: "todo", statuses: ["active", "archived"] },
         { kind: "handoff", statuses: ["active", "archived"] },
       ];
 
@@ -905,16 +767,6 @@ function formatMemoryUpdated(memory: MemoryRecord, store: MemoryStore): string {
   }
 
   return lines.join("\n");
-}
-
-function formatMemoryLinked(link: MemoryLinkRecord, dbPath: string): string {
-  return [
-    `Linked memory ${link.fromId} -> ${link.toId}.`,
-    `relation: ${link.relation}`,
-    `link_id: ${link.id}`,
-    `created_at: ${link.createdAt}`,
-    `db_path: ${dbPath}`,
-  ].join("\n");
 }
 
 function formatMemoryArchived(memory: MemoryRecord, dbPath: string): string {

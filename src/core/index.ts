@@ -16,14 +16,12 @@ export { LATEST_MEMORY_SCHEMA_VERSION } from "./migrations.ts";
 export { createMemoryCore } from "./memory-core.ts";
 export {
   MEMORY_KINDS,
-  MEMORY_LINK_RELATIONS,
   MEMORY_LIST_ORDER_BY,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
   MemoryValidationError,
   normalizeArchiveMemoryInput,
   normalizeCreateMemoryInput,
-  normalizeLinkMemoriesInput,
   normalizeListMemoriesInput,
   normalizeSearchMemoriesInput,
   normalizeUpdateMemoryInput,
@@ -49,11 +47,8 @@ export type {
 export type {
   ArchiveMemoryInput,
   CreateMemoryInput,
-  LinkMemoriesInput,
   ListMemoriesInput,
   MemoryKind,
-  MemoryLinkRecord,
-  MemoryLinkRelation,
   MemoryListOrderBy,
   MemoryRecord,
   MemoryScope,

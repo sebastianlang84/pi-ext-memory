@@ -39,7 +39,7 @@ memory_audit                 — report stale todos, old handoffs, scope identit
 /memory-audit                — same as memory_audit tool, output to terminal
 ```
 
-Advanced/compatibility tools remain callable for older workflows: `memory_list_active_todos`, `memory_list_active_handoffs`, `memory_stats`, `memory_archive`, and `memory_link`. Prefer `memory_list` for normal listing and `memory_update(status="archived", archiveReason=...)` for normal archive flows.
+Use `memory_list` for normal listing and `memory_update(status="archived", archiveReason=...)` for normal archive flows.
 
 ### Scope identity
 

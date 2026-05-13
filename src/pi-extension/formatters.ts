@@ -34,7 +34,6 @@ export function formatMemoryReview(
     "suggested_actions:",
     "- Review matching memories before saving anything new.",
     "- Use memory_update if an existing memory is stale, incomplete, closed, or should be archived.",
-    "- Use memory_link only for advanced relation maintenance when overlap matters for future retrieval.",
     "- Use /memory-session-save <summary> to persist a compact session recap explicitly.",
   ];
 

@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v3.3.6",
+        version: "v3.3.10",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
@@ -38,8 +38,8 @@ export function createMemoryCore(): MemoryCore {
         activeEmbeddingModel: embeddingStatus.activeModel,
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save", "/memory-audit"],
-        availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_link", "memory_archive", "memory_audit", "memory_list_active_todos", "memory_list_active_handoffs", "memory_stats"],
-        nextStep: "Architecture Deepening Program complete at v3.3.6. Next: monitor BGE-M3 retrieval quality in production.",
+        availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_stats"],
+        nextStep: "memory-model-minimisation in progress (v2.0.0 target). Next: Slice 5 — field removal (expiresAt, staleAfter).",
       };
     },
     initializeStore(input) {

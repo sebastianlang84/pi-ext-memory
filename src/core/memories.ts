@@ -4,14 +4,12 @@ import { findScopeIdentityIssues } from "./identity-policy.ts";
 
 export const MEMORY_KINDS = ["todo", "handoff"] as const;
 export const MEMORY_SCOPES = ["global", "project", "repo", "session"] as const;
-export const MEMORY_STATUSES = ["active", "archived", "done", "superseded"] as const;
-export const MEMORY_LINK_RELATIONS = ["related_to", "supersedes", "caused_by", "implements", "blocks"] as const;
+export const MEMORY_STATUSES = ["active", "archived"] as const;
 export const MEMORY_LIST_ORDER_BY = ["updatedAt", "createdAt"] as const;
 
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 export type MemoryScope = (typeof MEMORY_SCOPES)[number];
 export type MemoryStatus = (typeof MEMORY_STATUSES)[number];
-export type MemoryLinkRelation = (typeof MEMORY_LINK_RELATIONS)[number];
 export type MemoryListOrderBy = (typeof MEMORY_LIST_ORDER_BY)[number];
 
 export interface CreateMemoryInput {
@@ -54,12 +52,6 @@ export interface UpdateMemoryInput {
 export interface ArchiveMemoryInput {
   id: string;
   reason?: string;
-}
-
-export interface LinkMemoriesInput {
-  fromId: string;
-  toId: string;
-  relation: MemoryLinkRelation;
 }
 
 export interface SearchMemoriesInput {
@@ -150,14 +142,6 @@ export interface MemoryRecord {
   expiresAt?: string;
   staleAfter?: string;
   metadata: Record<string, unknown>;
-}
-
-export interface MemoryLinkRecord {
-  id: number;
-  fromId: string;
-  toId: string;
-  relation: MemoryLinkRelation;
-  createdAt: string;
 }
 
 export interface MemorySearchResult {
@@ -330,24 +314,6 @@ export function normalizeArchiveMemoryInput(input: ArchiveMemoryInput): { id: st
   }
 
   return { id, reason };
-}
-
-export function normalizeLinkMemoriesInput(input: LinkMemoriesInput): { fromId: string; toId: string; relation: MemoryLinkRelation } {
-  const issues: string[] = [];
-
-  const fromId = normalizeNonEmptyId("fromId", input.fromId, issues);
-  const toId = normalizeNonEmptyId("toId", input.toId, issues);
-  const relation = normalizeEnum("relation", input.relation, MEMORY_LINK_RELATIONS, issues);
-
-  if (fromId && toId && fromId === toId) {
-    issues.push("fromId and toId must be different memory ids");
-  }
-
-  if (issues.length > 0 || !fromId || !toId || !relation) {
-    throw new MemoryValidationError(issues);
-  }
-
-  return { fromId, toId, relation };
 }
 
 export function normalizeListMemoriesInput(input: ListMemoriesInput): NormalizedListMemoriesInput {

@@ -12,6 +12,20 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.10] - 2026-05-13
+
+### Removed
+- `memory_archive` tool removed; use `memory_update(status="archived", archiveReason=...)` instead.
+- `memory_link` tool and all link-related store methods/types removed.
+- `memory_list_active_todos` tool removed; use `memory_list(kind="todo", status="active")` instead.
+- `memory_list_active_handoffs` tool removed; use `memory_list(kind="handoff", status="active")` instead.
+
+## [3.3.9] - 2026-05-13
+
+### Removed
+- `done` and `superseded` removed from `MEMORY_STATUSES`; only `active` and `archived` are now valid status values in code and validators.
+- `memory_stats` no longer tracks `done` counts for `todo` kind.
+
 ## [3.3.8] - 2026-05-13
 
 ### Removed
