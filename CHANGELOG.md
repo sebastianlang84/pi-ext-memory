@@ -12,6 +12,12 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-05-13
+
+### Changed
+- Introduced shared DDL builder functions (`buildMemoriesTableDdl`, `buildMemoryFtsDdl`, `buildMemoryFtsTriggersDdl`) in `migrations.ts`; v8 migration now references these builders instead of duplicating schema DDL.
+- Removed orphaned `artifacts` table and its indexes from v1 migration (fresh DBs only; existing DBs are unaffected).
+
 ## [2.0.3] - 2026-05-13
 
 ### Changed

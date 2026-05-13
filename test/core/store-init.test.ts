@@ -31,13 +31,13 @@ test("initializeMemoryStore creates a fresh database and applies schema v8", () 
 
     const coreTables = db
       .prepare(
-        `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts', 'memories', 'memory_embeddings', 'sessions') ORDER BY name;`,
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('memories', 'memory_embeddings', 'sessions') ORDER BY name;`,
       )
       .all() as Array<{ name: string }>;
 
     assert.deepEqual(
       coreTables.map((table) => table.name),
-      ["artifacts", "memories", "memory_embeddings", "sessions"],
+      ["memories", "memory_embeddings", "sessions"],
     );
 
     const linksTable = db

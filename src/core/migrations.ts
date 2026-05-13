@@ -6,6 +6,63 @@ export interface MemoryMigration {
   requiresFkOff?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Canonical DDL builders — used by v8 to avoid duplicating schema definitions
+// ---------------------------------------------------------------------------
+
+function buildMemoriesTableDdl(kindNullable: boolean): string {
+  const kindCol = kindNullable ? "kind TEXT," : "kind TEXT NOT NULL,";
+  return `CREATE TABLE memories (
+        id TEXT PRIMARY KEY,
+        ${kindCol}
+        scope TEXT NOT NULL,
+        session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        body TEXT,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        source_agent TEXT,
+        project_id TEXT,
+        repo_path TEXT,
+        branch TEXT,
+        importance REAL NOT NULL DEFAULT 0.5 CHECK (importance >= 0 AND importance <= 1),
+        confidence REAL NOT NULL DEFAULT 0.5 CHECK (confidence >= 0 AND confidence <= 1),
+        status TEXT NOT NULL DEFAULT 'active',
+        pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_accessed_at TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}'
+      );`;
+}
+
+function buildMemoryFtsDdl(): string {
+  return `CREATE VIRTUAL TABLE memory_fts USING fts5(
+        title,
+        summary,
+        body,
+        tags,
+        tokenize='unicode61 remove_diacritics 2'
+      );`;
+}
+
+function buildMemoryFtsTriggersDdl(): string {
+  return `CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+        INSERT INTO memory_fts(rowid, title, summary, body, tags)
+        VALUES (new.rowid, new.title, new.summary, coalesce(new.body, ''), coalesce(new.tags_json, '[]'));
+      END;
+
+      CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.rowid;
+      END;
+
+      CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.rowid;
+        INSERT INTO memory_fts(rowid, title, summary, body, tags)
+        VALUES (new.rowid, new.title, new.summary, coalesce(new.body, ''), coalesce(new.tags_json, '[]'));
+      END;`;
+}
+
 export const memoryMigrations: MemoryMigration[] = [
   {
     version: 1,
@@ -56,16 +113,6 @@ export const memoryMigrations: MemoryMigration[] = [
         metadata_json TEXT NOT NULL DEFAULT '{}'
       );
 
-      CREATE TABLE artifacts (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        external_id TEXT,
-        path_or_url TEXT,
-        title TEXT,
-        metadata_json TEXT NOT NULL DEFAULT '{}',
-        created_at TEXT NOT NULL
-      );
-
       CREATE INDEX idx_memories_kind_scope ON memories(kind, scope);
       CREATE INDEX idx_memories_project_id ON memories(project_id);
       CREATE INDEX idx_memories_repo_path ON memories(repo_path);
@@ -74,8 +121,6 @@ export const memoryMigrations: MemoryMigration[] = [
       CREATE INDEX idx_links_to_memory_id ON links(to_memory_id);
       CREATE INDEX idx_sessions_project_id ON sessions(project_id);
       CREATE INDEX idx_sessions_repo_path ON sessions(repo_path);
-      CREATE INDEX idx_artifacts_type ON artifacts(type);
-      CREATE INDEX idx_artifacts_external_id ON artifacts(external_id);
     `,
   },
   {
@@ -182,28 +227,7 @@ export const memoryMigrations: MemoryMigration[] = [
     name: "nullable_kind",
     requiresFkOff: true,
     sql: `
-      CREATE TABLE memories_new (
-        id TEXT PRIMARY KEY,
-        kind TEXT,
-        scope TEXT NOT NULL,
-        session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
-        title TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        body TEXT,
-        tags_json TEXT NOT NULL DEFAULT '[]',
-        source_agent TEXT,
-        project_id TEXT,
-        repo_path TEXT,
-        branch TEXT,
-        importance REAL NOT NULL DEFAULT 0.5 CHECK (importance >= 0 AND importance <= 1),
-        confidence REAL NOT NULL DEFAULT 0.5 CHECK (confidence >= 0 AND confidence <= 1),
-        status TEXT NOT NULL DEFAULT 'active',
-        pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        last_accessed_at TEXT,
-        metadata_json TEXT NOT NULL DEFAULT '{}'
-      );
+      ${buildMemoriesTableDdl(true).replace("CREATE TABLE memories (", "CREATE TABLE memories_new (")}
 
       INSERT INTO memories_new SELECT
         id,
@@ -232,32 +256,13 @@ export const memoryMigrations: MemoryMigration[] = [
       DROP TRIGGER IF EXISTS memories_au;
       DROP TABLE IF EXISTS memory_fts;
 
-      CREATE VIRTUAL TABLE memory_fts USING fts5(
-        title,
-        summary,
-        body,
-        tags,
-        tokenize='unicode61 remove_diacritics 2'
-      );
+      ${buildMemoryFtsDdl()}
 
       INSERT INTO memory_fts(rowid, title, summary, body, tags)
       SELECT rowid, title, summary, coalesce(body, ''), coalesce(tags_json, '[]')
       FROM memories;
 
-      CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
-        INSERT INTO memory_fts(rowid, title, summary, body, tags)
-        VALUES (new.rowid, new.title, new.summary, coalesce(new.body, ''), coalesce(new.tags_json, '[]'));
-      END;
-
-      CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
-        DELETE FROM memory_fts WHERE rowid = old.rowid;
-      END;
-
-      CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
-        DELETE FROM memory_fts WHERE rowid = old.rowid;
-        INSERT INTO memory_fts(rowid, title, summary, body, tags)
-        VALUES (new.rowid, new.title, new.summary, coalesce(new.body, ''), coalesce(new.tags_json, '[]'));
-      END;
+      ${buildMemoryFtsTriggersDdl()}
     `,
   },
 ];
