@@ -28,7 +28,7 @@ import {
   normalizeSearchMemoriesInput,
   normalizeUpdateMemoryInput,
 } from "./memories.ts";
-import { computeDefaultExpiresAt, computeDefaultStaleAfter, getCapForKindScope } from "./policy.ts";
+import { applyMemoryLifecycleDefaults, buildActiveCapCountFilter, getCapForKindScope } from "./policy.ts";
 import {
   type MemoryEmbeddingRow,
   type MemoryRow,
@@ -144,26 +144,12 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
       createMemory(input) {
         assertStoreOpen(isClosed);
 
-        const memory = normalizeCreateMemoryInput(input);
+        const memory = applyMemoryLifecycleDefaults(normalizeCreateMemoryInput(input));
 
-        // Save pipeline: apply defaults for todo/handoff
-        if (memory.kind === "todo" && !memory.staleAfter) {
-          memory.staleAfter = computeDefaultStaleAfter(memory.scope);
-        }
-        if (memory.kind === "handoff" && !memory.expiresAt) {
-          memory.expiresAt = computeDefaultExpiresAt(memory.scope);
-        }
-
-        // Cap check for todo/handoff
         const cap = getCapForKindScope(memory.kind, memory.scope);
-        if (cap) {
-          const activeCount = readMemoryCount(db, {
-            kind: [memory.kind],
-            scope: [memory.scope],
-            status: "active",
-            ...(memory.repoPath ? { repoPath: memory.repoPath } : {}),
-            ...(memory.projectId ? { projectId: memory.projectId } : {}),
-          });
+        const capCountFilter = buildActiveCapCountFilter(memory);
+        if (cap && capCountFilter) {
+          const activeCount = readMemoryCount(db, capCountFilter);
           if (activeCount >= cap.activeHardMax) {
             throw new MemoryValidationError([
               `active_${memory.kind}_cap_exceeded: ${activeCount} active ${memory.kind}s (hard cap: ${cap.activeHardMax}) for scope=${memory.scope}. Archive or complete existing ${memory.kind}s first.`,

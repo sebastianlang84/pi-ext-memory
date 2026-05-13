@@ -75,10 +75,19 @@ export type {
 } from "./store.ts";
 export {
   MEMORY_POLICY,
+  applyMemoryLifecycleDefaults,
+  buildActiveCapCountFilter,
+  classifyLifecycleAuditFinding,
   computeDefaultExpiresAt,
   computeDefaultStaleAfter,
   getCapForKindScope,
+  getEffectiveLifecycleScope,
+  isActiveUnexpiredHandoff,
+  isHandoffExpired,
+  isMemoryExpired,
+  isMemoryPastStaleAfter,
+  isTodoStale,
 } from "./policy.ts";
-export type { CapPolicy } from "./policy.ts";
+export type { ActiveCapCountFilter, CapPolicy, LifecycleAuditFinding, LifecycleAuditFindingType } from "./policy.ts";
 export { DEFAULT_HYBRID_RETRIEVAL_POLICY } from "./retrieval-policy.ts";
 export type { HybridRetrievalPolicy } from "./retrieval-policy.ts";

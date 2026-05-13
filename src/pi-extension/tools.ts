@@ -18,7 +18,6 @@ import {
   type MemorySearchResult,
   type MemoryStore,
   computeDefaultExpiresAt,
-  computeDefaultStaleAfter,
   getCapForKindScope,
 } from "../core/index.ts";
 import { formatMemorySearchResultLine } from "./formatters.ts";

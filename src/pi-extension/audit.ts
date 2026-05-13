@@ -1,4 +1,12 @@
-import { getCapForKindScope, type MemoryRecord, type MemoryScope, type MemoryStore } from "../core/index.ts";
+import {
+  classifyLifecycleAuditFinding,
+  getCapForKindScope,
+  isMemoryExpired,
+  isMemoryPastStaleAfter,
+  type MemoryRecord,
+  type MemoryScope,
+  type MemoryStore,
+} from "../core/index.ts";
 
 // ─── Memory Audit ────────────────────────────────────────────────────────────
 
@@ -76,30 +84,35 @@ export function runMemoryAuditFull(
       .map((m) => buildProjectMigrationPreviewCandidate(m, now))
     : [];
 
-  const staleTodos: AuditCandidate[] = todos
-    .filter((m) => isTodoStale(m, now))
-    .map((m) => ({
+  const staleTodos: AuditCandidate[] = todos.flatMap((m) => {
+    const finding = classifyLifecycleAuditFinding(m, now);
+    if (finding?.type !== "stale_todo") return [];
+    return [{
       id: m.id,
       title: m.title,
       kind: m.kind,
       tags: m.tags,
       updatedAt: m.updatedAt,
       scope: m.scope,
-      reason: `Todo stale: stale_after=${m.staleAfter ?? "not set"} passed`,
-      suggestedAction: "Archive if done, or update status/tags to reflect current state",
-    }));
+      reason: finding.reason,
+      suggestedAction: finding.suggestedAction,
+    }];
+  });
 
-  const expiredHandoffs = handoffs.filter((m) => isHandoffExpired(m, now));
-  const oldHandoffs: AuditCandidate[] = expiredHandoffs.map((m) => ({
-    id: m.id,
-    title: m.title,
-    kind: m.kind,
-    tags: m.tags,
-    updatedAt: m.updatedAt,
-    scope: m.scope,
-    reason: `Handoff expired: expires_at=${m.expiresAt ?? "not set"} passed`,
-    suggestedAction: "Archive if the task is complete or no longer relevant",
-  }));
+  const oldHandoffs: AuditCandidate[] = handoffs.flatMap((m) => {
+    const finding = classifyLifecycleAuditFinding(m, now);
+    if (finding?.type !== "expired_handoff") return [];
+    return [{
+      id: m.id,
+      title: m.title,
+      kind: m.kind,
+      tags: m.tags,
+      updatedAt: m.updatedAt,
+      scope: m.scope,
+      reason: finding.reason,
+      suggestedAction: finding.suggestedAction,
+    }];
+  });
 
   const warnings: string[] = [];
   const suggestedActions: string[] = [];
@@ -123,8 +136,8 @@ export function runMemoryAuditFull(
     }
   }
 
-  if (expiredHandoffs.length > 0) {
-    warnings.push(`${expiredHandoffs.length} handoff${expiredHandoffs.length !== 1 ? "s" : ""} expired`);
+  if (oldHandoffs.length > 0) {
+    warnings.push(`${oldHandoffs.length} handoff${oldHandoffs.length !== 1 ? "s" : ""} expired`);
     suggestedActions.push("Archive expired handoffs");
   }
 
@@ -149,7 +162,7 @@ export function runMemoryAuditFull(
     activeTodosCount: todos.length,
     activeHandoffsCount: handoffs.length,
     staleTodosCount: staleTodos.length,
-    expiredHandoffsCount: expiredHandoffs.length,
+    expiredHandoffsCount: oldHandoffs.length,
     identityViolationsCount: identityViolations.length,
     projectMigrationPreviewCount: projectMigrationPreview.length,
     warnings,
@@ -214,7 +227,7 @@ function buildProjectMigrationPreviewCandidate(m: MemoryRecord, now: Date): Proj
     };
   }
 
-  if (isHandoffExpired(m, now) || isTodoStale(m, now)) {
+  if (isMemoryExpired(m, now) || isMemoryPastStaleAfter(m, now)) {
     return {
       ...base,
       recommendation: "archive",
@@ -247,16 +260,6 @@ function buildProjectMigrationPreviewCandidate(m: MemoryRecord, now: Date): Proj
     reason: "Legacy project record has projectId but no repoPath metadata, so repo/global migration cannot be inferred safely",
     suggestedAction: "Keep discoverable as legacy/read-only until a human chooses the target scope",
   };
-}
-
-function isTodoStale(m: MemoryRecord, now: Date): boolean {
-  if (!m.staleAfter) return false;
-  return new Date(m.staleAfter) < now;
-}
-
-function isHandoffExpired(m: MemoryRecord, now: Date): boolean {
-  if (!m.expiresAt) return false;
-  return new Date(m.expiresAt) < now;
 }
 
 export function buildHygieneLine(staleTodoCount: number, oldHandoffCount: number): string | null {

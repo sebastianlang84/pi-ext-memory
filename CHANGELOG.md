@@ -12,6 +12,15 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.3] - 2026-05-13
+
+### Added
+- Added direct regression coverage for the lifecycle policy seam, including defaults, cap identity filters, stale/expired classification, and active handoff relevance.
+
+### Changed
+- Store lifecycle defaults/cap checks, handoff relevance filtering, and audit stale/expired recommendations now share the core lifecycle policy Module while preserving public tool behavior.
+- Runtime status metadata now reports `v3.3.3`.
+
 ## [3.3.2] - 2026-05-13
 
 ### Added

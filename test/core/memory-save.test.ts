@@ -84,6 +84,40 @@ test("createMemory rejects low-information writes", () => {
   }
 });
 
+test("createMemory applies lifecycle defaults for todos and handoffs", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    const before = Date.now();
+    const todo = store.createMemory({
+      kind: "todo",
+      scope: "repo",
+      repoPath: "/repo/a",
+      title: "Follow up on lifecycle policy",
+      summary: "Follow up on lifecycle policy after the architecture-deepening slice lands.",
+    });
+    const handoff = store.createMemory({
+      kind: "handoff",
+      scope: "session",
+      sessionId: "session-1",
+      repoPath: "/repo/a",
+      title: "Lifecycle handoff",
+      summary: "Lifecycle handoff defaults should include a bounded expiry timestamp.",
+    });
+    const after = Date.now();
+
+    assert.ok(todo.staleAfter, "expected todo staleAfter default");
+    assert.ok(handoff.expiresAt, "expected handoff expiresAt default");
+    assert.ok(Date.parse(todo.staleAfter) >= before + 29 * 24 * 60 * 60 * 1000);
+    assert.ok(Date.parse(todo.staleAfter) <= after + 31 * 24 * 60 * 60 * 1000);
+    assert.ok(Date.parse(handoff.expiresAt) >= before + 13 * 24 * 60 * 60 * 1000);
+    assert.ok(Date.parse(handoff.expiresAt) <= after + 15 * 24 * 60 * 60 * 1000);
+  } finally {
+    store.close();
+  }
+});
+
 test("createMemory supports persisted readback after reopening the store", () => {
   const dbPath = createTempDbPath();
   const firstStore = initializeMemoryStore({ dbPath });
