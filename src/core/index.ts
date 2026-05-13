@@ -73,15 +73,9 @@ export {
   applyMemoryLifecycleDefaults,
   buildActiveCapCountFilter,
   classifyLifecycleAuditFinding,
-  computeDefaultExpiresAt,
-  computeDefaultStaleAfter,
   getCapForKindScope,
   getEffectiveLifecycleScope,
   isActiveUnexpiredHandoff,
-  isHandoffExpired,
-  isMemoryExpired,
-  isMemoryPastStaleAfter,
-  isTodoStale,
 } from "./policy.ts";
 export type { ActiveCapCountFilter, CapPolicy, LifecycleAuditFinding, LifecycleAuditFindingType } from "./policy.ts";
 export { DEFAULT_HYBRID_RETRIEVAL_POLICY } from "./retrieval-policy.ts";

@@ -12,6 +12,13 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [3.3.11] - 2026-05-13
+
+### Removed
+- `expiresAt` and `staleAfter` fields removed from all inputs, outputs, store methods, and policy functions.
+- `computeDefaultExpiresAt`, `computeDefaultStaleAfter`, `isTodoStale`, `isHandoffExpired`, `isMemoryExpired`, `isMemoryPastStaleAfter` removed from public API.
+- `expiresAt` parameter removed from `memory_update` tool.
+
 ## [3.3.10] - 2026-05-13
 
 ### Removed

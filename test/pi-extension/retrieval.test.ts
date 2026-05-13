@@ -371,31 +371,29 @@ test("findLatestHandoffForTurn excludes expired active handoffs", () => {
   const store = initializeMemoryStore({ dbPath });
 
   try {
-    store.createMemory({
+    const session = store.createMemory({
       kind: "handoff",
       scope: "session",
       sessionId: "session-789",
       repoPath: "/repo",
-      title: "Expired exact handoff",
-      summary: "Expired exact handoff must not be preloaded.",
-      expiresAt: "2000-01-01T00:00:00.000Z",
+      title: "Session handoff",
+      summary: "Session handoff is always returned since expiresAt is removed.",
     });
     const fallback = store.createMemory({
       kind: "handoff",
       scope: "repo",
       repoPath: "/repo",
-      title: "Unexpired repo handoff",
-      summary: "Unexpired repo fallback remains relevant.",
-      expiresAt: "2999-01-01T00:00:00.000Z",
+      title: "Repo fallback handoff",
+      summary: "Repo fallback handoff is always returned since expiresAt is removed.",
     });
 
-    // TODO(slice5): restore expiry exclusion assertions after expiresAt/staleAfter field removal is complete
-    // expiresAt is not persisted to DB (removed in schema v7), so expired handoffs are returned as active
+    // expiresAt removed in slice5 — all active handoffs are returned regardless
     const latest = findLatestHandoffForTurn(store, { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" });
-    assert.ok(latest !== undefined, "expected some handoff to be returned");
+    assert.ok(latest !== undefined, "expected session handoff to be returned");
+    assert.equal(latest?.memory.id, session.id);
 
     store.archiveMemory({ id: fallback.id });
-    // expired session handoff is still returned since expiresAt is not enforced
+    // session handoff is still returned after repo fallback is archived
     assert.ok(findLatestHandoffForTurn(store, { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" }) !== undefined);
   } finally {
     store.close();

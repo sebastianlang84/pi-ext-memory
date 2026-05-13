@@ -66,7 +66,7 @@ test("runTurnIntake returns memory content when only search results are present"
   }
 });
 
-test("runTurnIntake returns hygiene line when only stale todos exist", () => {
+test("runTurnIntake returns no hygiene line (stale detection removed)", () => {
   const dbPath = join(createTempDir("pi-memory-turn-intake-hygiene-"), "memory.sqlite");
   const store = initializeMemoryStore({ dbPath });
 
@@ -75,15 +75,13 @@ test("runTurnIntake returns hygiene line when only stale todos exist", () => {
       kind: "todo",
       scope: "repo",
       repoPath: "/repo",
-      title: "Old stale todo",
-      summary: "This todo has been stale for a long time.",
-      staleAfter: "2000-01-01T00:00:00.000Z",
+      title: "Old todo",
+      summary: "This todo has been around for a long time.",
     });
 
-    // TODO(slice5): restore hygiene line assertion after staleAfter field removal is complete
-    // staleAfter is not persisted to DB (removed in schema v7), so stale detection is broken and no hygiene line is generated
+    // staleAfter removed in slice5 — no hygiene line is ever generated via stale detection
     const result = runTurnIntake(store, "", "/repo", "session-abc");
-    assert.equal(result, undefined, "Expected no injection when stale detection is not functional");
+    assert.equal(result, undefined, "Expected no injection when no relevant content and no stale detection");
   } finally {
     store.close();
   }
@@ -111,21 +109,11 @@ test("runTurnIntake combines handoff, memories, and hygiene line correctly", () 
       summary: "The combinedneedle was decided in Q2.",
     });
 
-    store.createMemory({
-      kind: "todo",
-      scope: "repo",
-      repoPath: "/repo",
-      title: "Combined stale todo",
-      summary: "This todo is stale.",
-      staleAfter: "2000-01-01T00:00:00.000Z",
-    });
-
     const result = runTurnIntake(store, "combinedneedle", "/repo", "session-abc");
     assert.ok(typeof result === "string", "Expected a combined string result");
     // Should contain handoff content
     assert.match(result, /Combined handoff/);
-    // TODO(slice5): restore hygiene line assertions after staleAfter field removal is complete
-    // staleAfter is not persisted to DB (removed in schema v7), so no hygiene line is appended
+    // staleAfter removed in slice5 — no hygiene line is generated
     assert.doesNotMatch(result, /Memory hygiene|stale todo/i);
   } finally {
     store.close();

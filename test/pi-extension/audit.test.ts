@@ -46,7 +46,6 @@ test("memory audit builds read-only migration preview for legacy project records
       projectId: "legacy-project",
       title: "Expired project todo",
       summary: "Expired project todo can be reviewed for archival.",
-      staleAfter: "2000-01-01T00:00:00.000Z",
     });
     store.createMemory({
       kind: "todo",
@@ -63,7 +62,6 @@ test("memory audit builds read-only migration preview for legacy project records
       [
         ["Broken project fact", "needs-human-review"],
         ["Cross repo preference", "global"],
-        // TODO(slice5): restore "archive" after staleAfter field removal is complete (staleAfter not persisted → always legacy-read-only)
         ["Expired project todo", "legacy-read-only"],
         ["Project only fact", "legacy-read-only"],
         ["Repo-shaped legacy project", "repo"],
@@ -75,7 +73,6 @@ test("memory audit builds read-only migration preview for legacy project records
     assert.match(output, /Project migration preview \(5, read-only\):/);
     assert.match(output, /\[repo\] Repo-shaped legacy project/);
     assert.match(output, /\[legacy-read-only\] Project only fact/);
-    // TODO(slice5): restore 'preview only, no write performed' check after archive classification is re-enabled
     assert.match(output, /Keep discoverable as legacy\/read-only/);
   } finally {
     store.close();

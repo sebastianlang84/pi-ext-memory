@@ -27,8 +27,6 @@ export interface CreateMemoryInput {
   confidence?: number;
   sessionId?: string;
   pinned?: boolean;
-  expiresAt?: string;
-  staleAfter?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -43,8 +41,6 @@ export interface UpdateMemoryInput {
   tags?: string[];
   importance?: number;
   confidence?: number;
-  expiresAt?: string | null;
-  staleAfter?: string | null;
   status?: MemoryStatus;
   pinned?: boolean;
 }
@@ -113,8 +109,6 @@ export interface NormalizedUpdateMemoryInput {
   tags?: string[];
   importance?: number;
   confidence?: number;
-  expiresAt?: string | null;
-  staleAfter?: string | null;
   status?: MemoryStatus;
   pinned?: boolean;
 }
@@ -139,8 +133,6 @@ export interface MemoryRecord {
   createdAt: string;
   updatedAt: string;
   lastAccessedAt?: string;
-  expiresAt?: string;
-  staleAfter?: string;
   metadata: Record<string, unknown>;
 }
 
@@ -192,8 +184,6 @@ export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryReco
   const repoPath = normalizeOptionalText(input.repoPath);
   const branch = normalizeOptionalText(input.branch);
   const sessionId = normalizeOptionalText(input.sessionId);
-  const expiresAt = normalizeOptionalTimestamp(input.expiresAt, "expiresAt", issues);
-  const staleAfter = normalizeOptionalTimestamp(input.staleAfter, "staleAfter", issues);
   const importance = normalizeScore("importance", input.importance, issues);
   const confidence = normalizeScore("confidence", input.confidence, issues);
   const tags = normalizeTags(input.tags, issues);
@@ -224,8 +214,6 @@ export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryReco
     pinned: input.pinned === true,
     createdAt: timestamp,
     updatedAt: timestamp,
-    expiresAt,
-    staleAfter,
     metadata,
   };
 }
@@ -265,14 +253,6 @@ export function normalizeUpdateMemoryInput(input: UpdateMemoryInput): Normalized
     input.importance === undefined ? undefined : normalizeScore("importance", input.importance, issues, () => changedFieldCount++);
   const confidence =
     input.confidence === undefined ? undefined : normalizeScore("confidence", input.confidence, issues, () => changedFieldCount++);
-  const expiresAt =
-    input.expiresAt === undefined
-      ? undefined
-      : normalizeNullableOptionalTimestamp(input.expiresAt, "expiresAt", issues, () => changedFieldCount++);
-  const staleAfter =
-    input.staleAfter === undefined
-      ? undefined
-      : normalizeNullableOptionalTimestamp(input.staleAfter, "staleAfter", issues, () => changedFieldCount++);
   const status =
     input.status === undefined ? undefined : normalizeEnum("status", input.status, MEMORY_STATUSES, issues, () => changedFieldCount++);
   const pinned =
@@ -297,8 +277,6 @@ export function normalizeUpdateMemoryInput(input: UpdateMemoryInput): Normalized
     tags,
     importance,
     confidence,
-    expiresAt,
-    staleAfter,
     status,
     pinned,
   };
@@ -475,40 +453,6 @@ function normalizeNullableOptionalText(
 
   onChange?.();
   return normalizeOptionalText(value) ?? null;
-}
-
-function normalizeOptionalTimestamp(
-  value: string | undefined,
-  fieldName: string,
-  issues: string[],
-): string | undefined {
-  const normalized = normalizeOptionalText(value);
-  if (!normalized) return undefined;
-
-  if (Number.isNaN(Date.parse(normalized))) {
-    issues.push(`${fieldName} must be a valid ISO-8601 timestamp`);
-    return undefined;
-  }
-
-  return normalized;
-}
-
-function normalizeNullableOptionalTimestamp(
-  value: string | null,
-  fieldName: string,
-  issues: string[],
-  onChange?: () => void,
-): string | null | undefined {
-  if (value === null) {
-    onChange?.();
-    return null;
-  }
-
-  const normalized = normalizeOptionalTimestamp(value, fieldName, issues);
-  if (normalized !== undefined) {
-    onChange?.();
-  }
-  return normalized;
 }
 
 function normalizeScore(fieldName: string, value: number | undefined, issues: string[], onChange?: () => void): number {

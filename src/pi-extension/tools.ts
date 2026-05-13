@@ -15,7 +15,6 @@ import {
   type MemoryScope,
   type MemorySearchResult,
   type MemoryStore,
-  computeDefaultExpiresAt,
   getCapForKindScope,
 } from "../core/index.ts";
 import { formatMemorySearchResultLine } from "./formatters.ts";
@@ -244,7 +243,6 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
             tags: handoffInput.tags,
             importance: handoffInput.importance,
             confidence: handoffInput.confidence,
-            expiresAt: handoffInput.expiresAt ?? computeDefaultExpiresAt("session"),
           })
         : store.createMemory({ ...handoffInput, sourceAgent: "pi" });
 
@@ -274,9 +272,6 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       tags: Type.Optional(Type.Array(Type.String({ description: "Replacement tag list" }))),
       importance: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
       confidence: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
-      expiresAt: Type.Optional(
-        Type.Union([Type.String({ description: "Optional ISO-8601 expiry timestamp" }), Type.Null()]),
-      ),
       status: Type.Optional(StringEnum(MEMORY_STATUSES, { description: "Memory lifecycle status" })),
       archiveReason: Type.Optional(Type.String({ description: "Reason for archiving; only valid with status=archived" })),
       pinned: Type.Optional(Type.Boolean({ description: "Whether the memory should stay pinned" })),
@@ -313,7 +308,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         ];
         if (handoffContentFields.some((value) => value !== undefined)) {
           return {
-            content: [{ type: "text", text: `Use memory_save_handoff for handoff content changes; memory_update may only change handoff status/expiresAt.\ndb_path: ${store.dbPath}` }],
+            content: [{ type: "text", text: `Use memory_save_handoff for handoff content changes; memory_update may only change handoff status.\ndb_path: ${store.dbPath}` }],
             details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
@@ -415,7 +410,6 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
           params.tags,
           params.importance,
           params.confidence,
-          params.expiresAt,
           params.pinned,
           params.scope,
           params.repoPath,
@@ -761,10 +755,6 @@ function formatMemoryUpdated(memory: MemoryRecord, store: MemoryStore): string {
     `updated_at: ${memory.updatedAt}`,
     `db_path: ${store.dbPath}`,
   ];
-
-  if (memory.expiresAt) {
-    lines.splice(lines.length - 1, 0, `expires_at: ${memory.expiresAt}`);
-  }
 
   return lines.join("\n");
 }

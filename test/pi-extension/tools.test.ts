@@ -360,7 +360,6 @@ test("registerMemoryTools registers expected tools and wires their executors", a
       tags: ["handoff", "context_reset", "next_agent"],
       importance: 0.9,
       confidence: 0.9,
-      expiresAt: calls.update[0]?.expiresAt,
     },
     { id: "memory-saved", title: "Updated title", pinned: true },
   ]);
@@ -502,9 +501,8 @@ test("memory_save_handoff does not update an expired current-session handoff", a
     sessionId: projectContext.sessionId,
     projectId: projectContext.projectId,
     repoPath: projectContext.cwd,
-    title: "Expired current handoff",
-    summary: "Expired current handoff must remain unchanged.",
-    expiresAt: "2000-01-01T00:00:00.000Z",
+    title: "Current handoff",
+    summary: "Current handoff will be updated since expiresAt is removed.",
   });
 
   const tools: RegisteredTool[] = [];
@@ -525,8 +523,7 @@ test("memory_save_handoff does not update an expired current-session handoff", a
     { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
   );
 
-  // TODO(slice5): restore expiry-skip assertions after expiresAt/staleAfter field removal is complete
-  // expiresAt is not persisted to DB (removed in schema v7), so the "expired" handoff is treated as active and updated
+  // expiresAt removed in slice5 — the existing handoff is always treated as active and updated
   const saved = output.details.memory as MemoryRecord;
   assert.equal(saved.id, expired.id);
   assert.equal(store.getMemory(saved.id)?.summary, "Fresh current-session handoff.");
@@ -722,7 +719,7 @@ test("memory_update permits handoff lifecycle status updates but blocks content 
 
   assert.deepEqual(calls, [{ id: "handoff-old", status: "archived" }]);
   assert.match(statusOutput.content[0].text, /Updated memory handoff-old\./);
-  assert.match(contentOutput.content[0].text, /memory_update may only change handoff status\/expiresAt/);
+  assert.match(contentOutput.content[0].text, /memory_update may only change handoff status/);
 });
 
 test("memory_update returns not-found for unknown id", async (t) => {

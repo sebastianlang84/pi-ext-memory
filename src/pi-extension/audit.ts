@@ -1,8 +1,6 @@
 import {
   classifyLifecycleAuditFinding,
   getCapForKindScope,
-  isMemoryExpired,
-  isMemoryPastStaleAfter,
   type MemoryRecord,
   type MemoryScope,
   type MemoryStore,
@@ -224,15 +222,6 @@ function buildProjectMigrationPreviewCandidate(m: MemoryRecord, now: Date): Proj
       recommendation: "needs-human-review",
       reason: "Legacy project record has missing or conflicting identity metadata",
       suggestedAction: "Review manually before choosing repo, global, archive, or legacy-read-only",
-    };
-  }
-
-  if (isMemoryExpired(m, now) || isMemoryPastStaleAfter(m, now)) {
-    return {
-      ...base,
-      recommendation: "archive",
-      reason: "Legacy project record is stale or expired",
-      suggestedAction: "Consider archiving after confirming it is no longer useful; preview only, no write performed",
     };
   }
 

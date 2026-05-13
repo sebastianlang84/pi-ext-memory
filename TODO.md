@@ -20,7 +20,7 @@ Follow [Plan — Memory Model Minimisation](docs/plans/memory-model-minimisation
 - [ ] 2. Kind reduction (remove fact/preference/decision/episode/artifact_ref/progress_snapshot from MEMORY_KINDS)
 - [x] 3. Status reduction (active + archived only)
 - [x] 4. Tool removal (memory_archive, memory_link, memory_list_active_todos, memory_list_active_handoffs)
-- [ ] 5. Field removal (expiresAt, staleAfter, progress object)
+- [x] 5. Field removal (expiresAt, staleAfter, progress object)
 - [ ] 6. Handoff count warning (≥3 active handoffs in same repo → warn)
 - [ ] 7. Meta-table audit logging (lastAuditAt + lastAuditSummary after every audit)
 - [ ] 8. Agent guidelines update (promptSnippets, README, AGENTS.md)

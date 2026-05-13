@@ -5,14 +5,8 @@ import {
   applyMemoryLifecycleDefaults,
   buildActiveCapCountFilter,
   classifyLifecycleAuditFinding,
-  computeDefaultExpiresAt,
-  computeDefaultStaleAfter,
   getEffectiveLifecycleScope,
   isActiveUnexpiredHandoff,
-  isHandoffExpired,
-  isMemoryExpired,
-  isMemoryPastStaleAfter,
-  isTodoStale,
   type MemoryRecord,
 } from "../../src/core/index.ts";
 
@@ -39,16 +33,13 @@ function memory(overrides: Partial<MemoryRecord> = {}): MemoryRecord {
 
 test("lifecycle defaults are deterministic and session scope uses repo policy", () => {
   assert.equal(getEffectiveLifecycleScope("session"), "repo");
-  assert.equal(computeDefaultStaleAfter("session", now), "2026-06-12T12:00:00.000Z");
-  assert.equal(computeDefaultExpiresAt("global", now), "2026-05-27T12:00:00.000Z");
 
   const todo = applyMemoryLifecycleDefaults(memory({ kind: "todo", scope: "session" }), now);
   const handoff = applyMemoryLifecycleDefaults(memory({ kind: "handoff", scope: "global" }), now);
-  const explicit = applyMemoryLifecycleDefaults(memory({ kind: "handoff", expiresAt: "2099-01-01T00:00:00.000Z" }), now);
 
-  assert.equal(todo.staleAfter, "2026-06-12T12:00:00.000Z");
-  assert.equal(handoff.expiresAt, "2026-05-27T12:00:00.000Z");
-  assert.equal(explicit.expiresAt, "2099-01-01T00:00:00.000Z");
+  // staleAfter and expiresAt fields removed in slice5 — applyMemoryLifecycleDefaults is now a no-op
+  assert.equal(todo.staleAfter, undefined);
+  assert.equal(handoff.expiresAt, undefined);
 });
 
 test("active cap count filters keep lifecycle identity inputs in policy", () => {
@@ -59,28 +50,12 @@ test("active cap count filters keep lifecycle identity inputs in policy", () => 
   assert.equal(buildActiveCapCountFilter(memory({ kind: undefined })), null);
 });
 
-test("lifecycle classification handles stale todos, expired handoffs, and invalid timestamps", () => {
-  const staleTodo = memory({ kind: "todo", staleAfter: "2026-05-01T00:00:00.000Z" });
-  const expiredHandoff = memory({ kind: "handoff", expiresAt: "2026-05-01T00:00:00.000Z" });
-  const invalidHandoff = memory({ kind: "handoff", expiresAt: "not-a-date" });
+test("lifecycle classification returns null for all memories (staleAfter/expiresAt removed)", () => {
+  // staleAfter and expiresAt fields removed in slice5 — classifyLifecycleAuditFinding always returns null
+  assert.equal(classifyLifecycleAuditFinding(memory({ kind: "todo" }), now), null);
+  assert.equal(classifyLifecycleAuditFinding(memory({ kind: "handoff" }), now), null);
 
-  assert.equal(isMemoryPastStaleAfter(staleTodo, now), true);
-  assert.equal(isMemoryExpired(expiredHandoff, now), true);
-  assert.equal(isTodoStale(staleTodo, now), true);
-  assert.equal(isHandoffExpired(expiredHandoff, now), true);
-  assert.equal(isActiveUnexpiredHandoff(expiredHandoff, now), false);
-  assert.equal(isActiveUnexpiredHandoff(invalidHandoff, now), false);
+  // isActiveUnexpiredHandoff only checks kind and status now
   assert.equal(isActiveUnexpiredHandoff(memory({ kind: "handoff" }), now), true);
-
-  assert.deepEqual(classifyLifecycleAuditFinding(staleTodo, now), {
-    type: "stale_todo",
-    reason: "Todo stale: stale_after=2026-05-01T00:00:00.000Z passed",
-    suggestedAction: "Archive if done, or update status/tags to reflect current state",
-  });
-  assert.deepEqual(classifyLifecycleAuditFinding(expiredHandoff, now), {
-    type: "expired_handoff",
-    reason: "Handoff expired: expires_at=2026-05-01T00:00:00.000Z passed",
-    suggestedAction: "Archive if the task is complete or no longer relevant",
-  });
-  assert.equal(classifyLifecycleAuditFinding(memory({ kind: "todo", status: "archived", staleAfter: "2026-05-01T00:00:00.000Z" }), now), null);
+  assert.equal(isActiveUnexpiredHandoff(memory({ kind: "handoff", status: "archived" }), now), false);
 });

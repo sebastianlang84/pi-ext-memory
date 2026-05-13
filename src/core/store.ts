@@ -243,8 +243,6 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
           repoPath: patch.repoPath ?? existingMemory.repoPath,
           projectId: patch.projectId ?? existingMemory.projectId,
           updatedAt: timestamp,
-          expiresAt: patch.expiresAt === undefined ? existingMemory.expiresAt : (patch.expiresAt ?? undefined),
-          staleAfter: patch.staleAfter === undefined ? existingMemory.staleAfter : (patch.staleAfter ?? undefined),
         };
 
         const shouldRefreshEmbedding =
