@@ -18,5 +18,5 @@ Complete. All slices verified and implemented.
 
 ## Open Design Issues
 
-No open design issues. Add new entries here only when fresh design work is accepted.
+- Research whether local autoresearch tooling can help optimize pi-memory prompt injection for lower token cost without degrading agent behavior.
 

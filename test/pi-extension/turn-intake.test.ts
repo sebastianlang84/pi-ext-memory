@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -81,21 +81,39 @@ test("runTurnIntake returns handoff content when only a handoff is present", () 
   }
 });
 
-test("runTurnIntake returns memory content when only search results are present", () => {
+test("runTurnIntake returns compact guidance when no search results match", () => {
+  const dbPath = join(createTempDir("pi-memory-turn-intake-no-memory-"), "memory.sqlite");
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    const result = assertTurnMessage(runTurnIntake(store, "memoryonlyneedle", "/repo", "session-abc"));
+    assert.match(result.content, /pi-memory: no relevant stored context/);
+    assert.match(result.content, /use memory_search if prior project\/workflow context matters/);
+    assert.equal(result.details.query, "memoryonlyneedle");
+  } finally {
+    store.close();
+  }
+});
+
+test("runTurnIntake returns memory content when search results are present", () => {
   const dbPath = join(createTempDir("pi-memory-turn-intake-memory-"), "memory.sqlite");
+  const repoRoot = createTempDir("pi-memory-turn-intake-repo-");
+  mkdirSync(join(repoRoot, ".git"));
   const store = initializeMemoryStore({ dbPath });
 
   try {
     store.createMemory({
       kind: "todo",
       scope: "repo",
-      repoPath: "/repo",
+      repoPath: repoRoot,
       title: "Memory only fact",
       summary: "The memoryonlyneedle decision was made in Q1.",
     });
 
-    const result = assertTurnMessage(runTurnIntake(store, "memoryonlyneedle", "/repo", "session-abc"));
-    assert.match(result.content, /Memory only fact|Relevant memory context/);
+    const result = assertTurnMessage(runTurnIntake(store, "memoryonlyneedle", repoRoot, "session-abc"));
+    assert.match(result.content, /pi-memory context \(user overrides older memory\):/);
+    assert.match(result.content, /Memory only fact/);
+    assert.match(result.content, /Use memory_search if more prior project\/workflow context matters/);
     assert.equal(result.details.query, "memoryonlyneedle");
   } finally {
     store.close();

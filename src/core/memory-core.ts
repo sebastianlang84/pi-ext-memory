@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v2.0.8",
+        version: "v2.0.9",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
@@ -39,7 +39,7 @@ export function createMemoryCore(): MemoryCore {
         embeddingDimensions: embeddingStatus.dimensions,
         availableCommands: ["/memory-status", "/memory-search", "/memory-review", "/memory-handoff", "/memory-session-save", "/memory-audit"],
         availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_stats"],
-        nextStep: "memory-model-minimisation v2.0.0 complete. Next: backlog — provenance/sourceAgent exposure.",
+        nextStep: "memory-model-minimisation v2.0.0 complete. Next: backlog — evaluate prompt-injection token cost with local research tooling.",
       };
     },
     initializeStore(input) {

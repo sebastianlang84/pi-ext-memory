@@ -29,6 +29,10 @@ const PROJECT_MARKER_FILES = [
 const MEMORY_CONTEXT_CUSTOM_TYPE = "pi-memory-context";
 const TURN_MEMORY_RESULT_LIMIT = 3;
 const TURN_MEMORY_STAGE_LIMIT = 4;
+const MEMORY_NO_HIT_GUIDANCE =
+  "User overrides older memory; use memory_search if prior project/workflow context matters; save/update only durable notes or persistent todos.";
+const MEMORY_HIT_GUIDANCE =
+  "Use memory_search if more prior project/workflow context matters; save/update only durable notes or persistent todos.";
 
 export interface RetrieveTurnMemoriesOptions {
   resultLimit?: number;
@@ -189,7 +193,7 @@ export function buildTurnMemoryMessage(
 
   return {
     customType: MEMORY_CONTEXT_CUSTOM_TYPE,
-    content: formatTurnMemoryContext(results, latestHandoff),
+    content: formatTurnMemoryContext(query, results, latestHandoff),
     display: false,
     details: {
       dbPath,
@@ -206,22 +210,39 @@ export function buildTurnMemoryMessage(
   };
 }
 
-export function formatTurnMemoryContext(results: MemorySearchResult[], latestHandoff?: LatestHandoffResult): string {
+export function formatTurnMemoryContext(
+  query: string,
+  results: MemorySearchResult[],
+  latestHandoff?: LatestHandoffResult,
+): string {
   const topResults = results.slice(0, TURN_MEMORY_RESULT_LIMIT);
-  const contextLines =
-    topResults.length > 0
-      ? ["Relevant memory context:", ...topResults.map((result, index) => formatTurnMemoryLine(index + 1, result))]
-      : ["Relevant memory context: none found."];
-
+  const contextLines = formatTurnContextLines(query, topResults, latestHandoff !== undefined);
   const handoffLines = latestHandoff ? formatLatestHandoffLines(latestHandoff) : [];
 
-  return [
-    ...handoffLines,
-    ...contextLines,
-    "Memory triggers: use memory_search when prior context, project history, or workflow context materially affect the answer.",
-    "Memory writes: save or update only durable, reusable notes or persistent todos.",
-    "Memory precedence: prefer current user instructions when they conflict with older memory.",
-  ].join("\n");
+  return [...handoffLines, ...contextLines].join("\n");
+}
+
+function formatTurnContextLines(query: string, topResults: MemorySearchResult[], hasHandoff: boolean): string[] {
+  const selfDescription = isMemoryIntrospectionQuery(query)
+    ? "local SQLite memory extension for notes/todos/handoffs; "
+    : "";
+
+  if (topResults.length > 0) {
+    return [
+      `pi-memory context (${selfDescription}user overrides older memory):`,
+      ...topResults.map((result, index) => formatTurnMemoryLine(index + 1, result)),
+      MEMORY_HIT_GUIDANCE,
+    ];
+  }
+
+  const noHitLabel = hasHandoff ? "no additional stored context" : "no relevant stored context";
+  return [`pi-memory: ${selfDescription}${noHitLabel}. ${MEMORY_NO_HIT_GUIDANCE}`];
+}
+
+function isMemoryIntrospectionQuery(query: string): boolean {
+  return /(?:\bpi-memory\b|\bmemory_(?:search|list|save(?:_todo|_handoff)?|update|audit|stats)\b|\/memory-(?:status|search|handoff|audit)\b)/i.test(
+    query,
+  );
 }
 
 function formatLatestHandoffLines(latestHandoff: LatestHandoffResult): string[] {

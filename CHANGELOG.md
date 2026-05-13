@@ -12,6 +12,11 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.9] - 2026-05-14
+
+### Changed
+- Compacted turn-start memory guidance to reduce repeated no-hit boilerplate while preserving memory search/write/precedence instructions and adding targeted pi-memory self-description for introspection prompts.
+
 ## [2.0.8] - 2026-05-13
 
 ### Fixed

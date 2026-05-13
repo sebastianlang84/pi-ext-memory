@@ -472,7 +472,7 @@ test("buildTurnMemoryMessage injects latest handoff before normal memories", () 
   assert.equal(message.details.latestHandoffIsFallback, false);
 });
 
-test("buildTurnMemoryMessage injects memory triggers even when no results match", () => {
+test("buildTurnMemoryMessage injects compact memory guidance even when no results match", () => {
   const message = buildTurnMemoryMessage(
     "subagent setup",
     [],
@@ -488,10 +488,34 @@ test("buildTurnMemoryMessage injects memory triggers even when no results match"
   );
 
   assert.ok(message);
-  assert.match(message?.content ?? "", /Relevant memory context: none found\./);
-  assert.match(message?.content ?? "", /Memory triggers: use memory_search/);
-  assert.match(message?.content ?? "", /Memory writes: save or update only durable/);
+  assert.equal(
+    message?.content,
+    "pi-memory: no relevant stored context. User overrides older memory; use memory_search if prior project/workflow context matters; save/update only durable notes or persistent todos.",
+  );
   assert.deepEqual(message?.details.resultIds, []);
+});
+
+test("buildTurnMemoryMessage self-describes for pi-memory introspection prompts", () => {
+  const message = buildTurnMemoryMessage(
+    "what is pi-memory?",
+    [],
+    {
+      cwd: "/repo/packages/api",
+      sessionId: "session-789",
+      projectId: "@acme/api",
+      projectPath: "/repo/packages/api",
+      repoPath: "/repo",
+    },
+    "/home/user/.pi/agent/pi-memory.sqlite",
+    [],
+  );
+
+  assert.ok(message);
+  assert.match(
+    message?.content ?? "",
+    /pi-memory: local SQLite memory extension for notes\/todos\/handoffs; no relevant stored context\./,
+  );
+  assert.match(message?.content ?? "", /User overrides older memory/);
 });
 
 test("buildTurnMemoryMessage injects only a compact top-N context block", () => {
@@ -525,7 +549,8 @@ test("buildTurnMemoryMessage injects only a compact top-N context block", () => 
 
   assert.ok(message);
   assert.equal(message?.display, false);
-  assert.match(message?.content ?? "", /Relevant memory context:/);
+  assert.match(message?.content ?? "", /pi-memory context \(user overrides older memory\):/);
+  assert.match(message?.content ?? "", /Use memory_search if more prior project\/workflow context matters/);
   assert.match(message?.content ?? "", /First memory/);
   assert.match(message?.content ?? "", /Second memory/);
   assert.match(message?.content ?? "", /Third memory/);
