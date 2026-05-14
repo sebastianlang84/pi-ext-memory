@@ -37,12 +37,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_search",
     label: "Memory Search",
-    description: "Search memory content in the local pi-memory store using hybrid lexical + semantic retrieval and compact filters.",
-    promptSnippet: "Search local durable memory when automatic retrieved context is insufficient and prior decisions or todos may matter.",
+    description: "Search local memory content.",
+    promptSnippet: "Search durable memory when automatic context is insufficient.",
     promptGuidelines: [
-      "Use memory_search with compact, concrete queries.",
-      "Use memory_search filters to narrow results when kind, scope, repo, session, tags, or a legacy projectId are known.",
-      "Use small memory_search limits to protect context quality.",
+      "Use memory_search for compact content searches.",
+      "Use memory_search filters only when they materially narrow results.",
     ],
     parameters: Type.Object({
       query: Type.String({ description: "Content search query" }),
@@ -74,13 +73,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_list",
     label: "Memory List",
-    description: "List structured memories from the local pi-memory store using filters or a small active catalog, without full-text content search.",
-    promptSnippet: "List structured memories when kind, scope, tags, repo/session identity, legacy projectId, or status are known and no content query is needed.",
+    description: "List structured memories by filters.",
+    promptSnippet: "List known structured memories, especially todos or handoffs.",
     promptGuidelines: [
-      "Use memory_list for normal structured filtering, including active todos with kind=todo and active handoffs with kind=handoff.",
-      "Use memory_list with no kind/scope only for a small active catalog; add filters before paginating deeply.",
-      "Do not pass content queries to memory_list; use memory_search when searching memory text.",
-      "Use memory_list defaults intentionally: status is active and ordering is newest updated first.",
+      "Use memory_list for structured listing, especially active todos/handoffs.",
+      "Use memory_list for structured fields; use memory_search for text/content search.",
     ],
     parameters: Type.Object({
       kind: Type.Optional(Type.Union([StringEnum(MEMORY_KINDS, { description: "Memory kind" }), Type.Array(StringEnum(MEMORY_KINDS, { description: "Memory kind" }))])),
@@ -132,15 +129,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_save",
     label: "Memory Save",
-    description: "Create a structured memory in the local pi-memory store.",
-    promptSnippet:
-      "Save durable notes or context when the user explicitly wants something remembered or when a stable reusable note should persist.",
+    description: "Save durable memory notes.",
+    promptSnippet: "Save durable notes, facts, decisions, or reusable context.",
     promptGuidelines: [
-      "Use memory_save for durable notes and context that should persist across sessions.",
-      "Do not use memory_save for actionable open work; use memory_save_todo for todos.",
-      "Do not use memory_save for handoff state; use memory_save_handoff only when context will be lost and another agent must resume.",
-      "Avoid low-information memory_save scratch notes.",
-      "Always give memory_save a compact but informative summary.",
+      "Use memory_save only for durable notes/facts/decisions/context.",
+      "Use memory_save_todo for actionable work and memory_save_handoff for handoffs, not memory_save.",
+      "Avoid low-information memory_save saves; write compact summaries.",
     ],
     parameters: Type.Object({
       scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Memory scope; defaults to repo inside a Git repo, otherwise global; project is legacy/advanced compatibility" })),
@@ -191,14 +185,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_save_handoff",
     label: "Memory Save Handoff",
-    description: "Create or update the active structured handoff for the current Pi session.",
-    promptSnippet:
-      "Save or refresh a handoff only when the current context will be lost and another agent or future session must resume execution — context reset, compaction, or agent transfer.",
+    description: "Save or update a resumable session handoff.",
+    promptSnippet: "Save handoff state for context loss, compaction, session end, or agent transfer.",
     promptGuidelines: [
-      "Use memory_save_handoff only when context will be lost and execution must be resumable by another agent or future session.",
-      "Do not use memory_save_handoff for repo/task status notes — use memory_save for those.",
-      "Include goal, current state, and concrete next steps in memory_save_handoff.",
-      "Mention changed files, decisions, blockers, verification, and avoid-repeating notes in memory_save_handoff when relevant.",
+      "Use memory_save_handoff only for genuine context loss or transfer.",
+      "Include memory_save_handoff current state, next steps, blockers, and verification when relevant.",
     ],
     parameters: Type.Object({
       title: Type.Optional(Type.String({ description: "Short handoff title" })),
@@ -268,13 +259,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_update",
     label: "Memory Update",
-    description: "Correct, refine, pin, close, or archive an existing memory.",
-    promptSnippet: "Update an existing structured memory instead of creating duplicates when the memory should be corrected, closed, or archived.",
+    description: "Patch, close, or archive an existing memory.",
+    promptSnippet: "Update known memories instead of creating duplicates.",
     promptGuidelines: [
-      "Use memory_update to patch only the fields that actually changed.",
-      "Prefer memory_update over writing a weaker duplicate memory.",
-      "Use memory_update(status=\"archived\", archiveReason=...) for normal archive flows.",
-      "Use memory_update only when the target memory id is known from memory_search, memory_list, or retrieved context.",
+      "Use memory_update only with a known memory id.",
+      "Prefer memory_update over creating duplicate memories.",
     ],
     parameters: Type.Object({
       id: Type.String({ description: "Memory id to update" }),
@@ -454,14 +443,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_save_todo",
     label: "Memory Save Todo",
-    description: "Save an actionable open task that should persist across sessions.",
-    promptSnippet: "Save an actionable open task that should persist across sessions. Use memory_update to update an existing todo.",
+    description: "Save a persistent actionable todo.",
+    promptSnippet: "Save new persistent work items; update existing todos with memory_update.",
     promptGuidelines: [
-      "Use memory_save_todo for actionable open work, not passive notes or decisions.",
-      "Include the next concrete action in memory_save_todo whenever possible.",
-      "Use memory_save_todo with repo scope inside repositories to avoid global todo noise; project scope is legacy/advanced compatibility.",
-      "Prefer memory_update for an existing active todo over creating a duplicate with memory_save_todo.",
-      "Do not let memory_save_todo compete with TODO.md: repo-canonical backlog belongs in TODO.md when appropriate.",
+      "Use memory_save_todo for persistent actionable work.",
+      "Use memory_save_todo with nextAction when possible; update existing todos instead of duplicating.",
+      "Keep repo-canonical backlog in TODO.md when applicable; use memory_save_todo only for cross-session agent memory.",
     ],
     parameters: Type.Object({
       title: Type.String({ description: "Short title for the todo" }),
@@ -519,12 +506,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_audit",
     label: "Memory Audit",
-    description: "Audit memory hygiene and show a read-only migration preview for legacy project-scoped records.",
-    promptSnippet: "Run memory_audit to inspect scope identity issues and legacy project-scope migration preview candidates. Returns candidates with id, title, reason, and suggested action.",
+    description: "Audit memory hygiene.",
+    promptSnippet: "Inspect memory hygiene and legacy scope migration candidates.",
     promptGuidelines: [
-      "Run memory_audit when the session-start hygiene warning fires or after scope-identity changes.",
-      "Use memory_audit to preview legacy project-scope records before any migration; the preview is read-only.",
-      "Use memory_audit optional scope or repoPath filters to narrow the audit.",
+      "Use memory_audit for memory hygiene or legacy scope migration review.",
     ],
     parameters: Type.Object({
       scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Memory scope filter; normal choices are global, repo, and session; project is legacy/advanced compatibility" }))),
@@ -548,11 +533,10 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_stats",
     label: "Memory Stats",
-    description: "Advanced/admin tool: summarize active/archived counts per kind and scope with cap warnings.",
-    promptSnippet: "Use memory_stats only for memory-store health, caps, and warnings; use memory_list for normal listing.",
+    description: "Show memory-store health and caps.",
+    promptSnippet: "Check memory-store health, counts, and cap warnings.",
     promptGuidelines: [
-      "Use memory_stats as an advanced/admin health overview, not for normal memory navigation.",
-      "Use memory_stats for memory store health, not for listing memory content — use memory_list or memory_search for that.",
+      "Use memory_stats only for memory-store health/capacity checks.",
     ],
     parameters: Type.Object({
       scope: StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" }),

@@ -12,6 +12,9 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+### Changed
+- Shortened memory tool prompt descriptions and guidelines to reduce Pi startup context while preserving tool routing semantics.
+
 ## [2.0.9] - 2026-05-14
 
 ### Changed
