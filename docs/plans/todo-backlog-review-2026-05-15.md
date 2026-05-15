@@ -42,36 +42,39 @@ Review all current `TODO.md` items for:
 | Harden write policy docs/tool guidance | High | High | Excellent | README stale `progress_snapshot` wording is fixed. Continue clarifying docs/tool guidance to prevent memory pollution and transient-preference saves. |
 | Tiny startup canonical-facts card with pinned/canonical facts | Medium | Potentially high | Risky unless tiny | Defer until canonical keys and evals prove that search fallback is insufficient. If implemented, cap hard (e.g. only pinned canonical facts, few lines) and measure token cost. |
 
-## Suggested consolidation
+## Applied consolidation
 
-1. **Docs/prompt hygiene first**
-   - README stale `progress_snapshot` wording is fixed.
-   - Clarify remaining tool guidance: “save only explicit durable facts, handoffs, persistent todos, project paths, or explicit remember requests”.
-   - Low risk, immediate retrieval-quality benefit by reducing memory pollution.
+`TODO.md` now groups the open work into four delivery work packages plus evidence-gated deferred items:
 
-2. **Canonical fact retrieval slice**
-   - Combine canonical key support, key/tag boost, empty-result fallback, and `uga uga bongo git` evals.
-   - Keep it local and deterministic.
-   - Start with Git identity because the failure mode is concrete and easy to test.
+1. **Tag hygiene and catalog**
+   - Keep the derived tag catalog and field-vs-tag rule together.
+   - Include write-policy cleanup and todo workflow-tag cleanup here because all three reduce memory pollution.
 
-3. **Resolver slice**
-   - Add deterministic Git identity / repo path resolution after canonical facts are defined.
-   - Prefer one small API or internal resolver over multiple new Pi tools.
+2. **Ranking and near-miss retrieval**
+   - Combine exact tag/canonical-key boost with empty-result near-miss reporting.
+   - Keep this as a retrieval-quality slice, not a broad ranking rewrite.
 
-4. **Cluster audit slice**
-   - Add advisory conflict and dedup reports for canonical fact clusters.
-   - No auto-archive and no semantic O(n²) dedup.
+3. **Minimal canonical facts**
+   - Add canonical keys/facts only in the smallest form that solves deterministic fact lookup.
+   - Preserve ADR 007: no new `fact` kind, knowledge graph, broad registry, or background resolver.
 
-5. **Defer token-cost research and startup card**
-   - Revisit only after measurement shows prompt-injection cost or canonical-fact cold-start misses remain material.
+4. **Advisory hygiene and conflict audit**
+   - Add conflict and dedup recommendations for exact canonical-key/tag clusters.
+   - Keep archive actions explicit/manual; no automatic conflict resolution.
+
+Deferred items remain visible but gated by evidence:
+
+- local autoresearch for prompt-injection token cost,
+- specialized resolver tools/APIs,
+- startup canonical-facts card.
 
 ## Proposed priority order
 
-1. Remaining write-policy/tool-guidance cleanup.
-2. Minimal canonical key + tag/key ranking/fallback implementation.
-3. Git identity / repo path resolver API.
-4. Canonical cluster conflict/audit support.
-5. Token-cost research and startup canonical-facts card only if evidence still justifies them.
+1. Tag hygiene and write-policy cleanup, including todo workflow-tag cleanup.
+2. Exact tag/canonical-key ranking plus near-miss retrieval behavior.
+3. Minimal canonical key/fact support, starting with Git identity and repo path facts only if tests keep the model small.
+4. Advisory canonical-cluster conflict/audit support.
+5. Resolver tools/APIs, token-cost research, and startup canonical-facts card only if evidence still justifies them.
 
 ## Lightweight guardrails
 

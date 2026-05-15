@@ -12,19 +12,32 @@ Rule: Completed items are removed, not checked off.
 
 Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/todo-backlog-review-2026-05-15.md)
 
-## Open Design Issues
+## Retrieval quality work packages
+
+### 1. Tag hygiene and catalog
+
+- Implement a lightweight derived tag catalog so agents reuse existing content/context tags instead of inventing near-duplicates; plan: [docs/plans/tag-catalog-controlled-folksonomy.md](docs/plans/tag-catalog-controlled-folksonomy.md).
+- Harden memory write policy in docs/tool guidance: save only explicit durable facts, handoffs, persistent todos, project paths, or when the user explicitly says to remember; do not save transient preferences from frustration.
+- Align todo storage with the field-vs-tag rule: todo priority/status/next action belong in structured todo data, not ordinary content tags such as `todo`, `p1`, or `blocked`.
+
+### 2. Ranking and near-miss retrieval
+
+- Make memory retrieval rank exact tag and canonical-key matches ahead of weak semantic/lexical matches; a query containing `git` should surface `git`/`identity`/`commit` tagged memories even if the rest of the query is noise.
+- Improve empty-result behavior by reporting near tag/key misses instead of only `No memories matched`.
+
+### 3. Minimal canonical facts
+
+- Add canonical fact/key support for durable single-source facts such as `git.identity.default`, repo paths, and stable user preferences, so agents can resolve known fact types without relying only on free-text search.
+- Keep canonical facts lightweight: do not reintroduce a `fact` kind, knowledge graph, broad registry, or background resolver; prefer existing tags/metadata or one minimal indexed field if tests prove it necessary.
+
+### 4. Advisory hygiene and conflict audit
+
+- Detect conflicting active memories in the same canonical fact cluster, especially Git identity variants, and return an explicit conflict/canonical-candidate report instead of letting agents guess.
+- Add memory hygiene/dedup support for exact key/tag clusters that recommends a canonical record and archive candidates; keep all archive actions explicit/manual.
+
+## Deferred until evidence justifies them
 
 - Research whether local autoresearch tooling can help optimize pi-memory prompt injection for lower token cost without degrading agent behavior.
-
-## Retrieval reliability / memory quality
-
-- Implement a lightweight tag catalog so agents reuse existing content/context tags instead of inventing near-duplicates; plan: [docs/plans/tag-catalog-controlled-folksonomy.md](docs/plans/tag-catalog-controlled-folksonomy.md).
-- Add canonical fact/key support for durable single-source facts such as `git.identity.default`, repo paths, and stable user preferences, so agents can resolve known fact types without relying only on free-text search.
-- Make memory retrieval rank exact keys and tag matches ahead of weak semantic/lexical matches; a query containing `git` should surface `git`/`identity`/`commit` tagged memories even if the rest of the query is noise.
-- Add specialized resolver tools or APIs for high-value facts, starting with Git identity and repo path resolution, including repo-local config/history checks and conflict detection.
-- Detect conflicting active memories in the same fact cluster, especially Git identity variants, and return an explicit conflict/canonical-candidate report instead of letting agents guess.
-- Add memory hygiene/dedup support that can audit clusters such as `git,identity`, recommend a canonical record, and archive stale/conflicting duplicates.
-- Improve empty-result behavior by reporting near misses instead of only `No memories matched`.
-- Harden memory write policy in docs/tool guidance: save only explicit durable facts, handoffs, persistent todos, project paths, or when the user explicitly says to remember; do not save transient preferences from frustration.
-- Explore a tiny startup canonical-facts card with only pinned/canonical facts, not all memories, so critical facts can survive poor ad-hoc search queries.
+- Add specialized resolver tools or APIs for high-value facts, starting with Git identity and repo path resolution, only after minimal canonical facts and ranking still leave a concrete gap; prefer one small generic resolver surface over multiple normal tools.
+- Explore a tiny startup canonical-facts card with only pinned/canonical facts, not all memories, only after retrieval evals show search/fallback is insufficient; keep it hard-capped or opt-in.
 
