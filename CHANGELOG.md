@@ -13,6 +13,12 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.0.14] - 2026-05-15
+
+### Changed
+- Removed hardcoded fallback query alias expansion from memory search; relaxed lexical fallback now uses only the user's original query tokens.
+- Expanded retrieval-quality regression coverage for Git identity, GitHub SSH push, repo path, tag-only lexical retrieval, and unrelated-noise negative controls.
+
 ## [2.0.13] - 2026-05-15
 
 ### Changed
@@ -34,7 +40,7 @@ Older non-monotonic entries are preserved as legacy release-line history.
 - Shortened memory tool prompt descriptions and guidelines to reduce Pi startup context while preserving tool routing semantics.
 
 ### Fixed
-- Memory search now retries strict zero-hit lexical queries with a bounded relaxed fallback and small Git identity alias set, so noisy queries such as `uga uga bongo git` can still retrieve relevant Git identity memories while exact `AND` search remains the first pass.
+- Memory search now retries strict zero-hit lexical queries with a bounded relaxed fallback while exact `AND` search remains the first pass.
 
 ## [2.0.9] - 2026-05-14
 

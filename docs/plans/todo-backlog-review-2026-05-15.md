@@ -20,8 +20,8 @@ Review all current `TODO.md` items for:
 - `docs/product/prd-lightweight-local-memory-system.md` requires local-first, hybrid retrieval, DE/EN support, and low resource use.
 - `docs/adr/007-memory-model-minimisation.md` intentionally removed most structured kinds, links, auto-expiry, and semantic duplicate detection; new work should not re-grow that surface casually.
 - Current search in `src/core/search.ts` is hybrid lexical + semantic with scope/recency/importance/confidence weights, but no first-class key/canonical-fact boost and no pinned boost.
-- Since v2.0.10, strict FTS zero-hit searches retry with a bounded relaxed fallback and small Git-identity alias set; broader near-miss reporting and key/tag boosts remain open.
-- The initial Git-identity noisy-query regression coverage exists; broader retrieval evals beyond that slice remain open.
+- Strict FTS zero-hit searches retry with a bounded relaxed fallback; broader near-miss reporting and key/tag boosts remain open.
+- Retrieval eval coverage now includes Git identity, GitHub SSH push, repo path, tag-only lexical retrieval, alias-removal negative controls, and unrelated-noise negative controls.
 - `src/pi-extension/retrieval.ts` already keeps turn-start injection small: staged session/project/repo/global search, result limit 3, no broad unscoped fallback.
 - `CHANGELOG.md` `2.0.9` through `2.0.11` record prompt/guidance compaction, retrieval fallback, and documentation/status freshness work, so more prompt-injection optimization should be measurement-led.
 - `src/pi-extension/audit.ts` handles lifecycle and identity hygiene, but not canonical fact conflicts or fact-cluster deduping.
@@ -35,12 +35,10 @@ Review all current `TODO.md` items for:
 | Research local autoresearch tooling for prompt injection token cost | Medium | Unclear until measured | Good only if local and one-off | Keep as research, but low priority. Recent prompt-shortening work already reduced repeated guidance; next useful step is measurement, not tooling adoption. Avoid adding a resident service or dependency. |
 | Canonical fact/key support (`git.identity.default`, repo paths, stable prefs) | High | High | Good if narrowly scoped | Real problem: agents need deterministic single-source facts. Do not reintroduce `fact` kind; prefer a small canonical key/fact-cluster concept using tags/metadata or one minimal indexed field. |
 | Rank exact keys and tag matches ahead of weak semantic/lexical matches | High | High | Strong | Current ranking has lexical/semantic/scope weights but no explicit tag/key boost. This should be part of canonical-fact retrieval, not a separate broad ranking rewrite. |
-| Query expansion aliases (`git`, `mailadresse`, `repo`, `push`) | Medium-high | Medium | Good if static/local | Use tiny static alias maps only for high-value workflows. Keep transparent and tested; avoid LLM-based expansion or large synonym infra. |
 | Specialized resolver tools/APIs for Git identity and repo path | High | High | Medium-good if surface stays small | Strong deterministic local value via Git config/repo metadata. Prefer internal resolver API or one generic resolver surface over several new normal tools, to avoid prompt/tool bloat. |
 | Detect conflicting active memories in same fact cluster | High | High | Good if advisory | Useful once canonical keys exist. Return explicit conflict/canonical-candidate reports; never auto-choose on low evidence. |
 | Memory hygiene/dedup support for clusters | Medium | Medium | Good if manual/advisory | ADR 007 rejects semantic duplicate detection as a system feature. Keep this limited to exact key/tag clusters and explicit archive recommendations. |
-| Improve empty-result behavior with fallback keyword/tag/alias searches and near misses | High | Medium-high | Strong | Initial strict-zero-hit relaxed fallback is implemented for noisy Git identity queries. Remaining value is near-miss reporting and broader fallback behavior without over-broad recall. |
-| Retrieval evals for Git identity, including `uga uga bongo git` victory test | High | High | Excellent | Initial Git identity noisy-query regression coverage exists. Add broader eval cases for non-Git canonical facts, aliases, and negative controls. |
+| Improve empty-result behavior with fallback keyword/tag searches and near misses | High | Medium-high | Strong | Initial strict-zero-hit relaxed fallback is implemented for noisy Git identity queries. Remaining value is near-miss reporting and broader fallback behavior without over-broad recall. |
 | Harden write policy docs/tool guidance | High | High | Excellent | README stale `progress_snapshot` wording is fixed. Continue clarifying docs/tool guidance to prevent memory pollution and transient-preference saves. |
 | Tiny startup canonical-facts card with pinned/canonical facts | Medium | Potentially high | Risky unless tiny | Defer until canonical keys and evals prove that search fallback is insufficient. If implemented, cap hard (e.g. only pinned canonical facts, few lines) and measure token cost. |
 
@@ -52,7 +50,7 @@ Review all current `TODO.md` items for:
    - Low risk, immediate retrieval-quality benefit by reducing memory pollution.
 
 2. **Canonical fact retrieval slice**
-   - Combine canonical key support, key/tag boost, tiny alias expansion, empty-result fallback, and `uga uga bongo git` evals.
+   - Combine canonical key support, key/tag boost, empty-result fallback, and `uga uga bongo git` evals.
    - Keep it local and deterministic.
    - Start with Git identity because the failure mode is concrete and easy to test.
 
@@ -70,11 +68,10 @@ Review all current `TODO.md` items for:
 ## Proposed priority order
 
 1. Remaining write-policy/tool-guidance cleanup.
-2. Broader retrieval evals beyond the initial Git identity noisy-query coverage.
-3. Minimal canonical key + tag/key ranking/fallback implementation.
-4. Git identity / repo path resolver API.
-5. Canonical cluster conflict/audit support.
-6. Token-cost research and startup canonical-facts card only if evidence still justifies them.
+2. Minimal canonical key + tag/key ranking/fallback implementation.
+3. Git identity / repo path resolver API.
+4. Canonical cluster conflict/audit support.
+5. Token-cost research and startup canonical-facts card only if evidence still justifies them.
 
 ## Lightweight guardrails
 

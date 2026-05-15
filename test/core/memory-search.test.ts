@@ -113,6 +113,139 @@ test("searchMemories falls back to relaxed lexical matching for noisy Git identi
   }
 });
 
+test("searchMemories relaxed lexical fallback does not expand hardcoded aliases", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: createNoSemanticEmbeddingAdapter() });
+
+  try {
+    const emailMemory = store.createMemory({
+      scope: "global",
+      title: "Default email identity",
+      summary: "Use this email address for the default commit identity.",
+      tags: ["email", "identity"],
+    });
+
+    const exactResults = store.searchMemories({ query: "email", scope: ["global"] });
+    assert.equal(exactResults[0]?.id, emailMemory.id);
+
+    for (const query of ["mail", "credentials"]) {
+      const results = store.searchMemories({ query, scope: ["global"] });
+      assert.equal(results.some((result) => result.id === emailMemory.id), false, `did not expect alias match for query: ${query}`);
+    }
+  } finally {
+    store.close();
+  }
+});
+
+test("searchMemories retrieval-quality eval keeps distinct operational facts discoverable", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: createNoSemanticEmbeddingAdapter() });
+
+  try {
+    const gitIdentity = store.createMemory({
+      scope: "global",
+      title: "Default Git commit identity",
+      summary: "Use sebastianlang84 with email sebastian.lang@gmx.at for Git commits when repository local config is missing.",
+      tags: ["git", "identity", "commit", "email"],
+      importance: 0.9,
+      confidence: 0.9,
+    });
+
+    const githubSshPush = store.createMemory({
+      scope: "global",
+      title: "GitHub push via SSH",
+      summary: "Use SSH remotes for GitHub pushes and avoid HTTPS askpass credential prompts.",
+      tags: ["github", "push", "ssh", "remote"],
+      importance: 0.9,
+      confidence: 0.9,
+    });
+
+    const repoPath = store.createMemory({
+      scope: "repo",
+      repoPath: "/home/wasti/.pi/agent/git/github.com/sebastianlang84/pi-ext-memory",
+      title: "pi-memory repository path",
+      summary: "The pi-memory checkout path is /home/wasti/.pi/agent/git/github.com/sebastianlang84/pi-ext-memory.",
+      tags: ["repo", "path", "pi-memory"],
+      importance: 0.8,
+      confidence: 0.9,
+    });
+
+    store.createMemory({
+      scope: "global",
+      title: "Git commit email cleanup",
+      summary: "A Git commit task mentions email notifications but does not define the default identity.",
+      tags: ["git", "commit", "email"],
+      importance: 0.9,
+      confidence: 0.9,
+    });
+
+    store.createMemory({
+      scope: "global",
+      title: "GitHub SSH clone troubleshooting",
+      summary: "GitHub SSH clone debugging mentions push only as an unrelated transport note.",
+      tags: ["github", "ssh", "clone"],
+      importance: 0.9,
+      confidence: 0.9,
+    });
+
+    store.createMemory({
+      scope: "repo",
+      repoPath: repoPath.repoPath,
+      title: "Repository issue path",
+      summary: "A repository path note for temporary issue scans, not the pi-memory checkout location.",
+      tags: ["repo", "path", "issue-scan"],
+      importance: 0.8,
+      confidence: 0.9,
+    });
+
+    const weatherNoise = store.createMemory({
+      scope: "global",
+      title: "Weather invoice notes",
+      summary: "Weather invoice notes are unrelated operational noise for retrieval negative controls.",
+      tags: ["weather", "invoice"],
+    });
+
+    const cases = [
+      { query: "git commit identity", expectedId: gitIdentity.id },
+      { query: "github push ssh", expectedId: githubSshPush.id },
+      { query: "ssh remote", expectedId: githubSshPush.id },
+      { query: "repo path pi-memory", expectedId: repoPath.id, repoPath: repoPath.repoPath },
+    ];
+
+    for (const retrievalCase of cases) {
+      const results = store.searchMemories({
+        query: retrievalCase.query,
+        scope: retrievalCase.repoPath ? ["repo"] : undefined,
+        repoPath: retrievalCase.repoPath,
+      });
+      assert.equal(results[0]?.id, retrievalCase.expectedId, `expected top result for query: ${retrievalCase.query}`);
+      assert.notEqual(results[0]?.id, weatherNoise.id, `noise result must not win for query: ${retrievalCase.query}`);
+    }
+  } finally {
+    store.close();
+  }
+});
+
+test("searchMemories includes tags in lexical retrieval without special aliases", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: createNoSemanticEmbeddingAdapter() });
+
+  try {
+    const taggedOnly = store.createMemory({
+      scope: "global",
+      title: "Transport preference",
+      summary: "Use the secure transport path for publication.",
+      tags: ["github", "ssh"],
+    });
+
+    const results = store.searchMemories({ query: "github ssh", scope: ["global"] });
+    assert.equal(results[0]?.id, taggedOnly.id);
+    assert.deepEqual(results[0]?.tags, ["github", "ssh"]);
+  } finally {
+    store.close();
+  }
+});
+
 test("searchMemories applies kind and scope filters", () => {
   const dbPath = createTempDbPath();
   const store = initializeMemoryStore({ dbPath });

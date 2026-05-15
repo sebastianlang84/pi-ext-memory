@@ -339,7 +339,7 @@ export function normalizeSearchMemoriesInput(input: SearchMemoriesInput): Normal
   const repoPath = normalizeOptionalText(input.repoPath);
   const limit = normalizeLimit(input.limit, issues);
   const matchQuery = query ? buildFtsMatchQuery(query, issues, "AND") : undefined;
-  const relaxedMatchQuery = query ? buildFtsMatchQuery(query, issues, "OR", { expandAliases: true }) : undefined;
+  const relaxedMatchQuery = query ? buildFtsMatchQuery(query, issues, "OR") : undefined;
 
   issues.push(...findScopeIdentityIssues({ scope, sessionId, projectId, repoPath }));
 
@@ -547,22 +547,10 @@ function normalizeNonEmptyId(fieldName: string, value: string, issues: string[])
   return normalized;
 }
 
-const FALLBACK_QUERY_ALIASES: Record<string, string[]> = {
-  author: ["commit", "identity", "email"],
-  committer: ["commit", "identity", "email"],
-  credential: ["identity", "author", "committer"],
-  credentials: ["identity", "author", "committer"],
-  email: ["identity", "author", "committer"],
-  git: ["commit", "author", "identity", "email"],
-  identity: ["email", "author", "committer"],
-  mail: ["email", "identity", "author"],
-};
-
 function buildFtsMatchQuery(
   query: string,
   issues: string[],
   operator: "AND" | "OR",
-  options: { expandAliases?: boolean } = {},
 ): string | undefined {
   const uniqueTokens = Array.from(new Set(extractFtsTokens(query)));
 
@@ -571,31 +559,7 @@ function buildFtsMatchQuery(
     return undefined;
   }
 
-  if (operator === "OR" && options.expandAliases) {
-    const expandedTokens = expandFallbackTokens(uniqueTokens);
-    const originalQuery = buildFtsOrGroup(uniqueTokens);
-    const expandedQuery = buildFtsOrGroup(expandedTokens);
-
-    return originalQuery === expandedQuery ? originalQuery : `(${originalQuery}) AND (${expandedQuery})`;
-  }
-
   return uniqueTokens.map(quoteFtsToken).join(` ${operator} `);
-}
-
-function expandFallbackTokens(tokens: string[]): string[] {
-  const expandedTokens = [...tokens];
-
-  for (const token of tokens) {
-    for (const alias of FALLBACK_QUERY_ALIASES[token] ?? []) {
-      expandedTokens.push(...extractFtsTokens(alias));
-    }
-  }
-
-  return Array.from(new Set(expandedTokens));
-}
-
-function buildFtsOrGroup(tokens: string[]): string {
-  return tokens.map(quoteFtsToken).join(" OR ");
 }
 
 function quoteFtsToken(token: string): string {
