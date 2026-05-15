@@ -1,7 +1,7 @@
 import { type DatabaseSync } from "node:sqlite";
 
 import { type GeneratedMemoryEmbedding } from "./embeddings.ts";
-import { parseNumberArray, parseStringArray } from "./mappers.ts";
+import { parseNumberArray, parseObject, parseStringArray } from "./mappers.ts";
 import { type MemoryRecord, type MemorySearchResult, type NormalizedSearchMemoriesInput } from "./memories.ts";
 import { DEFAULT_HYBRID_RETRIEVAL_POLICY } from "./retrieval-policy.ts";
 
@@ -12,6 +12,7 @@ interface MemorySearchBaseRow {
   title: string;
   summary: string;
   tags_json: string;
+  metadata_json: string;
   project_id: string | null;
   repo_path: string | null;
   importance: number;
@@ -50,6 +51,8 @@ interface RankedMemorySearchCandidate {
   semanticScore: number;
   scopeScore: number;
   recencyScore: number;
+  exactMatchScore: number;
+  canonicalKey?: string;
 }
 
 export function searchMemoryResults(
@@ -60,8 +63,10 @@ export function searchMemoryResults(
   const candidateLimit = Math.max(input.limit * DEFAULT_HYBRID_RETRIEVAL_POLICY.candidateMultiplier, DEFAULT_HYBRID_RETRIEVAL_POLICY.minCandidates);
   const lexicalRows = searchLexicalMemoryRows(db, input, candidateLimit);
   const semanticRows = searchSemanticMemoryRows(db, input, queryEmbedding, candidateLimit);
+  const exactTagRows = searchExactTagMemoryRows(db, input, candidateLimit);
+  const exactCanonicalRows = searchExactCanonicalKeyMemoryRows(db, input, candidateLimit);
 
-  return rankHybridSearchResults(input, lexicalRows, semanticRows).slice(0, input.limit);
+  return rankHybridSearchResults(input, lexicalRows, semanticRows, exactTagRows, exactCanonicalRows).slice(0, input.limit);
 }
 
 export function createQueryEmbeddingContent(query: string) {
@@ -101,6 +106,7 @@ function queryLexicalMemoryRows(
         m.title,
         m.summary,
         m.tags_json,
+        m.metadata_json,
         m.project_id,
         m.repo_path,
         m.importance,
@@ -133,6 +139,7 @@ function searchSemanticMemoryRows(
         m.title,
         m.summary,
         m.tags_json,
+        m.metadata_json,
         m.project_id,
         m.repo_path,
         m.importance,
@@ -154,6 +161,80 @@ function searchSemanticMemoryRows(
     .filter((row): row is SemanticMemorySearchRow => row !== undefined && row.semantic_score >= DEFAULT_HYBRID_RETRIEVAL_POLICY.minVectorSimilarity)
     .sort((left, right) => right.semantic_score - left.semantic_score)
     .slice(0, limit);
+}
+
+function searchExactTagMemoryRows(
+  db: DatabaseSync,
+  input: NormalizedSearchMemoriesInput,
+  limit: number,
+): MemorySearchBaseRow[] {
+  const exactTerms = createExactQueryTerms(input.query);
+  if (exactTerms.size === 0) return [];
+
+  const filters = buildMemorySearchFilters(input, "m");
+  const exactTermList = Array.from(exactTerms);
+  return db
+    .prepare(`
+      SELECT
+        m.id,
+        m.kind,
+        m.scope,
+        m.title,
+        m.summary,
+        m.tags_json,
+        m.metadata_json,
+        m.project_id,
+        m.repo_path,
+        m.importance,
+        m.confidence,
+        m.created_at,
+        m.updated_at
+      FROM memories AS m
+      WHERE ${[
+        ...filters.clauses,
+        `EXISTS (SELECT 1 FROM json_each(m.tags_json) AS exact_tag WHERE LOWER(CAST(exact_tag.value AS TEXT)) IN (${createPlaceholders(exactTermList.length)}))`,
+      ].join(" AND ")}
+      ORDER BY m.updated_at DESC
+      LIMIT ?;
+    `)
+    .all(...filters.params, ...exactTermList, limit) as MemorySearchBaseRow[];
+}
+
+function searchExactCanonicalKeyMemoryRows(
+  db: DatabaseSync,
+  input: NormalizedSearchMemoriesInput,
+  limit: number,
+): MemorySearchBaseRow[] {
+  const exactTerms = createExactQueryTerms(input.query);
+  if (exactTerms.size === 0) return [];
+
+  const filters = buildMemorySearchFilters(input, "m");
+  const exactTermList = Array.from(exactTerms);
+  return db
+    .prepare(`
+      SELECT
+        m.id,
+        m.kind,
+        m.scope,
+        m.title,
+        m.summary,
+        m.tags_json,
+        m.metadata_json,
+        m.project_id,
+        m.repo_path,
+        m.importance,
+        m.confidence,
+        m.created_at,
+        m.updated_at
+      FROM memories AS m
+      WHERE ${[
+        ...filters.clauses,
+        `LOWER(CAST(json_extract(m.metadata_json, '$.canonicalKey') AS TEXT)) IN (${createPlaceholders(exactTermList.length)})`,
+      ].join(" AND ")}
+      ORDER BY m.updated_at DESC
+      LIMIT ?;
+    `)
+    .all(...filters.params, ...exactTermList, limit) as MemorySearchBaseRow[];
 }
 
 function buildMemorySearchFilters(
@@ -202,6 +283,8 @@ function rankHybridSearchResults(
   input: NormalizedSearchMemoriesInput,
   lexicalRows: LexicalMemorySearchRow[],
   semanticRows: SemanticMemorySearchRow[],
+  exactTagRows: MemorySearchBaseRow[],
+  exactCanonicalRows: MemorySearchBaseRow[],
 ): MemorySearchResult[] {
   const candidates = new Map<string, RankedMemorySearchCandidate>();
   const referenceTime = Date.now();
@@ -215,17 +298,28 @@ function rankHybridSearchResults(
     upsertRankedCandidate(candidates, row, { semanticScore: row.semantic_score });
   });
 
+  exactTagRows.forEach((row) => {
+    upsertRankedCandidate(candidates, row, {});
+  });
+
+  exactCanonicalRows.forEach((row) => {
+    upsertRankedCandidate(candidates, row, {});
+  });
+
+  const exactTerms = createExactQueryTerms(input.query);
   const rankedCandidates = Array.from(candidates.values())
     .map((candidate) => {
       const scopeScore = calculateScopeScore(candidate, input);
       const recencyScore = calculateRecencyScore(candidate.updatedAt, referenceTime);
       const matchScore = calculateHybridMatchScore(candidate, scopeScore, recencyScore);
+      const exactMatchScore = calculateExactMatchScore(candidate, exactTerms);
 
       return {
         ...candidate,
         scopeScore,
         recencyScore,
         matchScore,
+        exactMatchScore,
       };
     })
     .sort(compareRankedCandidates);
@@ -243,6 +337,7 @@ function upsertRankedCandidate(
   if (existing) {
     existing.lexicalScore = Math.max(existing.lexicalScore, input.lexicalScore ?? 0);
     existing.semanticScore = Math.max(existing.semanticScore, input.semanticScore ?? 0);
+    existing.canonicalKey ??= readCanonicalKey(row.metadata_json);
     return;
   }
 
@@ -253,6 +348,7 @@ function upsertRankedCandidate(
     title: row.title,
     summary: row.summary,
     tags: parseStringArray(row.tags_json),
+    canonicalKey: readCanonicalKey(row.metadata_json),
     projectId: row.project_id ?? undefined,
     repoPath: row.repo_path ?? undefined,
     importance: row.importance,
@@ -264,7 +360,49 @@ function upsertRankedCandidate(
     semanticScore: input.semanticScore ?? 0,
     scopeScore: 0,
     recencyScore: 0,
+    exactMatchScore: 0,
   });
+}
+
+function calculateExactMatchScore(
+  candidate: Pick<RankedMemorySearchCandidate, "tags" | "canonicalKey">,
+  exactTerms: Set<string>,
+): number {
+  if (exactTerms.size === 0) return 0;
+
+  const canonicalScore = candidate.canonicalKey && exactTerms.has(candidate.canonicalKey) ? 2 : 0;
+  const tagMatchCount = candidate.tags.filter((tag) => exactTerms.has(normalizeExactTerm(tag))).length;
+  const tagScore = tagMatchCount > 0 ? 1 + Math.min(1, tagMatchCount / exactTerms.size) : 0;
+
+  return Number((canonicalScore + tagScore).toFixed(6));
+}
+
+function readCanonicalKey(metadataJson: string): string | undefined {
+  const canonicalKey = parseObject(metadataJson).canonicalKey;
+  return typeof canonicalKey === "string" ? normalizeExactTerm(canonicalKey) : undefined;
+}
+
+function createExactQueryTerms(query: string): Set<string> {
+  const terms = new Set<string>();
+  const collapsedQuery = normalizeExactTerm(query);
+  if (collapsedQuery.length > 0) {
+    terms.add(collapsedQuery);
+  }
+
+  for (const token of query.match(/[\p{L}\p{N}][\p{L}\p{N}_-]*/gu) ?? []) {
+    terms.add(normalizeExactTerm(token));
+  }
+
+  for (const token of query.match(/[\p{L}\p{N}][\p{L}\p{N}_:-]*(?:\.[\p{L}\p{N}_:-]+)+/gu) ?? []) {
+    terms.add(normalizeExactTerm(token));
+  }
+
+  terms.delete("");
+  return terms;
+}
+
+function normalizeExactTerm(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function calculateRankPositionScore(index: number, total: number): number {
@@ -321,6 +459,7 @@ function calculateHybridMatchScore(
 
 function compareRankedCandidates(left: RankedMemorySearchCandidate, right: RankedMemorySearchCandidate): number {
   return (
+    right.exactMatchScore - left.exactMatchScore ||
     right.matchScore - left.matchScore ||
     right.semanticScore - left.semanticScore ||
     right.lexicalScore - left.lexicalScore ||

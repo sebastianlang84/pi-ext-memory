@@ -20,7 +20,6 @@ Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/
 
 ### 2. Ranking and near-miss retrieval
 
-- Make memory retrieval rank exact tag and canonical-key matches ahead of weak semantic/lexical matches; a query containing `git` should surface `git`/`identity`/`commit` tagged memories even if the rest of the query is noise.
 - Improve remaining empty-result behavior by reporting near key/canonical misses and broader non-tag hints instead of only `No memories matched`.
 
 ### 3. Minimal canonical facts

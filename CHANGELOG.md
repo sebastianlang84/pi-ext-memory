@@ -13,6 +13,11 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-05-16
+
+### Changed
+- Improved `memory_search` ranking so exact tag and `metadata.canonicalKey` matches outrank weaker lexical or semantic candidates, without adding prompt-facing tools or turn-start text.
+
 ## [2.1.3] - 2026-05-16
 
 ### Added

@@ -113,6 +113,67 @@ test("searchMemories falls back to relaxed lexical matching for noisy Git identi
   }
 });
 
+test("searchMemories ranks exact tag matches ahead of stronger lexical distractors for noisy queries", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: createNoSemanticEmbeddingAdapter() });
+
+  try {
+    const taggedFact = store.createMemory({
+      scope: "global",
+      title: "Source control preference",
+      summary: "Use the configured repository author when creating commits.",
+      tags: ["git"],
+      importance: 0.5,
+      confidence: 0.5,
+    });
+
+    store.createMemory({
+      scope: "global",
+      title: "Git banana troubleshooting",
+      summary: "Git banana appears here as strict-query lexical filler, but this note is only noisy text.",
+      tags: ["noise"],
+      importance: 1,
+      confidence: 1,
+    });
+
+    const results = store.searchMemories({ query: "git banana", scope: ["global"], limit: 5 });
+
+    assert.equal(results[0]?.id, taggedFact.id);
+  } finally {
+    store.close();
+  }
+});
+
+test("searchMemories finds exact canonicalKey matches without prompt-facing resolver tools", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: createNoSemanticEmbeddingAdapter() });
+
+  try {
+    const canonicalFact = store.createMemory({
+      scope: "global",
+      title: "Source control author setting",
+      summary: "Use this stable machine setting when creating repository commits.",
+      tags: ["commit"],
+      metadata: { canonicalKey: "git.identity.default" },
+    });
+
+    store.createMemory({
+      scope: "global",
+      title: "Git identity default terminology",
+      summary: "This noisy note mentions git identity default as general wording but is not canonical.",
+      tags: ["noise"],
+      importance: 1,
+      confidence: 1,
+    });
+
+    const results = store.searchMemories({ query: "git.identity.default", scope: ["global"], limit: 5 });
+
+    assert.equal(results[0]?.id, canonicalFact.id);
+  } finally {
+    store.close();
+  }
+});
+
 test("searchMemories relaxed lexical fallback does not expand hardcoded aliases", () => {
   const dbPath = createTempDbPath();
   const store = initializeMemoryStore({ dbPath, embeddingAdapter: createNoSemanticEmbeddingAdapter() });
