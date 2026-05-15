@@ -13,6 +13,17 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-05-15
+
+### Added
+- Added `memory_tag_catalog`, a read-only derived tag inventory with counts, scopes/kinds, and recent examples to help agents reuse existing tags.
+
+### Changed
+- `memory_save_todo` no longer adds workflow fields such as `todo`, priority, or blocked/in-progress status as ordinary content tags.
+
+### Fixed
+- `memory_update` now handles legacy lowercase todo priority tags when patching priority and removes priority workflow tags instead of adding replacements.
+
 ## [2.0.14] - 2026-05-15
 
 ### Changed

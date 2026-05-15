@@ -16,9 +16,9 @@ Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/
 
 ### 1. Tag hygiene and catalog
 
-- Implement a lightweight derived tag catalog so agents reuse existing content/context tags instead of inventing near-duplicates; plan: [docs/plans/tag-catalog-controlled-folksonomy.md](docs/plans/tag-catalog-controlled-folksonomy.md).
-- Harden memory write policy in docs/tool guidance: save only explicit durable facts, handoffs, persistent todos, project paths, or when the user explicitly says to remember; do not save transient preferences from frustration.
-- Align todo storage with the field-vs-tag rule: todo priority/status/next action belong in structured todo data, not ordinary content tags such as `todo`, `p1`, or `blocked`.
+- Add near-tag suggestions so search/save/update paths can warn about likely duplicate tags such as `agentic-context` vs `agent-context`; plan: [docs/plans/tag-catalog-controlled-folksonomy.md](docs/plans/tag-catalog-controlled-folksonomy.md).
+- Decide how to handle old workflow tags (`todo`, `p1`, `blocked`) that were written before new todo saves stopped adding them: audit recommendation, explicit migration, or leave as historical data.
+- Consider whether a tiny curated preferred-tag seed is needed, or whether the derived `memory_tag_catalog` is sufficient.
 
 ### 2. Ranking and near-miss retrieval
 

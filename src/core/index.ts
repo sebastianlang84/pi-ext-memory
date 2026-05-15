@@ -15,6 +15,16 @@ export {
 export { LATEST_MEMORY_SCHEMA_VERSION } from "./migrations.ts";
 export { createMemoryCore } from "./memory-core.ts";
 export {
+  TODO_PRIORITIES,
+  TODO_WORKFLOW_STATUSES,
+  findTodoPriorityInSummary,
+  findTodoPriorityTag,
+  isTodoPriorityTag,
+  isTodoWorkflowTag,
+  stripTodoPriorityTags,
+  stripTodoWorkflowTags,
+} from "./todos.ts";
+export {
   MEMORY_KINDS,
   MEMORY_LIST_ORDER_BY,
   MEMORY_SCOPES,
@@ -59,6 +69,7 @@ export type {
   UpdateMemoryInput,
 } from "./memories.ts";
 export type { MemoryCore, MemoryCoreStatus } from "./memory-core.ts";
+export type { TodoPriority, TodoWorkflowStatus } from "./todos.ts";
 export type {
   InitializeMemoryStoreInput,
   ListForToolResult,

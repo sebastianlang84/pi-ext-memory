@@ -7,8 +7,14 @@ import {
   MEMORY_LIST_ORDER_BY,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
+  TODO_PRIORITIES,
+  TODO_WORKFLOW_STATUSES,
+  findTodoPriorityInSummary,
+  findTodoPriorityTag,
+  stripTodoWorkflowTags,
   type MemoryKind,
   type MemoryScope,
+  type MemoryStatus,
   type MemoryStore,
   getCapForKindScope,
 } from "../core/index.ts";
@@ -24,6 +30,7 @@ import {
 import { findLatestExactSessionHandoff } from "./handoffs.ts";
 import { decorateCreateMemoryInput } from "./retrieval.ts";
 import { formatAuditResults, runMemoryAudit } from "./audit.ts";
+import { buildTagCatalog, formatTagCatalog } from "./tag-catalog.ts";
 import { createToolShell } from "./tool-shell.ts";
 
 
@@ -279,7 +286,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Updated scope — use with caution; normal choices are global, repo, and session; project is legacy/advanced compatibility" })),
       repoPath: Type.Optional(Type.String({ description: "Updated repoPath" })),
       projectId: Type.Optional(Type.String({ description: "Updated legacy/advanced projectId" })),
-      priority: Type.Optional(StringEnum(["P0", "P1", "P2"] as const, { description: "Todo priority — only applies when kind=todo" })),
+      priority: Type.Optional(StringEnum(TODO_PRIORITIES, { description: "Todo priority — only applies when kind=todo" })),
       nextAction: Type.Optional(Type.String({ description: "Next concrete action — only applies when kind=todo" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -332,6 +339,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
 
       // Build updated params for todo-specific fields
       let updateParams = { ...params } as typeof params & { summary?: string; tags?: string[] };
+      if (existingMemory.kind === "todo" && updateParams.tags !== undefined) {
+        updateParams = { ...updateParams, tags: stripTodoWorkflowTags(updateParams.tags) };
+      }
 
       if (params.scope !== undefined || params.projectId !== undefined || params.repoPath !== undefined) {
         if (params.scope === "global" && (existingMemory.sessionId || existingMemory.projectId || existingMemory.repoPath)) {
@@ -384,13 +394,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
           .replace(/^\[P[012]\]\s*/, "")
           .replace(/\s*→\s*.+$/, "");
         const currentNextAction = existingMemory.summary.match(/→\s*(.+)$/)?.[1];
-        const newPriority = params.priority ?? (existingMemory.tags.find((t) => t === "P0" || t === "P1" || t === "P2") as "P0" | "P1" | "P2" | undefined);
+        const newPriority = params.priority ?? findTodoPriorityTag(existingMemory.tags) ?? findTodoPriorityInSummary(existingMemory.summary);
         const newNextAction = params.nextAction ?? currentNextAction;
         const updatedSummary = buildTodoSummary({ title: existingMemory.title, priority: newPriority, nextAction: newNextAction, description: baseSummary });
 
-        // Replace priority tag
-        const tagsWithoutPriority = (params.tags ?? existingMemory.tags).filter((t) => t !== "P0" && t !== "P1" && t !== "P2");
-        const updatedTags = newPriority ? [...tagsWithoutPriority, newPriority] : tagsWithoutPriority;
+        // Remove legacy workflow tags. Todo priority/status are structured fields/rendered summary, not content tags.
+        const updatedTags = stripTodoWorkflowTags(updateParams.tags ?? existingMemory.tags);
 
         let effectiveSummary: string;
         if (updateParams.summary !== undefined) {
@@ -453,8 +462,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     parameters: Type.Object({
       title: Type.String({ description: "Short title for the todo" }),
       description: Type.Optional(Type.String({ description: "Longer description of the task" })),
-      priority: Type.Optional(StringEnum(["P0", "P1", "P2"] as const, { description: "Priority: P0=critical, P1=important, P2=nice-to-have" })),
-      status: Type.Optional(StringEnum(["open", "in_progress", "blocked"] as const, { description: "Current status of the todo" })),
+      priority: Type.Optional(StringEnum(TODO_PRIORITIES, { description: "Priority: P0=critical, P1=important, P2=nice-to-have" })),
+      status: Type.Optional(StringEnum(TODO_WORKFLOW_STATUSES, { description: "Current status of the todo" })),
       scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "Memory scope; normal choices are global, repo, and session; project is legacy/advanced compatibility" })),
       projectId: Type.Optional(Type.String({ description: "Legacy/advanced project identifier; prefer repoPath for normal repo todos" })),
       repoPath: Type.Optional(Type.String({ description: "Optional repository path" })),
@@ -471,9 +480,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       );
       if (identity.error) return identityErrorResponse(identity.error);
 
-      const tags = [...(params.tags ?? []), "todo"];
-      if (params.priority) tags.push(params.priority);
-      if (params.status && params.status !== "open") tags.push(params.status);
+      const tags = stripTodoWorkflowTags(params.tags ?? []);
 
       const summary = buildTodoSummary(params);
 
@@ -526,6 +533,40 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       return {
         content: [{ type: "text", text: output }],
         details: { dbPath: store.dbPath, staleTodos, oldHandoffs, identityViolations, projectMigrationPreview },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "memory_tag_catalog",
+    label: "Memory Tag Catalog",
+    description: "List active memory tags.",
+    promptSnippet: "Inspect existing tags before adding tags.",
+    promptGuidelines: [
+      "Use memory_tag_catalog before creating unfamiliar tags; read-only inventory only.",
+    ],
+    parameters: Type.Object({
+      scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "Scope filter" }))),
+      kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS, { description: "Kind filter" }))),
+      repoPath: Type.Optional(Type.String({ description: "Repo path filter" })),
+      status: Type.Optional(StringEnum(MEMORY_STATUSES, { description: "Status; defaults to active" })),
+      limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50, default: 50, description: "Max tags" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const { store, withLegacyNotice } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
+      const scopeFilter = params.scope as MemoryScope[] | undefined;
+      const kindFilter = params.kind as MemoryKind[] | undefined;
+      const status = (params.status ?? "active") as MemoryStatus;
+      const memories = store.listAllInternal({
+        status,
+        ...(scopeFilter ? { scope: scopeFilter } : {}),
+        ...(kindFilter ? { kind: kindFilter } : {}),
+        ...(params.repoPath ? { repoPath: params.repoPath } : {}),
+      });
+      const tagCatalog = buildTagCatalog(memories, { limit: params.limit ?? 50 });
+      return {
+        content: [{ type: "text", text: withLegacyNotice(formatTagCatalog(tagCatalog, store.dbPath), scopeFilter) }],
+        details: { dbPath: store.dbPath, tagCatalog, total_count: tagCatalog.length },
       };
     },
   });

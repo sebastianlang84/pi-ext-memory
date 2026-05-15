@@ -7,7 +7,7 @@ write-when: Tag-catalog scope, implementation order, or acceptance criteria chan
 
 # Plan — Lightweight Tag Catalog and Reuse
 
-Status: draft
+Status: partially implemented
 
 ## Purpose
 
@@ -18,6 +18,7 @@ Prevent tag sprawl while keeping pi-memory flexible. Agents should reuse existin
 - Tags are content/context labels, not the source of truth for fields that already exist.
 - If a tool has a field for a concept, use the field instead of duplicating it as a tag.
 - Preferred tags should be visible before or during saves.
+- A dedicated `memory_tag_catalog` tool is the MVP catalog surface because it is truly read-only; `memory_audit` writes audit metadata and remains focused on hygiene.
 - The MVP does not need a formal alias/deprecation system. LLMs can use a visible tag catalog to notice similar tags and retry/search/save with the preferred existing tag.
 - Keep the model flat: no heavy ontology, no background service, no remote dependency.
 
@@ -25,7 +26,8 @@ Prevent tag sprawl while keeping pi-memory flexible. Agents should reuse existin
 
 - Tags are stored as normalized lowercase strings in `memories.tags_json` and indexed into FTS.
 - `memory_search` and `memory_list` can filter by exact tags.
-- `memory_save_todo` currently appends `todo`, priority tags such as `p1`, and non-open status tags to the stored tag list, even though the tool accepts todo-specific fields.
+- Before the first implementation slice, `memory_save_todo` appended `todo`, priority tags such as `p1`, and non-open status tags to the stored tag list, even though the tool accepts todo-specific fields.
+- The first implementation slice stops adding those workflow tags for new todos and removes legacy priority tags when todo priority is patched.
 - ADR 007 keeps only `todo` and `handoff` as explicit kinds and relies on tags for ordinary note/fact/decision categorization.
 - The repo policy prefers retrieval quality over feature count and avoids tool-surface bloat.
 
@@ -39,7 +41,7 @@ Prevent tag sprawl while keeping pi-memory flexible. Agents should reuse existin
 
 ## Implementation slices
 
-### Slice 1 — Document the tag contract
+### Slice 1 — Document the tag contract — implemented
 
 - Add user/developer guidance: tags are for topic, subsystem, activity, artifact, and cross-cutting context.
 - State the field-vs-tag rule clearly: fields win; tags should not duplicate kind/status/priority/scope.
@@ -50,12 +52,12 @@ Acceptance:
 - Docs explain when to use tags vs structured fields.
 - No tool behavior changes yet.
 
-### Slice 2 — Add a derived tag catalog API
+### Slice 2 — Add a derived tag catalog API — implemented
 
-- Add a core read method that derives tag inventory from active memories using `json_each(tags_json)`.
+- Derive tag inventory from active memories through existing store read APIs.
 - Include tag, count, scopes/kinds seen, and one or two recent example titles.
 - Keep it read-only and generated from records; no authoritative tag table.
-- Expose it through the smallest surface that fits existing policy, preferably `memory_audit` first unless a dedicated tool proves necessary.
+- Expose it through `memory_tag_catalog`; avoid `memory_audit` because audit runs intentionally write `lastAuditAt` and `lastAuditSummary` metadata.
 
 Acceptance:
 
@@ -75,11 +77,12 @@ Acceptance:
 - Empty tag-filter searches show useful near misses.
 - Save/update paths can warn when a new tag looks like an existing tag.
 
-### Slice 4 — Align todo storage with the field-vs-tag rule
+### Slice 4 — Align todo storage with the field-vs-tag rule — partially implemented
 
 - Stop adding workflow tags such as `todo`, `p1`, and non-open status tags as ordinary content tags.
-- Preserve todo priority/status/nextAction in a structured place that survives list/update operations. Prefer existing `metadata_json` before adding columns.
+- Preserve todo priority/status/nextAction in structured tool fields and the rendered todo summary; no new columns were needed for this slice.
 - Keep backwards compatibility for old records that already have workflow tags.
+- Follow-up: decide whether old workflow tags should be reported as cleanup candidates, migrated explicitly, or left as historical data.
 
 Acceptance:
 
@@ -109,9 +112,9 @@ Acceptance:
 
 ## Open questions
 
-- Should the catalog be exposed through `memory_audit`, a new `memory_tags`/`memory_tag_catalog` tool, or both with one marked advanced?
 - Should preferred tags be purely derived from usage, or should there also be a small curated global catalog memory?
-- Should old workflow tags be cleaned by audit recommendations only, or by an explicit migration?
+- Should old workflow tags be cleaned by audit recommendations only, by an explicit migration, or left as historical data?
+- Should save/update paths warn when a new tag is close to an existing catalog tag?
 
 ## Risks
 

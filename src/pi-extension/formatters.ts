@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 
-import type { ListForToolResult, MemoryRecord, MemoryScope, MemorySearchResult, MemoryStore, SearchMemoriesInput, SessionRecord } from "../core/index.ts";
+import type { ListForToolResult, MemoryRecord, MemoryScope, MemorySearchResult, MemoryStore, SearchMemoriesInput, SessionRecord, TodoPriority, TodoWorkflowStatus } from "../core/index.ts";
 import { isLegacyProjectScopeSelected, LEGACY_PROJECT_SCOPE_NOTICE } from "../core/index.ts";
 import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
 
@@ -80,8 +80,8 @@ export function formatSearchPlanStage(stage: SearchMemoriesInput): string {
 type TodoSaveParams = {
   title: string;
   description?: string;
-  priority?: "P0" | "P1" | "P2";
-  status?: "open" | "in_progress" | "blocked";
+  priority?: TodoPriority;
+  status?: TodoWorkflowStatus;
   nextAction?: string;
 };
 

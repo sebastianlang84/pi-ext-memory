@@ -46,6 +46,7 @@ memory_save_todo               save actionable open tasks with priority/status/s
 memory_save_handoff            save or refresh resumable agent handoff state
 memory_update                  patch, close, or archive an existing memory by id; use archiveReason with status=archived when archiving
 memory_audit                   report lifecycle hygiene, scope identity issues, and read-only legacy project migration previews
+memory_tag_catalog             show existing active tags with counts, scopes/kinds, and recent examples
 ```
 
 Use `memory_list` for normal listing and `memory_update(status="archived", archiveReason=...)` for normal archive flows.
@@ -100,8 +101,16 @@ Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup s
 - `PI_MEMORY_BGE_M3_COMMAND` enables a local BGE-M3 embedding command adapter.
 - `PI_MEMORY_BGE_M3_TIMEOUT_MS` configures the BGE-M3 command timeout; the default is 15 seconds.
 
+## Tag catalog
+
+Use `memory_tag_catalog` before creating unfamiliar tags. It is read-only: it derives the current tag inventory from stored memories and does not update audit metadata, rewrite tags, archive records, or create a curated tag table.
+
+Catalog entries show each tag's count, scopes, kinds, and recent example titles. Use the catalog to reuse existing content/context tags instead of creating near-duplicates.
+
 ## Write guidance
 
 Save only explicit durable facts, decisions, preferences, reusable context, persistent todos, handoffs, project paths, or information the user explicitly asks the agent to remember.
 
 Do not save transient frustration, noisy chat history, secrets, credentials, or short-lived implementation details that belong only in the current diff or task plan.
+
+Tags are for topic, subsystem, artifact, activity, or cross-cutting context labels such as `pi-memory`, `tagging`, `agent-context`, or `design`. If a tool has a structured field for a concept, use the field instead of duplicating it as a tag: todo priority belongs in the `memory_save_todo.priority` field, todo workflow state belongs in `memory_save_todo.status`, next action belongs in `nextAction`, memory lifecycle state belongs in `memory_update.status`, and scope belongs in `scope`.

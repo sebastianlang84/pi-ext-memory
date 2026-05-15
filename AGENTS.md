@@ -2,6 +2,7 @@
 - Do not edit `AGENTS.md` without explicit user approval.
 - Keep the product local-first, dependency-light, portable, and simple; stop and ask before adding remote dependencies, background services, heavy infrastructure, or portability-reducing changes.
 - New features must have a clear, observable benefit, preferably covered by explicit tests; otherwise treat them as bloat.
+- Because this extension exposes many agent tools, keep token injection low: minimize prompt snippets, prompt guidelines, tool descriptions, parameter descriptions, and turn-start text; treat added prompt-facing text as bloat unless justified.
 - Keep retrieval/memory quality ahead of feature count.
 - Do not silently guess architecture, performance, or platform constraints; stop and ask when they affect the approach.
 - Keep repository documentation in English; avoid mixed-language or Denglish prose.

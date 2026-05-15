@@ -73,7 +73,7 @@ Retain:
 
 - `memory_save`, `memory_save_todo`, `memory_save_handoff`
 - `memory_search`, `memory_list`, `memory_update`
-- `memory_audit`, `memory_stats`
+- `memory_audit`, `memory_tag_catalog`, `memory_stats`
 
 ### sourceAgent / provenance
 

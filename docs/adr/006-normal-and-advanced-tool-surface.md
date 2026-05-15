@@ -18,6 +18,7 @@ The normal agent-facing tool path is:
 - `memory_save`, `memory_save_todo`, and `memory_save_handoff` for explicit writes.
 - `memory_update` for corrections, lifecycle changes, and normal archive flows via `status="archived"` plus `archiveReason`.
 - `memory_audit` for hygiene, scope-identity findings, and read-only legacy project migration previews.
+- `memory_tag_catalog` for read-only tag inventory before agents create unfamiliar content/context tags.
 
 ADR 007 partially supersedes the advanced/compatibility portion of this decision: the former advanced tools `memory_archive`, `memory_link`, `memory_list_active_todos`, and `memory_list_active_handoffs` are no longer callable. Use `memory_update(status="archived", archiveReason=...)` for archive flows and `memory_list` filters for active todos or handoffs.
 
@@ -28,4 +29,5 @@ Only `memory_stats` remains callable as an advanced/admin tool; it should not be
 - Agents get a smaller recommended path.
 - `memory_list` accepts optional `kind` and `scope`, enabling a small active catalog and replacing active-list wrappers.
 - `memory_update` can archive with a reason, replacing normal reliance on `memory_archive`.
+- `memory_tag_catalog` adds one normal read-only lookup path to reduce tag vocabulary drift without overloading `memory_audit`, which writes audit metadata.
 - The remaining advanced/admin callable surface is limited to `memory_stats`.

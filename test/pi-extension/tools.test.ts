@@ -233,7 +233,7 @@ test("registerMemoryTools registers all expected tool names", async (t) => {
   const { tools, projectContext } = await buildToolFixture();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
 
-  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_stats"];
+  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_tag_catalog", "memory_stats"];
   assert.equal(tools.length, expectedToolNames.length);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)), new Set(expectedToolNames));
 });
@@ -319,6 +319,43 @@ test("memory_save_todo returns saved todo id and details", async (t) => {
 
   assert.match(output.content[0].text, /Saved memory memory-saved\./);
   assert.ok(output.details !== undefined, "expected todo output to have details");
+});
+
+test("memory_save_todo stores only caller content tags, not todo workflow fields", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const capturedCreates: CreateMemoryInput[] = [];
+  const store = createMinimalStore({
+    createMemory(input: CreateMemoryInput) {
+      capturedCreates.push(input);
+      return createMemory({ ...input, id: "todo-saved", tags: input.tags ?? [] });
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  await toolByName(tools, "memory_save_todo").execute(
+    "call-todo-tags",
+    {
+      title: "Fix cache rollout",
+      description: "Track the cache rollout follow-up.",
+      priority: "P1",
+      status: "blocked",
+      nextAction: "Check staging logs",
+      tags: ["Cache", "todo", "p1", "blocked", "Release"],
+    },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.equal(capturedCreates.length, 1);
+  assert.deepEqual(capturedCreates[0]?.tags, ["Cache", "Release"]);
 });
 
 test("memory_save_handoff creates or updates a handoff and returns output", async (t) => {
@@ -423,6 +460,72 @@ test("memory_audit returns project migration preview and writes audit metadata",
   assert.match(metaWrites[0]?.value ?? "", /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(metaWrites[1]?.key, "lastAuditSummary");
   assert.match(metaWrites[1]?.value ?? "", /finding\(s\)/);
+});
+
+test("memory_tag_catalog derives tag counts without audit metadata writes", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const memories = [
+    createMemory({ id: "cache-1", scope: "repo", repoPath: projectContext.cwd, kind: undefined, title: "Cache rollout", tags: ["cache", "release"], updatedAt: "2026-05-10T00:00:00.000Z" }),
+    createMemory({ id: "cache-2", scope: "repo", repoPath: projectContext.cwd, kind: "todo", title: "Cache follow-up", tags: ["cache"], updatedAt: "2026-05-11T00:00:00.000Z" }),
+    createMemory({ id: "docs-1", scope: "global", repoPath: undefined, kind: undefined, title: "Docs note", tags: ["docs"], updatedAt: "2026-05-12T00:00:00.000Z" }),
+  ];
+  const filters: Array<Partial<NormalizedListMemoriesInput> | undefined> = [];
+  const metaWrites: Array<{ key: string; value: string }> = [];
+  const store = createMinimalStore({
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      filters.push(filter);
+      return memories.filter((memory) =>
+        (!filter?.status || memory.status === filter.status) &&
+        (!filter?.scope || filter.scope.includes(memory.scope)) &&
+        (!filter?.kind || (memory.kind !== undefined && memory.kind !== null && filter.kind.includes(memory.kind))) &&
+        (!filter?.repoPath || memory.repoPath === filter.repoPath)
+      );
+    },
+    setMeta(key: string, value: string) {
+      metaWrites.push({ key, value });
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_tag_catalog").execute(
+    "call-tag-catalog",
+    { scope: ["repo"], repoPath: projectContext.cwd },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /Tag catalog: 2 tag/);
+  assert.match(output.content[0].text, /cache — 2 memories/);
+  assert.match(output.content[0].text, /release — 1 memory/);
+  assert.deepEqual(output.details.tagCatalog, [
+    {
+      tag: "cache",
+      count: 2,
+      scopes: ["repo"],
+      kinds: ["note", "todo"],
+      examples: [
+        { id: "cache-2", title: "Cache follow-up", scope: "repo", kind: "todo", updatedAt: "2026-05-11T00:00:00.000Z" },
+        { id: "cache-1", title: "Cache rollout", scope: "repo", kind: "note", updatedAt: "2026-05-10T00:00:00.000Z" },
+      ],
+    },
+    {
+      tag: "release",
+      count: 1,
+      scopes: ["repo"],
+      kinds: ["note"],
+      examples: [
+        { id: "cache-1", title: "Cache rollout", scope: "repo", kind: "note", updatedAt: "2026-05-10T00:00:00.000Z" },
+      ],
+    },
+  ]);
+  assert.deepEqual(filters, [{ status: "active", scope: ["repo"], repoPath: projectContext.cwd }]);
+  assert.deepEqual(metaWrites, [], "memory_tag_catalog must be read-only and not write audit metadata");
 });
 
 test("memory_save_handoff updates only the current session handoff", async (t) => {
@@ -763,7 +866,7 @@ test("memory_update updates todo priority and rebuilds summary", async (t) => {
     kind: "todo",
     id: "todo-1",
     summary: "[P2] Fix the thing \u2192 old action",
-    tags: ["todo", "P2"],
+    tags: ["todo", "p2"],
   });
   const capturedUpdates: UpdateMemoryInput[] = [];
   const store = createMinimalStore({
@@ -794,8 +897,91 @@ test("memory_update updates todo priority and rebuilds summary", async (t) => {
   assert.equal(capturedUpdates.length, 1);
   const update = capturedUpdates[0]!;
   assert.ok(update.summary?.startsWith("[P1]"), `expected summary to start with [P1], got: ${update.summary}`);
-  assert.ok(update.tags?.includes("P1"), `expected tags to include P1, got: ${JSON.stringify(update.tags)}`);
-  assert.ok(!update.tags?.includes("P2"), `expected tags not to include P2, got: ${JSON.stringify(update.tags)}`);
+  assert.ok(!update.tags?.includes("p1"), `expected tags not to include p1, got: ${JSON.stringify(update.tags)}`);
+  assert.ok(!update.tags?.includes("p2"), `expected tags not to include p2, got: ${JSON.stringify(update.tags)}`);
+  assert.deepEqual(update.tags, []);
+});
+
+test("memory_update nextAction preserves priority from summary when no priority tag exists", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const todoMemory = createMemory({
+    kind: "todo",
+    id: "todo-summary-priority",
+    summary: "[P1] Fix the thing → old action",
+    tags: ["todo"],
+  });
+  const capturedUpdates: UpdateMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory: (_id) => todoMemory,
+    updateMemory: (input) => {
+      capturedUpdates.push(input);
+      return { ...todoMemory, ...input, tags: (input.tags ?? todoMemory.tags) as string[] };
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools(
+    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
+    () => store as never,
+  );
+
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  await toolByName(tools, "memory_update").execute(
+    "call-update",
+    { id: "todo-summary-priority", nextAction: "new action" },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.equal(capturedUpdates.length, 1);
+  const update = capturedUpdates[0]!;
+  assert.equal(update.summary, "[P1] Fix the thing → new action");
+  assert.deepEqual(update.tags, []);
+});
+
+test("memory_update strips workflow tags from explicit todo tag replacements", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const todoMemory = createMemory({
+    kind: "todo",
+    id: "todo-tags",
+    summary: "Fix the thing",
+    tags: ["cache"],
+  });
+  const capturedUpdates: UpdateMemoryInput[] = [];
+  const store = createMinimalStore({
+    getMemory: (_id) => todoMemory,
+    updateMemory: (input) => {
+      capturedUpdates.push(input);
+      return { ...todoMemory, ...input, tags: (input.tags ?? todoMemory.tags) as string[] };
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools(
+    { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
+    () => store as never,
+  );
+
+  const ctx = { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } };
+  const signal = new AbortController().signal;
+  await toolByName(tools, "memory_update").execute(
+    "call-update-tags",
+    { id: "todo-tags", tags: ["Cache", "todo", "p1", "blocked"] },
+    signal,
+    () => undefined,
+    ctx,
+  );
+
+  assert.equal(capturedUpdates.length, 1);
+  assert.deepEqual(capturedUpdates[0]?.tags, ["Cache"]);
 });
 
 test("memory_update with explicit summary + priority keeps prefix consistent", async (t) => {
@@ -806,7 +992,7 @@ test("memory_update with explicit summary + priority keeps prefix consistent", a
     kind: "todo",
     id: "todo-2",
     summary: "[P2] Fix the thing \u2192 old action",
-    tags: ["todo", "P2"],
+    tags: ["todo", "p2"],
   });
   const capturedUpdates: UpdateMemoryInput[] = [];
   const store = createMinimalStore({
@@ -837,7 +1023,7 @@ test("memory_update with explicit summary + priority keeps prefix consistent", a
   assert.equal(capturedUpdates.length, 1);
   const update = capturedUpdates[0]!;
   assert.ok(update.summary?.startsWith("[P0]"), `expected summary to start with [P0], got: ${update.summary}`);
-  assert.ok(update.tags?.includes("P0"), `expected tags to include P0, got: ${JSON.stringify(update.tags)}`);
+  assert.deepEqual(update.tags, []);
 });
 
 test("memory_save defaults to repo identity in a Git repo and rejects hidden contradictory ids", async (t) => {
