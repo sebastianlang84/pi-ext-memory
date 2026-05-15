@@ -80,6 +80,47 @@ test("memory audit builds read-only migration preview for legacy project records
   }
 });
 
+test("memory audit reports legacy todo workflow tags as manual-only hygiene findings", () => {
+  const { dbPath, tempRoot } = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+
+  try {
+    store.createMemory({
+      kind: "todo",
+      scope: "repo",
+      repoPath: "/repo/a",
+      title: "Legacy workflow tags",
+      summary: "Old todo workflow tags should be reviewed as tag hygiene only.",
+      tags: ["todo", "p1", "blocked", "pi-memory"],
+    });
+    store.createMemory({
+      kind: "todo",
+      scope: "repo",
+      repoPath: "/repo/a",
+      title: "Clean todo",
+      summary: "Content tags should not be flagged as workflow tag hygiene.",
+      tags: ["pi-memory"],
+    });
+
+    const summary = runMemoryAuditFull(store, ["repo"], "/repo/a");
+
+    assert.equal(summary.legacyWorkflowTagsCount, 1);
+    assert.equal(summary.legacyWorkflowTags[0]?.title, "Legacy workflow tags");
+    assert.match(summary.legacyWorkflowTags[0]?.reason ?? "", /todo, p1, blocked/);
+    assert.match(summary.legacyWorkflowTags[0]?.suggestedAction ?? "", /manual/i);
+    assert.ok(summary.suggestedActions.some((action) => action.includes("legacy todo workflow tags")));
+
+    const output = formatAuditResults(summary.staleTodos, summary.oldHandoffs, dbPath, summary.identityViolations, summary.projectMigrationPreview, summary.legacyWorkflowTags);
+    assert.match(output, /Legacy todo workflow tags \(1, advisory-only\):/);
+    assert.match(output, /Legacy workflow tags/);
+    assert.match(output, /manual review only; no automatic tag rewrite or archive/);
+    assert.doesNotMatch(output, /Clean todo/);
+  } finally {
+    store.close();
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("memory audit filters project migration preview by scope and repoPath", () => {
   const { dbPath, tempRoot } = createTempDbPath();
   const store = initializeMemoryStore({ dbPath });

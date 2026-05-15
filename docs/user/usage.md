@@ -45,7 +45,7 @@ memory_save                    save kindless durable notes, facts, decisions, pr
 memory_save_todo               save actionable open tasks with priority/status/scope
 memory_save_handoff            save or refresh resumable agent handoff state
 memory_update                  patch, close, or archive an existing memory by id; use archiveReason with status=archived when archiving
-memory_audit                   report lifecycle hygiene, scope identity issues, and read-only legacy project migration previews
+memory_audit                   report lifecycle hygiene, legacy workflow-tag hygiene, scope identity issues, and read-only legacy project migration previews
 memory_tag_catalog             show existing active tags with counts, scopes/kinds, and recent examples
 ```
 
@@ -108,6 +108,8 @@ Use `memory_tag_catalog` before creating unfamiliar tags. It is read-only: it de
 Catalog entries show each tag's count, scopes, kinds, and recent example titles. Use the catalog to reuse existing content/context tags instead of creating near-duplicates.
 
 When a tag-filtered `memory_search` has no results, or when `memory_save`, `memory_save_todo`, or `memory_update` receives a new tag that looks close to an existing tag, the tool can return advisory `near_tag_suggestions`. Suggestions never rewrite tags automatically; retry or patch explicitly if the existing tag is the intended one.
+
+`memory_audit` also reports active memories that still carry legacy todo workflow tags such as `todo`, `p1`, or `blocked`. These findings are advisory-only: review and patch/archive explicitly if needed; pi-memory does not migrate, rewrite, or archive them automatically.
 
 ## Write guidance
 

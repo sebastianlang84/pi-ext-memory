@@ -535,15 +535,15 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const { store, withLegacyNotice } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
-      const { staleTodos, oldHandoffs, identityViolations, projectMigrationPreview } = runMemoryAudit(store, params.scope, params.repoPath);
+      const { staleTodos, oldHandoffs, identityViolations, legacyWorkflowTags, projectMigrationPreview } = runMemoryAudit(store, params.scope, params.repoPath);
       const now = new Date().toISOString();
-      const totalFindings = staleTodos.length + oldHandoffs.length + identityViolations.length + projectMigrationPreview.length;
+      const totalFindings = staleTodos.length + oldHandoffs.length + identityViolations.length + legacyWorkflowTags.length + projectMigrationPreview.length;
       store.setMeta("lastAuditAt", now);
-      store.setMeta("lastAuditSummary", `${totalFindings} finding(s): ${staleTodos.length} stale_todo, ${oldHandoffs.length} old_handoff, ${identityViolations.length} identity_violation, ${projectMigrationPreview.length} migration_preview`);
-      const output = withLegacyNotice(formatAuditResults(staleTodos, oldHandoffs, store.dbPath, identityViolations, projectMigrationPreview), params.scope as MemoryScope[] | undefined);
+      store.setMeta("lastAuditSummary", `${totalFindings} finding(s): ${staleTodos.length} stale_todo, ${oldHandoffs.length} old_handoff, ${identityViolations.length} identity_violation, ${legacyWorkflowTags.length} legacy_workflow_tag, ${projectMigrationPreview.length} migration_preview`);
+      const output = withLegacyNotice(formatAuditResults(staleTodos, oldHandoffs, store.dbPath, identityViolations, projectMigrationPreview, legacyWorkflowTags), params.scope as MemoryScope[] | undefined);
       return {
         content: [{ type: "text", text: output }],
-        details: { dbPath: store.dbPath, staleTodos, oldHandoffs, identityViolations, projectMigrationPreview },
+        details: { dbPath: store.dbPath, staleTodos, oldHandoffs, identityViolations, legacyWorkflowTags, projectMigrationPreview },
       };
     },
   });

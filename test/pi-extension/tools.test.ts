@@ -410,6 +410,7 @@ test("memory_audit returns project migration preview and writes audit metadata",
     projectId: projectContext.projectId,
     repoPath: projectContext.cwd,
     title: "Legacy project record",
+    tags: ["todo", "p1", "policy"],
   });
   const filters: Array<Partial<NormalizedListMemoriesInput> | undefined> = [];
   const metaWrites: Array<{ key: string; value: string }> = [];
@@ -437,7 +438,20 @@ test("memory_audit returns project migration preview and writes audit metadata",
 
   assert.match(output.content[0].text, /^notice: scope=project is legacy\/advanced compatibility/);
   assert.match(output.content[0].text, /Project migration preview \(1, read-only\):/);
+  assert.match(output.content[0].text, /Legacy todo workflow tags \(1, advisory-only\):/);
   assert.match(output.content[0].text, /\[repo\] Legacy project record/);
+  assert.deepEqual(output.details.legacyWorkflowTags, [
+    {
+      id: legacyProject.id,
+      title: legacyProject.title,
+      kind: legacyProject.kind,
+      tags: legacyProject.tags,
+      updatedAt: legacyProject.updatedAt,
+      scope: legacyProject.scope,
+      reason: "Active memory carries legacy todo workflow tags: todo, p1",
+      suggestedAction: "Treat priority/status/todo as structured todo fields; manual review only; no automatic tag rewrite or archive",
+    },
+  ]);
   assert.deepEqual(output.details.projectMigrationPreview, [
     {
       id: legacyProject.id,
@@ -459,7 +473,8 @@ test("memory_audit returns project migration preview and writes audit metadata",
   assert.equal(metaWrites[0]?.key, "lastAuditAt");
   assert.match(metaWrites[0]?.value ?? "", /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(metaWrites[1]?.key, "lastAuditSummary");
-  assert.match(metaWrites[1]?.value ?? "", /finding\(s\)/);
+  assert.match(metaWrites[1]?.value ?? "", /2 finding\(s\):/);
+  assert.match(metaWrites[1]?.value ?? "", /1 legacy_workflow_tag/);
 });
 
 test("memory_tag_catalog derives tag counts without audit metadata writes", async (t) => {

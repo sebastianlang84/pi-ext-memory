@@ -16,7 +16,6 @@ Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/
 
 ### 1. Tag hygiene and catalog
 
-- Decide how to handle old workflow tags (`todo`, `p1`, `blocked`) that were written before new todo saves stopped adding them: audit recommendation, explicit migration, or leave as historical data.
 - Consider whether a tiny curated preferred-tag seed is needed, or whether the derived `memory_tag_catalog` is sufficient.
 
 ### 2. Ranking and near-miss retrieval

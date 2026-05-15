@@ -1,6 +1,7 @@
 import {
   classifyLifecycleAuditFinding,
   getCapForKindScope,
+  isTodoWorkflowTag,
   type MemoryRecord,
   type MemoryScope,
   type MemoryStore,
@@ -32,12 +33,14 @@ export interface AuditSummary {
   staleTodos: AuditCandidate[];
   oldHandoffs: AuditCandidate[];
   identityViolations: AuditCandidate[];
+  legacyWorkflowTags: AuditCandidate[];
   projectMigrationPreview: ProjectMigrationPreviewCandidate[];
   activeTodosCount: number;
   activeHandoffsCount: number;
   staleTodosCount: number;
   expiredHandoffsCount: number;
   identityViolationsCount: number;
+  legacyWorkflowTagsCount: number;
   projectMigrationPreviewCount: number;
   warnings: string[];
   suggestedActions: string[];
@@ -47,12 +50,13 @@ export function runMemoryAudit(
   store: MemoryStore,
   scopeFilter?: string[],
   repoPathFilter?: string,
-): { staleTodos: AuditCandidate[]; oldHandoffs: AuditCandidate[]; identityViolations: AuditCandidate[]; projectMigrationPreview: ProjectMigrationPreviewCandidate[] } {
+): { staleTodos: AuditCandidate[]; oldHandoffs: AuditCandidate[]; identityViolations: AuditCandidate[]; legacyWorkflowTags: AuditCandidate[]; projectMigrationPreview: ProjectMigrationPreviewCandidate[] } {
   const summary = runMemoryAuditFull(store, scopeFilter, repoPathFilter);
   return {
     staleTodos: summary.staleTodos,
     oldHandoffs: summary.oldHandoffs,
     identityViolations: summary.identityViolations,
+    legacyWorkflowTags: summary.legacyWorkflowTags,
     projectMigrationPreview: summary.projectMigrationPreview,
   };
 }
@@ -75,6 +79,7 @@ export function runMemoryAuditFull(
   const handoffs = store.listAllInternal({ ...internalFilter, kind: ["handoff"] });
 
   const identityViolations = memories.flatMap((m) => buildIdentityViolationCandidate(m));
+  const legacyWorkflowTags = memories.flatMap((m) => buildLegacyWorkflowTagCandidate(m));
   const shouldPreviewProjectRecords = !scopeFilter || scopeFilter.includes("project");
   const projectMigrationPreview = shouldPreviewProjectRecords
     ? memories
@@ -148,6 +153,11 @@ export function runMemoryAuditFull(
     suggestedActions.push("Review identity violations before any migration");
   }
 
+  if (legacyWorkflowTags.length > 0) {
+    warnings.push(`${legacyWorkflowTags.length} active memor${legacyWorkflowTags.length !== 1 ? "ies carry" : "y carries"} legacy todo workflow tags`);
+    suggestedActions.push("Review legacy todo workflow tags manually; apply no automatic tag rewrite or archive");
+  }
+
   if (projectMigrationPreview.length > 0) {
     suggestedActions.push("Review project migration preview; apply no changes without explicit approval");
   }
@@ -156,16 +166,34 @@ export function runMemoryAuditFull(
     staleTodos,
     oldHandoffs,
     identityViolations,
+    legacyWorkflowTags,
     projectMigrationPreview,
     activeTodosCount: todos.length,
     activeHandoffsCount: handoffs.length,
     staleTodosCount: staleTodos.length,
     expiredHandoffsCount: oldHandoffs.length,
     identityViolationsCount: identityViolations.length,
+    legacyWorkflowTagsCount: legacyWorkflowTags.length,
     projectMigrationPreviewCount: projectMigrationPreview.length,
     warnings,
     suggestedActions,
   };
+}
+
+function buildLegacyWorkflowTagCandidate(m: MemoryRecord): AuditCandidate[] {
+  const workflowTags = Array.from(new Set(m.tags.filter((tag) => isTodoWorkflowTag(tag))));
+  if (workflowTags.length === 0) return [];
+
+  return [{
+    id: m.id,
+    title: m.title,
+    kind: m.kind,
+    tags: m.tags,
+    updatedAt: m.updatedAt,
+    scope: m.scope,
+    reason: `Active memory carries legacy todo workflow tag${workflowTags.length !== 1 ? "s" : ""}: ${workflowTags.join(", ")}`,
+    suggestedAction: "Treat priority/status/todo as structured todo fields; manual review only; no automatic tag rewrite or archive",
+  }];
 }
 
 function buildIdentityViolationCandidate(m: MemoryRecord): AuditCandidate[] {
@@ -262,9 +290,10 @@ export function formatAuditResults(
   dbPath: string,
   identityViolations: AuditCandidate[] = [],
   projectMigrationPreview: ProjectMigrationPreviewCandidate[] = [],
+  legacyWorkflowTags: AuditCandidate[] = [],
 ): string {
   const lines: string[] = [];
-  const total = staleTodos.length + oldHandoffs.length + identityViolations.length + projectMigrationPreview.length;
+  const total = staleTodos.length + oldHandoffs.length + identityViolations.length + projectMigrationPreview.length + legacyWorkflowTags.length;
 
   if (total === 0) {
     lines.push("Memory audit: no items need attention.", "Project migration preview: no legacy project records included.", `db_path: ${dbPath}`);
@@ -304,6 +333,20 @@ export function formatAuditResults(
     identityViolations.forEach((c, i) => {
       lines.push(
         `  ${i + 1}. [${c.scope}] ${c.title} (${c.id})`,
+        `     tags: ${c.tags.join(", ") || "none"}`,
+        `     updated_at: ${c.updatedAt}`,
+        `     reason: ${c.reason}`,
+        `     action: ${c.suggestedAction}`,
+      );
+    });
+  }
+
+  if (legacyWorkflowTags.length > 0) {
+    lines.push("", `Legacy todo workflow tags (${legacyWorkflowTags.length}, advisory-only):`);
+    legacyWorkflowTags.forEach((c, i) => {
+      lines.push(
+        `  ${i + 1}. [${c.scope}] ${c.title} (${c.id})`,
+        `     kind: ${c.kind}`,
         `     tags: ${c.tags.join(", ") || "none"}`,
         `     updated_at: ${c.updatedAt}`,
         `     reason: ${c.reason}`,

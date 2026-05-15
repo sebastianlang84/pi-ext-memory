@@ -13,6 +13,11 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-05-16
+
+### Added
+- Added advisory-only `memory_audit` findings for active memories carrying legacy todo workflow tags such as `todo`, priority tags, or status tags; no tag rewrites or archives are performed automatically.
+
 ## [2.1.2] - 2026-05-16
 
 ### Added

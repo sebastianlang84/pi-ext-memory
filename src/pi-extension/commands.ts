@@ -195,12 +195,12 @@ export function registerMemoryCommands(
   });
 
   pi.registerCommand("memory-audit", {
-    description: "Audit memory hygiene and preview legacy project-scope migration candidates without writing changes",
+    description: "Audit memory hygiene, legacy workflow tags, and legacy project-scope migration candidates without writing changes",
     handler: async (_args, ctx) => {
       const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
 
-      const { staleTodos, oldHandoffs, identityViolations, projectMigrationPreview } = runMemoryAudit(activeStore);
-      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview);
+      const { staleTodos, oldHandoffs, identityViolations, legacyWorkflowTags, projectMigrationPreview } = runMemoryAudit(activeStore);
+      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview, legacyWorkflowTags);
 
       writeCommandOutput(output, ctx);
     },
