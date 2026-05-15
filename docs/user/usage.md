@@ -107,7 +107,7 @@ Use `memory_tag_catalog` before creating unfamiliar tags. It is read-only: it de
 
 Catalog entries show each tag's count, scopes, kinds, and recent example titles. Use the catalog to reuse existing content/context tags instead of creating near-duplicates.
 
-When a tag-filtered `memory_search` has no results, or when `memory_save`, `memory_save_todo`, or `memory_update` receives a new tag that looks close to an existing tag, the tool can return advisory `near_tag_suggestions`. Suggestions never rewrite tags automatically; retry or patch explicitly if the existing tag is the intended one.
+When `memory_search` has no results, it can return advisory `empty_result_hints`: near `metadata.canonicalKey` suggestions for likely key typos or token matches, plus a short broaden-search retry hint. When a tag-filtered `memory_search` has no results, or when `memory_save`, `memory_save_todo`, or `memory_update` receives a new tag that looks close to an existing tag, the tool can also return advisory `near_tag_suggestions`. Suggestions never rewrite tags automatically; retry or patch explicitly if the existing tag/key is the intended one.
 
 `memory_audit` also reports active memories that still carry legacy todo workflow tags such as `todo`, `p1`, or `blocked`. These findings are advisory-only: review and patch/archive explicitly if needed; pi-memory does not migrate, rewrite, or archive them automatically.
 

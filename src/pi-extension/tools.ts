@@ -13,6 +13,7 @@ import {
   findTodoPriorityTag,
   stripTodoWorkflowTags,
   type MemoryKind,
+  type MemoryRecord,
   type MemoryScope,
   type MemoryStatus,
   type MemoryStore,
@@ -26,6 +27,7 @@ import {
   formatMemorySearchResults,
   formatMemorySaved,
   formatMemoryUpdated,
+  type EmptySearchHint,
 } from "./formatters.ts";
 import { findLatestExactSessionHandoff } from "./handoffs.ts";
 import { decorateCreateMemoryInput } from "./retrieval.ts";
@@ -46,9 +48,111 @@ function buildNearTagSuggestions(
 ): NearTagSuggestion[] {
   if (!requestedTags || requestedTags.length === 0) return [];
 
-  const memories = store.listAllInternal({ status: "active", ...filter });
+  return buildNearTagSuggestionsFromMemories(requestedTags, store.listAllInternal({ status: "active", ...filter }));
+}
+
+function buildNearTagSuggestionsFromMemories(requestedTags: string[] | undefined, memories: MemoryRecord[]): NearTagSuggestion[] {
+  if (!requestedTags || requestedTags.length === 0) return [];
+
   const tagCatalog = buildTagCatalog(memories, { limit: 200, maxExamplesPerTag: 0 });
   return suggestNearTags(requestedTags, tagCatalog);
+}
+
+function buildEmptySearchHints(
+  query: string,
+  params: { tags?: string[]; kind?: MemoryKind[]; scope?: MemoryScope[]; sessionId?: string; projectId?: string; repoPath?: string },
+  memories: MemoryRecord[],
+): EmptySearchHint[] {
+  const hints: EmptySearchHint[] = [];
+  const nearCanonicalKeys = findNearCanonicalKeys(query, memories);
+  if (nearCanonicalKeys.length > 0) {
+    hints.push({ type: "near_canonical_key", input: findLikelyCanonicalInput(query), suggestions: nearCanonicalKeys });
+  }
+
+  hints.push({
+    type: "broaden_search",
+    message: params.tags && params.tags.length > 0
+      ? "Retry without tag filters or check memory_tag_catalog for current tags."
+      : "Retry with fewer keywords or a broader scope/kind when appropriate.",
+  });
+
+  return hints;
+}
+
+function findNearCanonicalKeys(query: string, memories: MemoryRecord[]): string[] {
+  const queryKey = normalizeCanonicalKey(query);
+  const queryTerms = new Set(splitCanonicalTerms(query));
+  const dottedInputs = extractCanonicalLikeInputs(query);
+  const seen = new Set<string>();
+  const matches: Array<{ key: string; score: number }> = [];
+
+  for (const memory of memories) {
+    const canonicalKey = readCanonicalKey(memory);
+    if (!canonicalKey || seen.has(canonicalKey)) continue;
+    seen.add(canonicalKey);
+
+    const keyTerms = new Set(splitCanonicalTerms(canonicalKey));
+    const overlap = [...queryTerms].filter((term) => keyTerms.has(term)).length;
+    const closeDottedInput = dottedInputs.some((input) => isNearCanonicalKey(input, canonicalKey));
+    const prefixOrSubstring = queryKey.length >= 4 && (canonicalKey.includes(queryKey) || queryKey.includes(canonicalKey));
+
+    if (closeDottedInput || prefixOrSubstring || (queryTerms.size > 0 && overlap >= Math.min(2, queryTerms.size))) {
+      matches.push({ key: canonicalKey, score: (closeDottedInput ? 4 : 0) + (prefixOrSubstring ? 2 : 0) + overlap });
+    }
+  }
+
+  return matches
+    .sort((a, b) => b.score - a.score || a.key.localeCompare(b.key))
+    .slice(0, 3)
+    .map((match) => match.key);
+}
+
+function readCanonicalKey(memory: MemoryRecord): string | undefined {
+  const canonicalKey = memory.metadata.canonicalKey;
+  return typeof canonicalKey === "string" ? normalizeCanonicalKey(canonicalKey) : undefined;
+}
+
+function findLikelyCanonicalInput(query: string): string {
+  return extractCanonicalLikeInputs(query)[0] ?? normalizeCanonicalKey(query);
+}
+
+function extractCanonicalLikeInputs(query: string): string[] {
+  return query
+    .toLowerCase()
+    .match(/[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9][a-z0-9_-]*)+/g) ?? [];
+}
+
+function splitCanonicalTerms(value: string): string[] {
+  return normalizeCanonicalKey(value).split(/[.\s_-]+/).filter((term) => term.length >= 2);
+}
+
+function normalizeCanonicalKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9._ -]+/g, "").replace(/\s+/g, " ");
+}
+
+function isNearCanonicalKey(input: string, canonicalKey: string): boolean {
+  if (input === canonicalKey) return true;
+  const distance = levenshteinDistance(input, canonicalKey);
+  return distance > 0 && distance <= Math.max(2, Math.floor(canonicalKey.length * 0.18));
+}
+
+function levenshteinDistance(left: string, right: string): number {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex++) {
+    let northwest = previous[0]!;
+    previous[0] = leftIndex;
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex++) {
+      const deletion = previous[rightIndex]! + 1;
+      const insertion = previous[rightIndex - 1]! + 1;
+      const substitution = northwest + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1);
+      northwest = previous[rightIndex]!;
+      previous[rightIndex] = Math.min(deletion, insertion, substitution);
+    }
+  }
+
+  return previous[right.length]!;
 }
 
 export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getActiveStore: (cwd: string) => MemoryStore): void {
@@ -79,18 +183,26 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         projectId: identity.projectId,
         repoPath: identity.repoPath,
       });
-      const nearTagSuggestions = results.length === 0
-        ? buildNearTagSuggestions(store, params.tags, {
-            scope: params.scope as MemoryScope[] | undefined,
-            kind: params.kind as MemoryKind[] | undefined,
-            sessionId: identity.sessionId,
-            projectId: identity.projectId,
-            repoPath: identity.repoPath,
-          })
+      const emptySearchFilter = {
+        scope: params.scope as MemoryScope[] | undefined,
+        kind: params.kind as MemoryKind[] | undefined,
+        sessionId: identity.sessionId,
+        projectId: identity.projectId,
+        repoPath: identity.repoPath,
+      };
+      const activeMemoriesForEmptySearch = results.length === 0 ? store.listAllInternal({ status: "active", ...emptySearchFilter }) : [];
+      const nearTagSuggestions = results.length === 0 ? buildNearTagSuggestionsFromMemories(params.tags, activeMemoriesForEmptySearch) : [];
+      const emptyResultHints = results.length === 0
+        ? buildEmptySearchHints(params.query, { ...emptySearchFilter, tags: params.tags }, activeMemoriesForEmptySearch)
         : [];
       return {
-        content: [{ type: "text", text: withLegacyNotice(formatMemorySearchResults(params.query, results, store.dbPath, nearTagSuggestions), params.scope as MemoryScope[] | undefined) }],
-        details: nearTagSuggestions.length > 0 ? { dbPath: store.dbPath, results, nearTagSuggestions } : { dbPath: store.dbPath, results },
+        content: [{ type: "text", text: withLegacyNotice(formatMemorySearchResults(params.query, results, store.dbPath, nearTagSuggestions, emptyResultHints), params.scope as MemoryScope[] | undefined) }],
+        details: {
+          dbPath: store.dbPath,
+          results,
+          ...(nearTagSuggestions.length > 0 ? { nearTagSuggestions } : {}),
+          ...(emptyResultHints.length > 0 ? { emptyResultHints: emptyResultHints } : {}),
+        },
       };
     },
   });

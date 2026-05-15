@@ -543,6 +543,81 @@ test("memory_tag_catalog derives tag counts without audit metadata writes", asyn
   assert.deepEqual(metaWrites, [], "memory_tag_catalog must be read-only and not write audit metadata");
 });
 
+test("memory_search adds empty-result hints for near canonical keys", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const canonicalMemory = createMemory({
+    id: "git-identity-default",
+    scope: "global",
+    title: "Default Git identity",
+    summary: "Use the default Git author when repository-local config is absent.",
+    tags: ["git", "identity"],
+    metadata: { canonicalKey: "git.identity.default" },
+  });
+  const store = createMinimalStore({
+    searchMemories() { return []; },
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      return filter?.status === "active" ? [canonicalMemory] : [];
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_search").execute(
+    "call-search-near-canonical-key",
+    { query: "git.identity.defalt", scope: ["global"] },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /No memories matched "git\.identity\.defalt"/);
+  assert.match(output.content[0].text, /empty_result_hints:\n- near_canonical_key: git\.identity\.defalt -> git\.identity\.default/);
+  assert.deepEqual(output.details.emptyResultHints, [
+    { type: "near_canonical_key", input: "git.identity.defalt", suggestions: ["git.identity.default"] },
+    { type: "broaden_search", message: "Retry with fewer keywords or a broader scope/kind when appropriate." },
+  ]);
+});
+
+test("memory_search keeps generic empty-result hints when no canonical key is near", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const canonicalMemory = createMemory({
+    id: "git-identity-default",
+    scope: "global",
+    title: "Default Git identity",
+    metadata: { canonicalKey: "git.identity.default" },
+  });
+  const store = createMinimalStore({
+    searchMemories() { return []; },
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      return filter?.status === "active" ? [canonicalMemory] : [];
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_search").execute(
+    "call-search-generic-empty-hint",
+    { query: ".", scope: ["global"] },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /empty_result_hints:\n- broaden_search: Retry with fewer keywords or a broader scope\/kind when appropriate\./);
+  assert.doesNotMatch(output.content[0].text, /near_canonical_key/);
+  assert.deepEqual(output.details.emptyResultHints, [
+    { type: "broaden_search", message: "Retry with fewer keywords or a broader scope/kind when appropriate." },
+  ]);
+});
+
 test("memory_search suggests near tags when a tag filter has no matches", async (t) => {
   const projectContext = await createTempPiToolContext();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });

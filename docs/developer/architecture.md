@@ -69,7 +69,7 @@ The embedding path is local-first:
 - bounded timeout via `PI_MEMORY_BGE_M3_TIMEOUT_MS`,
 - deterministic built-in fallback when no command is configured.
 
-Search combines SQLite FTS, vector similarity, scope/context matching, recency, importance, confidence, and lexical/tag signals. Exact tag and `metadata.canonicalKey` matches are internal ranking signals; they do not add prompt-facing tools or turn-start text.
+Search combines SQLite FTS, vector similarity, scope/context matching, recency, importance, confidence, and lexical/tag signals. Exact tag and `metadata.canonicalKey` matches are internal ranking signals; they do not add prompt-facing tools or turn-start text. Zero-hit `memory_search` hints are generated in the Pi tool layer from scoped active records, so they stay request-local and advisory.
 
 ## Tool surface
 

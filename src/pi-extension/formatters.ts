@@ -5,6 +5,10 @@ import { isLegacyProjectScopeSelected, LEGACY_PROJECT_SCOPE_NOTICE } from "../co
 import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
 import { formatNearTagSuggestionLines, type NearTagSuggestion } from "./tag-catalog.ts";
 
+export type EmptySearchHint =
+  | { type: "near_canonical_key"; input: string; suggestions: string[] }
+  | { type: "broaden_search"; message: string };
+
 export function formatMemorySessionSaveUsage(minSummaryLength: number): string {
   return `Usage: /memory-session-save <summary>\nProvide an explicit session summary with at least ${minSummaryLength} characters.`;
 }
@@ -281,9 +285,20 @@ export function formatMemoryListResultLine(index: number, memory: MemoryRecord):
   return `${index}. [${kindLabel}/${memory.scope}/${memory.status}] ${memory.title} (${memory.id}) — ${memory.summary}${tags} updated=${memory.updatedAt}`;
 }
 
-export function formatMemorySearchResults(query: string, results: MemorySearchResult[], dbPath: string, nearTagSuggestions: NearTagSuggestion[] = []): string {
+export function formatMemorySearchResults(
+  query: string,
+  results: MemorySearchResult[],
+  dbPath: string,
+  nearTagSuggestions: NearTagSuggestion[] = [],
+  emptySearchHints: EmptySearchHint[] = [],
+): string {
   if (results.length === 0) {
-    return [`No memories matched \"${query}\".`, ...formatNearTagSuggestionLines(nearTagSuggestions), `db_path: ${dbPath}`].join("\n");
+    return [
+      `No memories matched \"${query}\".`,
+      ...formatNearTagSuggestionLines(nearTagSuggestions),
+      ...formatEmptySearchHintLines(emptySearchHints),
+      `db_path: ${dbPath}`,
+    ].join("\n");
   }
 
   return [
@@ -291,6 +306,21 @@ export function formatMemorySearchResults(query: string, results: MemorySearchRe
     ...results.map((result, index) => formatMemorySearchResultLine(index + 1, result)),
     `db_path: ${dbPath}`,
   ].join("\n");
+}
+
+export function formatEmptySearchHintLines(hints: EmptySearchHint[]): string[] {
+  if (hints.length === 0) return [];
+
+  return [
+    "empty_result_hints:",
+    ...hints.map((hint) => {
+      if (hint.type === "near_canonical_key") {
+        return `- near_canonical_key: ${hint.input} -> ${hint.suggestions.join(", ")}`;
+      }
+
+      return `- broaden_search: ${hint.message}`;
+    }),
+  ];
 }
 
 // ─── End moved functions ─────────────────────────────────────────────────────

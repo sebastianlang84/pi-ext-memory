@@ -13,6 +13,11 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.5] - 2026-05-16
+
+### Added
+- Added `empty_result_hints` to zero-hit `memory_search` output, including near `metadata.canonicalKey` suggestions and short broaden-search retry guidance.
+
 ## [2.1.4] - 2026-05-16
 
 ### Changed
