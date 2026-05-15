@@ -18,6 +18,7 @@ Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/
 
 ## Retrieval reliability / memory quality
 
+- Implement a lightweight tag catalog so agents reuse existing content/context tags instead of inventing near-duplicates; plan: [docs/plans/tag-catalog-controlled-folksonomy.md](docs/plans/tag-catalog-controlled-folksonomy.md).
 - Add canonical fact/key support for durable single-source facts such as `git.identity.default`, repo paths, and stable user preferences, so agents can resolve known fact types without relying only on free-text search.
 - Make memory retrieval rank exact keys and tag matches ahead of weak semantic/lexical matches; a query containing `git` should surface `git`/`identity`/`commit` tagged memories even if the rest of the query is noise.
 - Add specialized resolver tools or APIs for high-value facts, starting with Git identity and repo path resolution, including repo-local config/history checks and conflict detection.
