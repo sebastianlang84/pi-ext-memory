@@ -84,7 +84,7 @@ The normal tool path is intentionally small:
 - `memory_audit`,
 - `memory_tag_catalog`.
 
-`memory_tag_catalog` is read-only and derives tag inventory from active memories on demand; it does not write audit metadata or maintain a separate authoritative tag table.
+`memory_tag_catalog` is read-only and derives tag inventory from active memories on demand; it does not write audit metadata, maintain a separate authoritative tag table, or ship a curated preferred-tag seed.
 
 `memory_stats` remains callable as an advanced/admin health and capacity tool, not as a normal first-choice agent path.
 

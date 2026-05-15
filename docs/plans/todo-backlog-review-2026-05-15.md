@@ -33,6 +33,7 @@ Review all current `TODO.md` items for:
 | TODO item | Sense | Gain | Lightweight fit | Notes / recommendation |
 | --- | --- | --- | --- | --- |
 | Research local autoresearch tooling for prompt injection token cost | Medium | Unclear until measured | Good only if local and one-off | Keep as research, but low priority. Recent prompt-shortening work already reduced repeated guidance; next useful step is measurement, not tooling adoption. Avoid adding a resident service or dependency. |
+| Preferred-tag seed vs derived catalog | Medium | Medium | Strongest when derived-only | Resolved: use the on-demand derived `memory_tag_catalog`; do not add a curated preferred-tag seed, catalog memory, alias table, or turn-start tag injection. |
 | Canonical fact/key support (`git.identity.default`, repo paths, stable prefs) | High | High | Good if narrowly scoped | Real problem: agents need deterministic single-source facts. Do not reintroduce `fact` kind; prefer a small canonical key/fact-cluster concept using tags/metadata or one minimal indexed field. |
 | Rank exact keys and tag matches ahead of weak semantic/lexical matches | High | High | Strong | Implemented as internal exact tag and `metadata.canonicalKey` ranking signals; no separate prompt-facing resolver was added. |
 | Specialized resolver tools/APIs for Git identity and repo path | High | High | Medium-good if surface stays small | Strong deterministic local value via Git config/repo metadata. Prefer internal resolver API or one generic resolver surface over several new normal tools, to avoid prompt/tool bloat. |
@@ -44,17 +45,21 @@ Review all current `TODO.md` items for:
 
 ## Applied consolidation
 
-`TODO.md` now groups the remaining open work into three delivery work packages plus evidence-gated deferred items:
+`TODO.md` now keeps the remaining open work in canonical-fact and advisory-audit work packages plus evidence-gated deferred items. The tag-catalog seed question is resolved in favor of the derived catalog:
 
-1. **Tag hygiene and catalog**
-   - Keep the derived tag catalog and field-vs-tag rule together.
-   - Include write-policy cleanup and todo workflow-tag cleanup here because all three reduce memory pollution.
+Resolved tag hygiene/catalog decision:
 
-2. **Minimal canonical facts**
+- Keep the derived tag catalog and field-vs-tag rule together.
+- Do not add a curated preferred-tag seed; derive tag reuse signals from active memories and keep suggestions advisory.
+- Todo workflow-tag cleanup remains audit-only/manual.
+
+Remaining open packages:
+
+1. **Minimal canonical facts**
    - Add canonical keys/facts only in the smallest form that solves deterministic fact lookup.
    - Preserve ADR 007: no new `fact` kind, knowledge graph, broad registry, or background resolver.
 
-3. **Advisory hygiene and conflict audit**
+2. **Advisory hygiene and conflict audit**
    - Add conflict and dedup recommendations for exact canonical-key/tag clusters.
    - Keep archive actions explicit/manual; no automatic conflict resolution.
 
@@ -66,10 +71,9 @@ Deferred items remain visible but gated by evidence:
 
 ## Proposed priority order
 
-1. Tag hygiene and catalog decisions.
-2. Minimal canonical key/fact support, starting with Git identity and repo path facts only if tests keep the model small.
-3. Advisory canonical-cluster conflict/audit support.
-4. Resolver tools/APIs, token-cost research, and startup canonical-facts card only if evidence still justifies them.
+1. Minimal canonical key/fact support, starting with Git identity and repo path facts only if tests keep the model small.
+2. Advisory canonical-cluster conflict/audit support.
+3. Resolver tools/APIs, token-cost research, and startup canonical-facts card only if evidence still justifies them.
 
 ## Lightweight guardrails
 

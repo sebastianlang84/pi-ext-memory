@@ -103,9 +103,9 @@ Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup s
 
 ## Tag catalog
 
-Use `memory_tag_catalog` before creating unfamiliar tags. It is read-only: it derives the current tag inventory from stored memories and does not update audit metadata, rewrite tags, archive records, or create a curated tag table.
+Use `memory_tag_catalog` before creating unfamiliar tags. It is read-only: it derives the current tag inventory from stored memories and does not update audit metadata, rewrite tags, archive records, create a curated tag table, or ship a preferred-tag seed.
 
-Catalog entries show each tag's count, scopes, kinds, and recent example titles. Use the catalog to reuse existing content/context tags instead of creating near-duplicates.
+Catalog entries show each tag's count, scopes, kinds, and recent example titles. Use the catalog to reuse existing content/context tags instead of creating near-duplicates; preferred tags are inferred from current active usage. The catalog is intentionally on-demand and is not injected at turn start.
 
 When `memory_search` has no results, it can return advisory `empty_result_hints`: near `metadata.canonicalKey` suggestions for likely key typos or token matches, plus a short broaden-search retry hint. When a tag-filtered `memory_search` has no results, or when `memory_save`, `memory_save_todo`, or `memory_update` receives a new tag that looks close to an existing tag, the tool can also return advisory `near_tag_suggestions`. Suggestions never rewrite tags automatically; retry or patch explicitly if the existing tag/key is the intended one.
 

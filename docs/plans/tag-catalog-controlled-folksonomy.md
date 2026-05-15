@@ -7,7 +7,7 @@ write-when: Tag-catalog scope, implementation order, or acceptance criteria chan
 
 # Plan — Lightweight Tag Catalog and Reuse
 
-Status: partially implemented; slices 1-3 implemented
+Status: implemented for derived catalog, near-tag suggestions, exact tag ranking, and advisory legacy workflow-tag hygiene
 
 ## Purpose
 
@@ -17,10 +17,10 @@ Prevent tag sprawl while keeping pi-memory flexible. Agents should reuse existin
 
 - Tags are content/context labels, not the source of truth for fields that already exist.
 - If a tool has a field for a concept, use the field instead of duplicating it as a tag.
-- Preferred tags should be visible before or during saves.
+- Preferred tags are inferred from current active usage, not from a built-in curated seed.
 - A dedicated `memory_tag_catalog` tool is the MVP catalog surface because it is truly read-only; `memory_audit` writes audit metadata and remains focused on hygiene.
 - The MVP does not need a formal alias/deprecation system. LLMs can use a visible tag catalog to notice similar tags and retry/search/save with the preferred existing tag.
-- Keep the model flat: no heavy ontology, no background service, no remote dependency.
+- Keep the model flat: no curated preferred-tag table, no heavy ontology, no background service, no remote dependency.
 
 ## Current facts
 
@@ -38,6 +38,7 @@ Prevent tag sprawl while keeping pi-memory flexible. Agents should reuse existin
 3. Tag suggestions are advisory: prefer existing similar tags, but allow deliberate new tags.
 4. Todo state uses todo fields/metadata, not content tags like `todo`, `p1`, or `open`.
 5. Empty or weak searches can report near tag matches so agents can retry with likely existing tags.
+6. pi-memory does not ship or inject a preferred-tag seed; tag reuse is guided by the on-demand derived catalog and advisory near-tag hints.
 
 ## Implementation slices
 
@@ -83,12 +84,12 @@ Acceptance:
 - Empty tag-filter searches show useful near misses.
 - Save/update paths can warn when a new tag looks like an existing tag.
 
-### Slice 4 — Align todo storage with the field-vs-tag rule — partially implemented
+### Slice 4 — Align todo storage with the field-vs-tag rule — implemented
 
 - Stop adding workflow tags such as `todo`, `p1`, and non-open status tags as ordinary content tags.
 - Preserve todo priority/status/nextAction in structured tool fields and the rendered todo summary; no new columns were needed for this slice.
 - Keep backwards compatibility for old records that already have workflow tags.
-- Follow-up: decide whether old workflow tags should be reported as cleanup candidates, migrated explicitly, or left as historical data.
+- Report old workflow tags as advisory audit cleanup candidates; do not migrate, rewrite, or archive them automatically.
 
 Acceptance:
 
@@ -96,7 +97,7 @@ Acceptance:
 - Existing todo update/list behavior remains stable.
 - Tests cover migration/compatibility for old priority tags.
 
-### Slice 5 — Retrieval/ranking polish
+### Slice 5 — Retrieval/ranking polish — implemented
 
 - Boost exact tag matches above weak lexical/semantic matches.
 - On empty results, show near tag matches instead of only saying no memories matched.
@@ -116,10 +117,10 @@ Acceptance:
 - Docs-only slices: `git diff --check` and link/path inspection.
 - Code slices: `npm test` plus relevant smoke checks only when local Pi runtime is healthy.
 
-## Open questions
+## Resolved decisions
 
-- Should preferred tags be purely derived from usage, or should there also be a small curated global catalog memory?
-- Should old workflow tags be cleaned by audit recommendations only, by an explicit migration, or left as historical data?
+- Preferred tags are purely derived from active memory usage through `memory_tag_catalog`; there is no curated global catalog memory, preferred-tag seed, alias table, or turn-start tag injection.
+- Old workflow tags are handled by advisory audit recommendations only; pi-memory does not migrate, rewrite, or archive them automatically.
 
 ## Risks
 

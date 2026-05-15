@@ -14,16 +14,12 @@ Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/
 
 ## Retrieval quality work packages
 
-### 1. Tag hygiene and catalog
-
-- Consider whether a tiny curated preferred-tag seed is needed, or whether the derived `memory_tag_catalog` is sufficient.
-
-### 2. Minimal canonical facts
+### 1. Minimal canonical facts
 
 - Add canonical fact/key support for durable single-source facts such as `git.identity.default`, repo paths, and stable user preferences, so agents can resolve known fact types without relying only on free-text search.
 - Keep canonical facts lightweight: do not reintroduce a `fact` kind, knowledge graph, broad registry, or background resolver; prefer existing tags/metadata or one minimal indexed field if tests prove it necessary.
 
-### 3. Advisory hygiene and conflict audit
+### 2. Advisory hygiene and conflict audit
 
 - Detect conflicting active memories in the same canonical fact cluster, especially Git identity variants, and return an explicit conflict/canonical-candidate report instead of letting agents guess.
 - Add memory hygiene/dedup support for exact key/tag clusters that recommends a canonical record and archive candidates; keep all archive actions explicit/manual.
