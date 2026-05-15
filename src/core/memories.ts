@@ -89,6 +89,7 @@ export interface NormalizedListMemoriesInput {
 export interface NormalizedSearchMemoriesInput {
   query: string;
   matchQuery: string;
+  relaxedMatchQuery: string;
   kind?: MemoryKind[];
   scope?: MemoryScope[];
   tags: string[];
@@ -337,17 +338,19 @@ export function normalizeSearchMemoriesInput(input: SearchMemoriesInput): Normal
   const projectId = normalizeOptionalText(input.projectId);
   const repoPath = normalizeOptionalText(input.repoPath);
   const limit = normalizeLimit(input.limit, issues);
-  const matchQuery = query ? buildFtsMatchQuery(query, issues) : undefined;
+  const matchQuery = query ? buildFtsMatchQuery(query, issues, "AND") : undefined;
+  const relaxedMatchQuery = query ? buildFtsMatchQuery(query, issues, "OR", { expandAliases: true }) : undefined;
 
   issues.push(...findScopeIdentityIssues({ scope, sessionId, projectId, repoPath }));
 
-  if (issues.length > 0 || !query || !matchQuery) {
+  if (issues.length > 0 || !query || !matchQuery || !relaxedMatchQuery) {
     throw new MemoryValidationError(issues);
   }
 
   return {
     query,
     matchQuery,
+    relaxedMatchQuery,
     kind,
     scope,
     tags,
@@ -544,16 +547,64 @@ function normalizeNonEmptyId(fieldName: string, value: string, issues: string[])
   return normalized;
 }
 
-function buildFtsMatchQuery(query: string, issues: string[]): string | undefined {
-  const tokens = query.match(/[\p{L}\p{N}][\p{L}\p{N}_-]*/gu) ?? [];
-  const normalizedTokens = Array.from(new Set(tokens.map((token) => token.toLowerCase())));
+const FALLBACK_QUERY_ALIASES: Record<string, string[]> = {
+  author: ["commit", "identity", "email"],
+  committer: ["commit", "identity", "email"],
+  credential: ["identity", "author", "committer"],
+  credentials: ["identity", "author", "committer"],
+  email: ["identity", "author", "committer"],
+  git: ["commit", "author", "identity", "email"],
+  identity: ["email", "author", "committer"],
+  mail: ["email", "identity", "author"],
+};
 
-  if (normalizedTokens.length === 0) {
+function buildFtsMatchQuery(
+  query: string,
+  issues: string[],
+  operator: "AND" | "OR",
+  options: { expandAliases?: boolean } = {},
+): string | undefined {
+  const uniqueTokens = Array.from(new Set(extractFtsTokens(query)));
+
+  if (uniqueTokens.length === 0) {
     issues.push("query must contain searchable terms");
     return undefined;
   }
 
-  return normalizedTokens.map((token) => `"${token.replaceAll("\"", '""')}"`).join(" AND ");
+  if (operator === "OR" && options.expandAliases) {
+    const expandedTokens = expandFallbackTokens(uniqueTokens);
+    const originalQuery = buildFtsOrGroup(uniqueTokens);
+    const expandedQuery = buildFtsOrGroup(expandedTokens);
+
+    return originalQuery === expandedQuery ? originalQuery : `(${originalQuery}) AND (${expandedQuery})`;
+  }
+
+  return uniqueTokens.map(quoteFtsToken).join(` ${operator} `);
+}
+
+function expandFallbackTokens(tokens: string[]): string[] {
+  const expandedTokens = [...tokens];
+
+  for (const token of tokens) {
+    for (const alias of FALLBACK_QUERY_ALIASES[token] ?? []) {
+      expandedTokens.push(...extractFtsTokens(alias));
+    }
+  }
+
+  return Array.from(new Set(expandedTokens));
+}
+
+function buildFtsOrGroup(tokens: string[]): string {
+  return tokens.map(quoteFtsToken).join(" OR ");
+}
+
+function quoteFtsToken(token: string): string {
+  return `"${token.replaceAll("\"", '""')}"`;
+}
+
+function extractFtsTokens(value: string): string[] {
+  const tokens = value.match(/[\p{L}\p{N}][\p{L}\p{N}_-]*/gu) ?? [];
+  return tokens.map((token) => token.toLowerCase());
 }
 
 function isLowInformationSummary(summary: string): boolean {

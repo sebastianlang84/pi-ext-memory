@@ -12,8 +12,13 @@ This changelog follows the Keep a Changelog format.
 
 ## [Unreleased]
 
+## [2.0.10] - 2026-05-15
+
 ### Changed
 - Shortened memory tool prompt descriptions and guidelines to reduce Pi startup context while preserving tool routing semantics.
+
+### Fixed
+- Memory search now retries strict zero-hit lexical queries with a bounded relaxed fallback and small Git identity alias set, so noisy queries such as `uga uga bongo git` can still retrieve relevant Git identity memories while exact `AND` search remains the first pass.
 
 ## [2.0.9] - 2026-05-14
 

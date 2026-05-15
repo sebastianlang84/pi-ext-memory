@@ -12,6 +12,28 @@ function createTempDbPath(): string {
   return join(tempRoot, "memory.sqlite");
 }
 
+function createNoSemanticEmbeddingAdapter(): MemoryEmbeddingAdapter {
+  return {
+    getStatus() {
+      return {
+        strategy: "mock-zero-vector",
+        defaultModel: "mock-zero-1d",
+        fallbackModel: "mock-zero-1d",
+        activeModel: "mock-zero-1d",
+        dimensions: 1,
+      };
+    },
+    generateEmbedding() {
+      return {
+        model: "mock-zero-1d",
+        dimensions: 1,
+        vector: [0],
+        contentHash: "mock-zero",
+      };
+    },
+  };
+}
+
 test("searchMemories returns lexical matches for an exact term", () => {
   const dbPath = createTempDbPath();
   const store = initializeMemoryStore({ dbPath });
@@ -39,6 +61,53 @@ test("searchMemories returns lexical matches for an exact term", () => {
     assert.equal(results[0]?.title, "SQLite lexical baseline");
     assert.equal(results[0]?.kind, "todo");
     assert.equal(results[0]?.scope, "repo");
+  } finally {
+    store.close();
+  }
+});
+
+test("searchMemories falls back to relaxed lexical matching for noisy Git identity queries", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: createNoSemanticEmbeddingAdapter() });
+
+  try {
+    const gitIdentity = store.createMemory({
+      scope: "global",
+      title: "Default Git identity on this machine",
+      summary: "On this machine, use Git identity sebastianlang84 with email sebastian.lang@gmx.at for commits when repository local Git config is missing.",
+      tags: ["git", "identity", "commit", "user.email"],
+      importance: 0.9,
+      confidence: 0.9,
+      metadata: { canonicalKey: "git.identity.default" },
+    });
+
+    store.createMemory({
+      scope: "global",
+      title: "Weather banana invoice tracking",
+      summary: "Weather banana invoice notes are unrelated to source control identity and should satisfy the negative query.",
+      tags: ["weather", "invoice"],
+    });
+
+    for (const query of [
+      "git",
+      "identity",
+      "git credentials user.email",
+      "commit author identity",
+      "git credentials identity user.email commit author git.identity.default",
+      "uga uga bongo git",
+    ]) {
+      const results = store.searchMemories({ query, scope: ["global"] });
+      assert.equal(results[0]?.id, gitIdentity.id, `expected Git identity as top result for query: ${query}`);
+    }
+
+    const negativeResults = store.searchMemories({ query: "weather banana invoice", scope: ["global"] });
+    assert.notEqual(negativeResults[0]?.id, gitIdentity.id);
+
+    const negativeFallbackResults = store.searchMemories({ query: "weather credentials invoice", scope: ["global"] });
+    assert.notEqual(negativeFallbackResults[0]?.id, gitIdentity.id);
+
+    const filteredFallbackResults = store.searchMemories({ query: "uga uga bongo git", scope: ["repo"] });
+    assert.equal(filteredFallbackResults.some((result) => result.id === gitIdentity.id), false);
   } finally {
     store.close();
   }

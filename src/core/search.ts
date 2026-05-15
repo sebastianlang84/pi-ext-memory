@@ -77,8 +77,22 @@ function searchLexicalMemoryRows(
   input: NormalizedSearchMemoriesInput,
   limit: number,
 ): LexicalMemorySearchRow[] {
+  const strictRows = queryLexicalMemoryRows(db, input, input.matchQuery, limit);
+  if (strictRows.length > 0) {
+    return strictRows;
+  }
+
+  return queryLexicalMemoryRows(db, input, input.relaxedMatchQuery, limit);
+}
+
+function queryLexicalMemoryRows(
+  db: DatabaseSync,
+  input: NormalizedSearchMemoriesInput,
+  matchQuery: string,
+  limit: number,
+): LexicalMemorySearchRow[] {
   const filters = buildMemorySearchFilters(input, "m");
-  const rows = db
+  return db
     .prepare(`
       SELECT
         m.id,
@@ -100,9 +114,7 @@ function searchLexicalMemoryRows(
       ORDER BY lexical_match_score ASC, m.updated_at DESC
       LIMIT ?;
     `)
-    .all(...filters.params, input.matchQuery, limit) as LexicalMemorySearchRow[];
-
-  return rows;
+    .all(...filters.params, matchQuery, limit) as LexicalMemorySearchRow[];
 }
 
 function searchSemanticMemoryRows(
