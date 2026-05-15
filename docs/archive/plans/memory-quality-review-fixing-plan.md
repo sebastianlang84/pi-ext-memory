@@ -4,6 +4,8 @@ Date: 2026-05-13
 Status: completed/archived
 Scope: retrieval/memory quality, Module seams, testability, agent navigability, and regression coverage for scope identity, audit, handoffs, and tool validation.
 
+> Archived note: this document is historical planning context. Current behavior is defined by code, `README.md`, `TODO.md`, and accepted ADRs; stale mentions inside this plan are not active guidance.
+
 ## Completion Outcome
 
 Completed as v3.3.1 with a deliberately bounded scope:

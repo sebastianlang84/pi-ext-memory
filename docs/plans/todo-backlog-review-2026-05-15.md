@@ -20,13 +20,13 @@ Review all current `TODO.md` items for:
 - `docs/prd-lightweight-local-memory-system.md` requires local-first, hybrid retrieval, DE/EN support, and low resource use.
 - `docs/adr/007-memory-model-minimisation.md` intentionally removed most structured kinds, links, auto-expiry, and semantic duplicate detection; new work should not re-grow that surface casually.
 - Current search in `src/core/search.ts` is hybrid lexical + semantic with scope/recency/importance/confidence weights, but no first-class key/canonical-fact boost and no pinned boost.
-- `src/core/memories.ts` builds FTS queries as `term1 AND term2 ...`; noisy queries can suppress an otherwise strong token hit.
-- Temp check in a temporary SQLite store using `initializeMemoryStore`: a memory titled `Git identity default` tagged `git, identity, commit, user.email` is found for `git` and `git identity`, but **not** for `uga uga bongo git`.
+- Since v2.0.10, strict FTS zero-hit searches retry with a bounded relaxed fallback and small Git-identity alias set; broader near-miss reporting and key/tag boosts remain open.
+- The initial Git-identity noisy-query regression coverage exists; broader retrieval evals beyond that slice remain open.
 - `src/pi-extension/retrieval.ts` already keeps turn-start injection small: staged session/project/repo/global search, result limit 3, no broad unscoped fallback.
-- `CHANGELOG.md` `[Unreleased]` and `2.0.9` already record prompt/guidance compaction work, so more prompt-injection optimization should be measurement-led.
+- `CHANGELOG.md` `2.0.9` through `2.0.11` record prompt/guidance compaction, retrieval fallback, and documentation/status freshness work, so more prompt-injection optimization should be measurement-led.
 - `src/pi-extension/audit.ts` handles lifecycle and identity hygiene, but not canonical fact conflicts or fact-cluster deduping.
-- `README.md` still says `memory_save` can save `progress_snapshot`; this is stale after ADR 007 / v2.0.0 and belongs with the write-policy cleanup.
-- `TODO.md` itself still contains the completed v2.0.0 section; that is backlog hygiene debt, but this review leaves the user's existing TODO edits untouched.
+- `README.md` no longer advertises removed `progress_snapshot` writes after the v2.0.11 documentation refresh; broader write-policy hardening remains open.
+- `TODO.md` no longer keeps the completed v2.0.0 section after the v2.0.11 documentation refresh.
 
 ## Item-by-item review
 
@@ -39,16 +39,16 @@ Review all current `TODO.md` items for:
 | Specialized resolver tools/APIs for Git identity and repo path | High | High | Medium-good if surface stays small | Strong deterministic local value via Git config/repo metadata. Prefer internal resolver API or one generic resolver surface over several new normal tools, to avoid prompt/tool bloat. |
 | Detect conflicting active memories in same fact cluster | High | High | Good if advisory | Useful once canonical keys exist. Return explicit conflict/canonical-candidate reports; never auto-choose on low evidence. |
 | Memory hygiene/dedup support for clusters | Medium | Medium | Good if manual/advisory | ADR 007 rejects semantic duplicate detection as a system feature. Keep this limited to exact key/tag clusters and explicit archive recommendations. |
-| Improve empty-result behavior with fallback keyword/tag/alias searches and near misses | High | Medium-high | Strong | Current `No memories matched` can happen even when a strong token exists inside noisy queries because FTS uses AND. Implement bounded fallback before adding heavier semantic machinery. |
-| Retrieval evals for Git identity, including `uga uga bongo git` victory test | High | High | Excellent | Add as regression coverage after defining expected behavior. This protects canonical facts, aliases, fallback, and noisy-query handling. |
-| Harden write policy docs/tool guidance | High | High | Excellent | Do soon. It is mostly docs/prompt hygiene and prevents memory pollution. Also fix stale `README.md` `progress_snapshot` wording. |
+| Improve empty-result behavior with fallback keyword/tag/alias searches and near misses | High | Medium-high | Strong | Initial strict-zero-hit relaxed fallback is implemented for noisy Git identity queries. Remaining value is near-miss reporting and broader fallback behavior without over-broad recall. |
+| Retrieval evals for Git identity, including `uga uga bongo git` victory test | High | High | Excellent | Initial Git identity noisy-query regression coverage exists. Add broader eval cases for non-Git canonical facts, aliases, and negative controls. |
+| Harden write policy docs/tool guidance | High | High | Excellent | README stale `progress_snapshot` wording is fixed. Continue clarifying docs/tool guidance to prevent memory pollution and transient-preference saves. |
 | Tiny startup canonical-facts card with pinned/canonical facts | Medium | Potentially high | Risky unless tiny | Defer until canonical keys and evals prove that search fallback is insufficient. If implemented, cap hard (e.g. only pinned canonical facts, few lines) and measure token cost. |
 
 ## Suggested consolidation
 
 1. **Docs/prompt hygiene first**
-   - Fix stale README/tool guidance around durable writes and removed `progress_snapshot` concept.
-   - Clarify “save only explicit durable facts, handoffs, persistent todos, project paths, or explicit remember requests”.
+   - README stale `progress_snapshot` wording is fixed.
+   - Clarify remaining tool guidance: “save only explicit durable facts, handoffs, persistent todos, project paths, or explicit remember requests”.
    - Low risk, immediate retrieval-quality benefit by reducing memory pollution.
 
 2. **Canonical fact retrieval slice**
@@ -69,8 +69,8 @@ Review all current `TODO.md` items for:
 
 ## Proposed priority order
 
-1. Write-policy and README cleanup.
-2. Noisy-query / canonical Git identity retrieval evals.
+1. Remaining write-policy/tool-guidance cleanup.
+2. Broader retrieval evals beyond the initial Git identity noisy-query coverage.
 3. Minimal canonical key + tag/key ranking/fallback implementation.
 4. Git identity / repo path resolver API.
 5. Canonical cluster conflict/audit support.

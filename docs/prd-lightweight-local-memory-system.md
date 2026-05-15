@@ -197,19 +197,21 @@ Aktueller Stand:
 
 Das System speichert **verdichtete Erinnerungen**, nicht primär Rohdialoge.
 
-### Memory-Typen
+### Memory-Arten
 
-- **fact** — stabile Fakten
-- **preference** — User- oder Projektpräferenzen
-- **decision** — getroffene technische/produktbezogene Entscheidungen
-- **episode** — relevantes Ereignis oder Arbeitskontext
-- **artifact_ref** — Verweis auf Datei, PR, Commit, Ticket, Doc
-- **todo** — offene Aufgabe oder Wiedervorlage
+- generische, kindlose Memories für dauerhafte Notizen, Fakten, Entscheidungen, Präferenzen und Kontext
+- **todo** — explizit strukturierte offene Aufgabe oder Wiedervorlage
+- **handoff** — explizit strukturierter Übergabe-/Resume-Kontext für Sessions, Resets oder Agent-Transfers
+
+### Status
+
+- **active** — normal abrufbar
+- **archived** — dauerhaft erhalten, aber aus normalen aktiven Flows entfernt
 
 ### Scope
 
 - **global**
-- **project**
+- **project** — Legacy/Advanced-Kompatibilität
 - **repo**
 - **session**
 
@@ -217,9 +219,11 @@ Das System speichert **verdichtete Erinnerungen**, nicht primär Rohdialoge.
 
 Statt kompletter Chat-Historie sollen kompakte Einträge gespeichert werden, z. B.:
 
-- Entscheidung + Begründung
-- Problem + Ursache + Fix
-- Präferenz + Gültigkeitsbereich
+- Entscheidung + Begründung als kindlose Memory
+- Problem + Ursache + Fix als kindlose Memory
+- Präferenz + Gültigkeitsbereich als kindlose Memory
+- explizites Todo über `memory_save_todo`
+- expliziter Handoff über `memory_save_handoff`
 - Session-Zusammenfassung
 
 ---
@@ -242,8 +246,8 @@ Retrieval soll **hybrid** sein.
 - Recency
 - Importance
 - Confidence
-- exakte Tag-Treffer
-- manuell gepinnte Einträge
+- lexikalische Treffer in Titel, Zusammenfassung, Body und Tags
+- optionale Metadaten-/Tag-Filter
 
 Ziel:
 Nicht nur semantisch „ähnliche“ Erinnerungen finden, sondern die **relevantesten** für den aktuellen Agent-Kontext.
@@ -255,7 +259,8 @@ Nicht nur semantisch „ähnliche“ Erinnerungen finden, sondern die **relevant
 ### memories
 
 - id
-- kind
+- kind — optional; nur dedizierte Flows setzen aktuell `todo` oder `handoff`, generische Memories bleiben kindlos
+- status — `active` oder `archived`
 - scope
 - title
 - summary
@@ -270,14 +275,16 @@ Nicht nur semantisch „ähnliche“ Erinnerungen finden, sondern die **relevant
 - created_at
 - updated_at
 - last_accessed_at
-- expires_at
-- embedding
 
-### links
+### memory_embeddings
 
-- from_id
-- to_id
-- relation
+- memory_id
+- model
+- dimensions
+- vector_json
+- content_hash
+- created_at
+- updated_at
 
 ### sessions
 
@@ -287,14 +294,7 @@ Nicht nur semantisch „ähnliche“ Erinnerungen finden, sondern die **relevant
 - summary
 - project_id
 
-### artifacts
-
-- artifact_id
-- type
-- external_id
-- path_or_url
-- title
-- metadata_json
+Nicht mehr Teil des aktuellen V1-Modells sind `expires_at`, Link-Relationen oder separate Artifact-Tabellen/APIs.
 
 ---
 
@@ -304,15 +304,17 @@ Auch wenn V1 lokal-only startet, soll die Kernfunktionalität sauber kapselbar s
 
 ### Kernoperationen
 
-- create memory
+- create generic memory
+- save explicit todo
+- save explicit handoff
 - update memory
 - search memory
+- list/filter memories
 - get memory by id
-- link memories
-- pin / unpin memory
-- forget / archive memory
+- archive memory über Status-Update
 - summarize session
-- compact memory
+
+Nicht aktuelle V1-API sind Link-Memory-Operationen, Artifact-APIs, TTL/Expiry-Operationen oder Pin/Unpin-Flows.
 
 Spätere Exposition:
 

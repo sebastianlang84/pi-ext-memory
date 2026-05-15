@@ -1,7 +1,9 @@
 # Plan: Memory Model Minimisation (v2.0.0)
 
-Status: Accepted, not started  
-ADR: [007-memory-model-minimisation](../adr/007-memory-model-minimisation.md)
+Status: completed/archived
+ADR: [007-memory-model-minimisation](../../adr/007-memory-model-minimisation.md)
+
+> Archived note: this document is historical planning context. Current behavior is defined by code, `README.md`, `TODO.md`, and accepted ADRs; stale mentions inside this plan are not active guidance.
 
 ## Goal
 

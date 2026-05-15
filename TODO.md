@@ -12,12 +12,6 @@ Rule: Completed items are removed, not checked off.
 
 Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/todo-backlog-review-2026-05-15.md)
 
-## Versioned delivery plan
-
-### v2.0.0 — Memory Model Minimisation
-
-Complete. All slices verified and implemented.
-
 ## Open Design Issues
 
 - Research whether local autoresearch tooling can help optimize pi-memory prompt injection for lower token cost without degrading agent behavior.

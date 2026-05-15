@@ -1,8 +1,8 @@
 ---
-role: Working plan for pi-memory scope identity simplification
-contains: Scope identity policy, simple-repo and monorepo target behavior, implementation slices, compatibility risks, and acceptance criteria
-not-contains: Final ADR decision, completed implementation notes, or schema migration history
-write-when: Scope/identifier semantics, planned validation, defaults, or migration approach changes materially
+role: Historical archived plan for pi-memory scope identity simplification
+contains: Historical scope identity policy, simple-repo and monorepo target behavior, implementation slices, compatibility risks, and acceptance criteria
+not-contains: Current implementation instructions, active tasks, or source-of-truth tool behavior
+write-when: Historical status or archive routing changes
 ---
 
 # Plan — Memory Scope Identity
@@ -10,6 +10,8 @@ write-when: Scope/identifier semantics, planned validation, defaults, or migrati
 ## 1. Purpose
 
 Status: archived/superseded. The first implementation slice was accepted in [ADR 004 — Scope-first memory identity](../../adr/004-scope-first-memory-identity.md). The audit/report follow-up is implemented as report-only `memory_audit` identity findings. ADR 005 resolves the remaining project-id namespace question by soft-deprecating normal project/projectId use.
+
+> Archived note: this document is historical planning context. Current behavior is defined by code, `README.md`, `TODO.md`, and accepted ADRs; stale mentions inside this plan are not active guidance.
 
 This plan resolves the `scope` / `projectId` / `repoPath` ambiguity in pi-memory without losing the two core use cases:
 

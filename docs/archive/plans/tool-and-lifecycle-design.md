@@ -1,5 +1,9 @@
 # pi-ext-memory — Schlankes Tool- und Lifecycle-Design
 
+Status: archived/superseded by later ADRs and implementation.
+
+> Archived note: this document is historical design context. Current behavior is defined by code, `README.md`, `TODO.md`, and accepted ADRs; stale mentions of removed kinds/tools are not active guidance.
+
 ## Ausgangsproblem
 
 `pi-ext-memory` ist eine SQLite-basierte Memory-Extension für den Pi Coding Agent. Sie speichert strukturierte Erinnerungen wie Facts, Decisions, Todos und Handoffs über Sessions hinweg.

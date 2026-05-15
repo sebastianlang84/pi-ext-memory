@@ -1,17 +1,19 @@
 ---
-role: Working plan for simplifying pi-memory scope semantics
-contains: Target global/repo/session model, project-scope deprecation path, agent rules, implementation slices, migration risks, and acceptance criteria
-not-contains: Final ADR decision, completed implementation notes, or schema migration history
-write-when: Scope model, deprecation strategy, migration approach, or agent-facing memory rules change materially
+role: Historical archived plan for simplifying pi-memory scope semantics
+contains: Historical target global/repo/session model, project-scope deprecation path, agent rules, implementation slices, migration risks, and acceptance criteria
+not-contains: Current implementation instructions, active tasks, or source-of-truth tool behavior
+write-when: Historical status or archive routing changes
 ---
 
 # Plan — Memory Scope Simplification
 
 ## 1. Purpose
 
-Status: active implementation follow-up to [ADR 005 — Simplified agent-facing memory scopes](../adr/005-simplified-agent-facing-scopes.md), [ADR 004 — Scope-first memory identity](../adr/004-scope-first-memory-identity.md), and the archived [Plan — Memory Scope Identity](../archive/plans/memory-scope-identity.md).
+Status: archived/superseded by [ADR 005 — Simplified agent-facing memory scopes](../../adr/005-simplified-agent-facing-scopes.md), [ADR 004 — Scope-first memory identity](../../adr/004-scope-first-memory-identity.md), and later implementation work.
 
-This plan simplifies pi-memory's agent-facing scope model after the v3.0.0 scope-first identity work and the v3.1.0 identity audit/report path.
+> Archived note: this document is historical planning context. Current behavior is defined by code, `README.md`, `TODO.md`, and accepted ADRs; stale mentions inside this plan are not active guidance.
+
+This plan simplified pi-memory's agent-facing scope model after the v3.0.0 scope-first identity work and the v3.1.0 identity audit/report path.
 
 The new working hypothesis:
 

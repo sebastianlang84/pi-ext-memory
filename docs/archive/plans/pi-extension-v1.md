@@ -1,17 +1,19 @@
 ---
-role: Working plan for the Pi extension V1 surface
-contains: Proposed extension shape, tool and command surface, event hooks, write policy defaults, and implementation slices
-not-contains: Final ADR decisions, full SQL schema, or finished implementation
-write-when: The proposed Pi integration shape or V1 extension surface changes materially
+role: Historical archived plan for the Pi extension V1 surface
+contains: Historical proposed extension shape, tool and command surface, event hooks, write policy defaults, and implementation slices
+not-contains: Current implementation instructions, active tasks, or source-of-truth tool behavior
+write-when: Historical status or archive routing changes
 ---
 
 # Plan — Pi Extension V1
 
 ## 1. Purpose
 
-This document makes the V1 Pi integration concrete enough to implement in small steps.
+This document made the V1 Pi integration concrete enough to implement in small steps.
 
-It is a **working plan**, not yet a final ADR.
+Status: archived/superseded by implementation and accepted ADRs.
+
+> Archived note: this document is historical planning context. Current behavior is defined by code, `README.md`, `TODO.md`, and accepted ADRs; stale mentions inside this plan are not active guidance.
 
 ## 2. Planning Position
 

@@ -28,14 +28,16 @@ Normal tools and commands:
 ```text
 memory_search                — search durable memory (semantic + lexical)
 memory_list                  — list/filter structured memories; kind and scope are optional; paginated with total_count, has_more, next_offset
-memory_save                  — save facts, decisions, notes, progress snapshots (kind=progress_snapshot)
+memory_save                  — save kindless durable notes, facts, decisions, and context
 memory_save_todo             — save actionable open tasks (priority, status, scope)
 memory_save_handoff          — save/refresh resumable agent handoff state
 memory_update                — patch, close, or archive an existing memory by id; use archiveReason with status=archived when archiving
 memory_audit                 — report scope identity issues and read-only legacy project migration preview
 /memory-status               — show extension status and config
 /memory-search <query>       — manual memory search
+/memory-review               — show relevant existing memories and suggested cleanup/save actions
 /memory-handoff              — show or archive the active session handoff
+/memory-session-save <summary> — persist an explicit session summary
 /memory-audit                — same as memory_audit tool, output to terminal
 ```
 

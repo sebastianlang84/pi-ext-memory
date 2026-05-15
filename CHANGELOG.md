@@ -9,8 +9,14 @@ write-when: A user/operator-relevant repo change is introduced
 
 All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
+Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
+
+## [2.0.11] - 2026-05-15
+
+### Changed
+- Refreshed documentation and runtime status metadata to match the current kindless memory model, default DB path, command surface, and completed plan state.
 
 ## [2.0.10] - 2026-05-15
 

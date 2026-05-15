@@ -1,7 +1,7 @@
 # ADR 006: Normal and Advanced Tool Surface
 
 Date: 2026-05-13
-Status: Accepted
+Status: Accepted; partially superseded by ADR 007
 
 ## Context
 
@@ -19,21 +19,13 @@ The normal agent-facing tool path is:
 - `memory_update` for corrections, lifecycle changes, and normal archive flows via `status="archived"` plus `archiveReason`.
 - `memory_audit` for hygiene, scope-identity findings, and read-only legacy project migration previews.
 
-The following tools remain callable as advanced or compatibility tools, but should not be the normal first choice:
+ADR 007 partially supersedes the advanced/compatibility portion of this decision: the former advanced tools `memory_archive`, `memory_link`, `memory_list_active_todos`, and `memory_list_active_handoffs` are no longer callable. Use `memory_update(status="archived", archiveReason=...)` for archive flows and `memory_list` filters for active todos or handoffs.
 
-- `memory_list_active_todos`
-- `memory_list_active_handoffs`
-- `memory_stats`
-- `memory_archive`
-- `memory_link`
-
-`memory_list_active_handoffs` keeps its explicit name instead of adding a shorter alias. It is a compatibility wrapper with special active-only and repo/session widening behavior; adding `memory_list_handoffs` would increase the surface instead of simplifying it.
-
-No public tool is removed in this slice. Hard removal of callable tools remains a future SemVer-major decision.
+Only `memory_stats` remains callable as an advanced/admin tool; it should not be the normal first choice for routine agent work.
 
 ## Consequences
 
-- Agents get a smaller recommended path without breaking older workflows.
-- `memory_list` accepts optional `kind` and `scope`, enabling a small active catalog and replacing most routine uses of active-list wrappers.
-- `memory_update` can archive with a reason, reducing normal reliance on `memory_archive`.
-- Advanced tools can be hidden, removed, or moved behind an admin surface later only with an explicit SemVer-major decision.
+- Agents get a smaller recommended path.
+- `memory_list` accepts optional `kind` and `scope`, enabling a small active catalog and replacing active-list wrappers.
+- `memory_update` can archive with a reason, replacing normal reliance on `memory_archive`.
+- The remaining advanced/admin callable surface is limited to `memory_stats`.
