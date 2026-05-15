@@ -1,6 +1,6 @@
 # pi-memory
 
-Local, SQLite-backed memory for Pi coding agents. It stores structured facts, decisions, preferences, todos, and handoffs, then retrieves relevant context at the start of a turn.
+Local, SQLite-backed memory for Pi coding agents. It stores durable notes, facts, decisions, preferences, todos, and handoffs, then retrieves relevant context at the start of a turn.
 
 ## Install
 
@@ -15,7 +15,7 @@ cd ~/dev/pi-extensions/pi-ext-memory
 pi install .
 ```
 
-## Usage
+## Quick start
 
 Check extension status:
 
@@ -23,57 +23,30 @@ Check extension status:
 /memory-status
 ```
 
-Normal tools and commands:
+Search manually:
 
 ```text
-memory_search                — search durable memory (semantic + lexical)
-memory_list                  — list/filter structured memories; kind and scope are optional; paginated with total_count, has_more, next_offset
-memory_save                  — save kindless durable notes, facts, decisions, and context
-memory_save_todo             — save actionable open tasks (priority, status, scope)
-memory_save_handoff          — save/refresh resumable agent handoff state
-memory_update                — patch, close, or archive an existing memory by id; use archiveReason with status=archived when archiving
-memory_audit                 — report lifecycle hygiene, scope identity issues, and read-only legacy project migration preview
-memory_stats                 — advanced/admin health, cap, and last-audit summary by scope
-/memory-status               — show extension status and config
-/memory-search <query>       — manual memory search
-/memory-review               — show relevant existing memories and suggested cleanup/save actions
-/memory-handoff              — show or archive the active session handoff
-/memory-session-save <summary> — persist an explicit session summary
-/memory-audit                — same as memory_audit tool, output to terminal
+/memory-search <query>
 ```
 
-Use `memory_list` for normal listing and `memory_update(status="archived", archiveReason=...)` for normal archive flows.
+Save an explicit session summary:
 
-### Scope identity
+```text
+/memory-session-save <summary>
+```
 
-Normal agent-facing scopes are:
+Normal agent tools are `memory_search`, `memory_list`, `memory_save`, `memory_save_todo`, `memory_save_handoff`, `memory_update`, and `memory_audit`.
 
-| Scope | Use when |
-|---|---|
-| `global` | The memory should apply across repositories. |
-| `repo` | Future agents in the current repository/worktree should know it. |
-| `session` | The state is short-lived handoff/resume/current-run context. |
+`memory_stats` is available for advanced/admin health and capacity checks, but it is not the normal first-choice tool path.
 
-Inside a Git repository, ordinary saves and todos default to `repo`; outside a repo they default to `global`. Tools reject contradictory filters such as `scope="repo"` plus `projectId`, avoiding accidental `project_id AND repo_path` misses.
+## Documentation
 
-`project` / `projectId` remains available only as legacy/advanced compatibility. Explicit `scope="project"` tool calls return a compatibility notice; new normal agent use should prefer `repo` with `repoPath`.
-
-### Active caps
-
-| Scope | Todo hard cap | Handoff hard cap |
-|---|---|---|
-| repo / session | 50 | 10 |
-| global | 20 | 5 |
-| legacy project | 50 | 10 |
-
-Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup suggestions. Archive or complete existing todos/handoffs first.
-
-Optional configuration:
-
-- By default, pi-memory stores SQLite state at `~/.pi/agent/state/pi-memory/memory.sqlite`.
-- On first startup with the default path, if the new DB does not exist but the legacy `~/.pi/agent/pi-memory.sqlite` file does, pi-memory copies the legacy DB plus SQLite `-wal`/`-shm` sidecars into the new state path.
-- `PI_MEMORY_DB_PATH` overrides the SQLite database path and disables the legacy default-path copy.
-- `PI_MEMORY_BGE_M3_COMMAND` enables a local BGE-M3 embedding command adapter.
+- [User guide](docs/user/usage.md) — commands, tools, scopes, caps, configuration, and write guidance.
+- [Product requirements](docs/product/prd-lightweight-local-memory-system.md) — product intent, V1 scope, risks, and success criteria.
+- [Developer architecture](docs/developer/architecture.md) — core/extension boundaries, storage, retrieval, and verification.
+- [Architecture decisions](docs/adr/) — durable design decisions.
+- [Active backlog](TODO.md) — open work only.
+- [Changelog](CHANGELOG.md) — user/operator-relevant release history.
 
 ## License
 

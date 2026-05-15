@@ -17,7 +17,7 @@ Review all current `TODO.md` items for:
 
 ## Evidence snapshot
 
-- `docs/prd-lightweight-local-memory-system.md` requires local-first, hybrid retrieval, DE/EN support, and low resource use.
+- `docs/product/prd-lightweight-local-memory-system.md` requires local-first, hybrid retrieval, DE/EN support, and low resource use.
 - `docs/adr/007-memory-model-minimisation.md` intentionally removed most structured kinds, links, auto-expiry, and semantic duplicate detection; new work should not re-grow that surface casually.
 - Current search in `src/core/search.ts` is hybrid lexical + semantic with scope/recency/importance/confidence weights, but no first-class key/canonical-fact boost and no pinned boost.
 - Since v2.0.10, strict FTS zero-hit searches retry with a bounded relaxed fallback and small Git-identity alias set; broader near-miss reporting and key/tag boosts remain open.

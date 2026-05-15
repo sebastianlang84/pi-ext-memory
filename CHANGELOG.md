@@ -13,6 +13,11 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.0.13] - 2026-05-15
+
+### Changed
+- Reorganized documentation into product, user, and developer guides; kept README as a concise entry point, clarified `memory_stats` as advanced/admin only, and removed empty placeholder doc folders.
+
 ## [2.0.12] - 2026-05-15
 
 ### Changed

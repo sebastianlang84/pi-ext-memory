@@ -35,20 +35,22 @@ On session start: **retrieve repo memories, then read `TODO.md`**. Load deeper d
 | --- | --- | --- |
 | `TODO.md` | Active open work only | Work or priorities change |
 | `CHANGELOG.md` | Outward-facing change history | User/operator-relevant changes land |
-| `README.md` | Project guide and navigation | Setup, usage, or repo orientation changes |
+| `README.md` | Project guide and navigation | Setup or repo orientation changes |
+| `docs/product/*` | Product intent, scope, requirements, risks, and success criteria | Product scope, requirements, or major direction changes |
+| `docs/user/*` | User-facing commands, tools, workflows, and configuration | User-visible behavior, commands, tools, or configuration changes |
+| `docs/developer/*` | Developer-facing architecture, module boundaries, schemas, APIs, tests, and local development notes | Internal architecture, API, schema, or development workflow changes |
 | `docs/adr/*` | Durable decisions | A durable decision is made |
 | `docs/plans/*` | Detailed execution plans | A task needs a breakdown beyond `TODO.md` |
-| `docs/runbooks/*` | Procedural workflows | An operational workflow should be documented |
-| `docs/policies/*` | Specialized technical policies | A policy needs a dedicated home |
 | `.agents/skills/*` | Optional repo-local skills | A reusable repo-local skill is curated |
 
 ## 5) Routing
 - Stable truth -> memory store (repo scope)
 - Active work -> `TODO.md`
+- Product intent/scope -> `docs/product/*`
+- User-facing behavior/config -> `docs/user/*`
+- Developer-facing architecture/API/test notes -> `docs/developer/*`
 - Durable decisions -> `docs/adr/*`
 - Detailed plans -> `docs/plans/*`
-- Procedural docs -> `docs/runbooks/*`
-- Specialized policy -> `docs/policies/*`
 - Repo-local skills -> `.agents/skills/*`
 
 ## 6) Gates (mandatory per task)
