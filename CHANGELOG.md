@@ -13,6 +13,11 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.0.12] - 2026-05-15
+
+### Changed
+- Clarified README and PRD documentation for the current tool surface, admin `memory_stats` tool, no-automatic-TTL lifecycle posture, and kindless/todo/handoff V1 scope.
+
 ## [2.0.11] - 2026-05-15
 
 ### Changed

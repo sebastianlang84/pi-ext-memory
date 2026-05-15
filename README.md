@@ -32,7 +32,8 @@ memory_save                  — save kindless durable notes, facts, decisions, 
 memory_save_todo             — save actionable open tasks (priority, status, scope)
 memory_save_handoff          — save/refresh resumable agent handoff state
 memory_update                — patch, close, or archive an existing memory by id; use archiveReason with status=archived when archiving
-memory_audit                 — report scope identity issues and read-only legacy project migration preview
+memory_audit                 — report lifecycle hygiene, scope identity issues, and read-only legacy project migration preview
+memory_stats                 — advanced/admin health, cap, and last-audit summary by scope
 /memory-status               — show extension status and config
 /memory-search <query>       — manual memory search
 /memory-review               — show relevant existing memories and suggested cleanup/save actions

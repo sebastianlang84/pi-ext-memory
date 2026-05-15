@@ -90,7 +90,7 @@ Default-Prinzip:
 - DE+EN Retrieval
 - speichert strukturierte Memory-Objekte
 - semantische Suche + exakte Textsuche
-- Filter nach Projekt/Scope/Typ
+- Filter nach Scope, Repo-/Session-Identität, optionalem Kind und Tags
 - Session-Summaries speicherbar
 - einfache Integration in Pi
 - später erweiterbar Richtung MCP/OpenAPI
@@ -99,7 +99,7 @@ Default-Prinzip:
 
 - einfache Konfiguration
 - Import/Export einer Memory-Datei
-- TTL oder Archivierung für kurzlebige Einträge
+- Archivierung und Audit-Hinweise für kurzlebige Einträge; keine automatische TTL/Expiry in der aktuellen V1-Linie
 - Ranking mit Recency/Importance
 
 ### Nicht in V1
@@ -384,8 +384,8 @@ Pi kann:
    - aktueller Stand bleibt manual-first mit expliziten Tools/Commands
    - spätere Optionen: heuristisch halbautomatisch oder automatisch mit Review
 
-4. **Welche Einträge dürfen verfallen?**
-   - episodes / todos / temporäre Hinweise
+4. **Welche aktiven Einträge brauchen Hygiene- oder Archivierungsregeln?**
+   - aktuelle V1-Linie: keine automatische Expiry; Audit weist auf alte Handoffs und stale Todos hin, Archivierung bleibt explizit
 
 5. **Wie wird Compaction umgesetzt?**
    - sessionbasiert
@@ -410,7 +410,7 @@ Pi kann:
 - Memory CRUD
 - Hybrid Search
 - Session Summary speichern
-- Fact/Decision/Preference/Todo/Episode
+- kindlose Memories für Fakten, Entscheidungen, Präferenzen und Kontext; dedizierte `todo`- und `handoff`-Flows
 - einfacher Pi-Adapter
 
 ### Nicht enthalten
