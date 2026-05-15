@@ -3,6 +3,7 @@ import { hostname } from "node:os";
 import type { ListForToolResult, MemoryRecord, MemoryScope, MemorySearchResult, MemoryStore, SearchMemoriesInput, SessionRecord, TodoPriority, TodoWorkflowStatus } from "../core/index.ts";
 import { isLegacyProjectScopeSelected, LEGACY_PROJECT_SCOPE_NOTICE } from "../core/index.ts";
 import { decorateCreateMemoryInput, deriveMemoryTurnContext } from "./retrieval.ts";
+import { formatNearTagSuggestionLines, type NearTagSuggestion } from "./tag-catalog.ts";
 
 export function formatMemorySessionSaveUsage(minSummaryLength: number): string {
   return `Usage: /memory-session-save <summary>\nProvide an explicit session summary with at least ${minSummaryLength} characters.`;
@@ -186,7 +187,7 @@ export function appendMarkdownList(lines: string[], heading: string, values?: st
   lines.push("", `## ${heading}`, ...cleaned.map((value) => `- ${value}`));
 }
 
-export function formatMemorySaved(memory: MemoryRecord, store: MemoryStore): string {
+export function formatMemorySaved(memory: MemoryRecord, store: MemoryStore, nearTagSuggestions: NearTagSuggestion[] = []): string {
   const lines = [
     `Saved memory ${memory.id}.`,
     `kind: ${memory.kind ?? "unset"}`,
@@ -209,6 +210,7 @@ export function formatMemorySaved(memory: MemoryRecord, store: MemoryStore): str
   }
 
   lines.push(
+    ...formatNearTagSuggestionLines(nearTagSuggestions),
     `embedding_model: ${store.embeddingModel}`,
     `embedding_dimensions: ${store.embeddingDimensions}`,
     `db_path: ${store.dbPath}`,
@@ -217,7 +219,7 @@ export function formatMemorySaved(memory: MemoryRecord, store: MemoryStore): str
   return lines.join("\n");
 }
 
-export function formatMemoryUpdated(memory: MemoryRecord, store: MemoryStore): string {
+export function formatMemoryUpdated(memory: MemoryRecord, store: MemoryStore, nearTagSuggestions: NearTagSuggestion[] = []): string {
   const lines = [
     `Updated memory ${memory.id}.`,
     `status: ${memory.status}`,
@@ -226,6 +228,7 @@ export function formatMemoryUpdated(memory: MemoryRecord, store: MemoryStore): s
     `summary: ${memory.summary}`,
     `tags: ${memory.tags.join(", ") || "none"}`,
     `updated_at: ${memory.updatedAt}`,
+    ...formatNearTagSuggestionLines(nearTagSuggestions),
     `db_path: ${store.dbPath}`,
   ];
 
@@ -278,9 +281,9 @@ export function formatMemoryListResultLine(index: number, memory: MemoryRecord):
   return `${index}. [${kindLabel}/${memory.scope}/${memory.status}] ${memory.title} (${memory.id}) — ${memory.summary}${tags} updated=${memory.updatedAt}`;
 }
 
-export function formatMemorySearchResults(query: string, results: MemorySearchResult[], dbPath: string): string {
+export function formatMemorySearchResults(query: string, results: MemorySearchResult[], dbPath: string, nearTagSuggestions: NearTagSuggestion[] = []): string {
   if (results.length === 0) {
-    return [`No memories matched \"${query}\".`, `db_path: ${dbPath}`].join("\n");
+    return [`No memories matched \"${query}\".`, ...formatNearTagSuggestionLines(nearTagSuggestions), `db_path: ${dbPath}`].join("\n");
   }
 
   return [

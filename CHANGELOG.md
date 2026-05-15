@@ -13,6 +13,11 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-05-16
+
+### Added
+- Added advisory near-tag suggestions for empty tag-filtered `memory_search` calls and for save/update tool calls whose requested tags look close to existing active tags.
+
 ## [2.1.1] - 2026-05-15
 
 ### Added

@@ -528,6 +528,130 @@ test("memory_tag_catalog derives tag counts without audit metadata writes", asyn
   assert.deepEqual(metaWrites, [], "memory_tag_catalog must be read-only and not write audit metadata");
 });
 
+test("memory_search suggests near tags when a tag filter has no matches", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const catalogMemory = createMemory({ id: "agent-context", scope: "repo", repoPath: projectContext.cwd, tags: ["agent-context"] });
+  const store = createMinimalStore({
+    searchMemories() { return []; },
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      return filter?.repoPath === projectContext.cwd ? [catalogMemory] : [];
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_search").execute(
+    "call-search-near-tag",
+    { query: "context", scope: ["repo"], repoPath: projectContext.cwd, tags: ["agentic-context"] },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /No memories matched "context"/);
+  assert.match(output.content[0].text, /near_tag_suggestions:\n- agentic-context: agent-context/);
+  assert.deepEqual(output.details.nearTagSuggestions, [{ input: "agentic-context", suggestions: ["agent-context"] }]);
+});
+
+test("memory_save warns when new tags look like existing tags", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const catalogMemory = createMemory({ id: "agent-context", scope: "repo", repoPath: projectContext.cwd, tags: ["agent-context"] });
+  const store = createMinimalStore({
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      return filter?.repoPath === projectContext.cwd ? [catalogMemory] : [];
+    },
+    createMemory(input: CreateMemoryInput): MemoryRecord {
+      return createMemory({ ...input, id: "saved-near-tag", tags: input.tags ?? [] });
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_save").execute(
+    "call-save-near-tag",
+    { title: "Agent context note", summary: "Remember the compact agent context rule.", tags: ["agentic-context"] },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /Saved memory saved-near-tag/);
+  assert.match(output.content[0].text, /near_tag_suggestions:\n- agentic-context: agent-context/);
+  assert.deepEqual(output.details.nearTagSuggestions, [{ input: "agentic-context", suggestions: ["agent-context"] }]);
+});
+
+test("memory_save_todo warns when content tags look like existing tags", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const catalogMemory = createMemory({ id: "agent-context", scope: "repo", repoPath: projectContext.cwd, tags: ["agent-context"] });
+  const store = createMinimalStore({
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      return filter?.repoPath === projectContext.cwd ? [catalogMemory] : [];
+    },
+    createMemory(input: CreateMemoryInput): MemoryRecord {
+      return createMemory({ ...input, id: "todo-near-tag", kind: "todo", tags: input.tags ?? [] });
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_save_todo").execute(
+    "call-save-todo-near-tag",
+    { title: "Document agent context", description: "Capture durable agent context guidance.", tags: ["agentic-context", "todo", "p1"] },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /Saved memory todo-near-tag/);
+  assert.match(output.content[0].text, /near_tag_suggestions:\n- agentic-context: agent-context/);
+  assert.deepEqual(output.details.nearTagSuggestions, [{ input: "agentic-context", suggestions: ["agent-context"] }]);
+});
+
+test("memory_update warns when replacement tags look like existing tags", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const existingMemory = createMemory({ id: "memory-update-near-tag", scope: "repo", repoPath: projectContext.cwd, tags: ["policy"] });
+  const catalogMemory = createMemory({ id: "agent-context", scope: "repo", repoPath: projectContext.cwd, tags: ["agent-context"] });
+  const store = createMinimalStore({
+    getMemory(id: string): MemoryRecord | null { return id === existingMemory.id ? existingMemory : null; },
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      return filter?.repoPath === projectContext.cwd ? [catalogMemory, existingMemory] : [];
+    },
+    updateMemory(input: UpdateMemoryInput): MemoryRecord {
+      return { ...existingMemory, ...input, tags: input.tags ?? existingMemory.tags } as MemoryRecord;
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_update").execute(
+    "call-update-near-tag",
+    { id: existingMemory.id, tags: ["agentic-context"] },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /Updated memory memory-update-near-tag/);
+  assert.match(output.content[0].text, /near_tag_suggestions:\n- agentic-context: agent-context/);
+  assert.deepEqual(output.details.nearTagSuggestions, [{ input: "agentic-context", suggestions: ["agent-context"] }]);
+});
+
 test("memory_save_handoff updates only the current session handoff", async (t) => {
   const projectContext = await createTempPiToolContext();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });

@@ -30,13 +30,25 @@ import {
 import { findLatestExactSessionHandoff } from "./handoffs.ts";
 import { decorateCreateMemoryInput } from "./retrieval.ts";
 import { formatAuditResults, runMemoryAudit } from "./audit.ts";
-import { buildTagCatalog, formatTagCatalog } from "./tag-catalog.ts";
+import { buildTagCatalog, formatTagCatalog, suggestNearTags, type NearTagSuggestion } from "./tag-catalog.ts";
 import { createToolShell } from "./tool-shell.ts";
 
 
 function normalizeOptionalArray<T>(value?: T | T[]): T[] | undefined {
   if (value === undefined) return undefined;
   return Array.isArray(value) ? value : [value];
+}
+
+function buildNearTagSuggestions(
+  store: MemoryStore,
+  requestedTags: string[] | undefined,
+  filter: { scope?: MemoryScope[]; kind?: MemoryKind[]; sessionId?: string; projectId?: string; repoPath?: string } = {},
+): NearTagSuggestion[] {
+  if (!requestedTags || requestedTags.length === 0) return [];
+
+  const memories = store.listAllInternal({ status: "active", ...filter });
+  const tagCatalog = buildTagCatalog(memories, { limit: 200, maxExamplesPerTag: 0 });
+  return suggestNearTags(requestedTags, tagCatalog);
 }
 
 export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getActiveStore: (cwd: string) => MemoryStore): void {
@@ -67,9 +79,18 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         projectId: identity.projectId,
         repoPath: identity.repoPath,
       });
+      const nearTagSuggestions = results.length === 0
+        ? buildNearTagSuggestions(store, params.tags, {
+            scope: params.scope as MemoryScope[] | undefined,
+            kind: params.kind as MemoryKind[] | undefined,
+            sessionId: identity.sessionId,
+            projectId: identity.projectId,
+            repoPath: identity.repoPath,
+          })
+        : [];
       return {
-        content: [{ type: "text", text: withLegacyNotice(formatMemorySearchResults(params.query, results, store.dbPath), params.scope as MemoryScope[] | undefined) }],
-        details: { dbPath: store.dbPath, results },
+        content: [{ type: "text", text: withLegacyNotice(formatMemorySearchResults(params.query, results, store.dbPath, nearTagSuggestions), params.scope as MemoryScope[] | undefined) }],
+        details: nearTagSuggestions.length > 0 ? { dbPath: store.dbPath, results, nearTagSuggestions } : { dbPath: store.dbPath, results },
       };
     },
   });
@@ -158,6 +179,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         { requirePrimary: requestedScope !== "global" },
       );
       if (identity.error) return identityErrorResponse(identity.error);
+      const nearTagSuggestions = buildNearTagSuggestions(store, params.tags, {
+        scope: [requestedScope],
+        sessionId: identity.sessionId,
+        projectId: identity.projectId,
+        repoPath: identity.repoPath,
+      });
       const memory = store.createMemory({
         ...decorateCreateMemoryInput(
           {
@@ -173,8 +200,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         sourceAgent: "pi",
       });
       return {
-        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store), requestedScope) }],
-        details: { dbPath: store.dbPath, memory },
+        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store, nearTagSuggestions), requestedScope) }],
+        details: nearTagSuggestions.length > 0 ? { dbPath: store.dbPath, memory, nearTagSuggestions } : { dbPath: store.dbPath, memory },
       };
     },
   });
@@ -418,11 +445,17 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         };
       }
 
+      const nearTagSuggestions = buildNearTagSuggestions(store, params.tags !== undefined ? updateParams.tags : undefined, {
+        scope: [(params.scope ?? existingMemory.scope) as MemoryScope],
+        sessionId: existingMemory.sessionId,
+        projectId: updateParams.projectId ?? existingMemory.projectId,
+        repoPath: updateParams.repoPath ?? existingMemory.repoPath,
+      });
       const { archiveReason: _archiveReason, ...coreUpdateParams } = updateParams;
       const memory = store.updateMemory(coreUpdateParams);
       return {
-        content: [{ type: "text", text: withLegacyNotice(formatMemoryUpdated(memory, store), params.scope as MemoryScope | undefined) }],
-        details: { dbPath: store.dbPath, memory },
+        content: [{ type: "text", text: withLegacyNotice(formatMemoryUpdated(memory, store, nearTagSuggestions), params.scope as MemoryScope | undefined) }],
+        details: nearTagSuggestions.length > 0 ? { dbPath: store.dbPath, memory, nearTagSuggestions } : { dbPath: store.dbPath, memory },
       };
     },
   });
@@ -455,6 +488,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       if (identity.error) return identityErrorResponse(identity.error);
 
       const tags = stripTodoWorkflowTags(params.tags ?? []);
+      const nearTagSuggestions = buildNearTagSuggestions(store, tags, {
+        scope: [requestedScope],
+        sessionId: identity.sessionId,
+        projectId: identity.projectId,
+        repoPath: identity.repoPath,
+      });
 
       const summary = buildTodoSummary(params);
 
@@ -478,8 +517,8 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         sourceAgent: "pi",
       });
       return {
-        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store), requestedScope) }],
-        details: { dbPath: store.dbPath, memory },
+        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store, nearTagSuggestions), requestedScope) }],
+        details: nearTagSuggestions.length > 0 ? { dbPath: store.dbPath, memory, nearTagSuggestions } : { dbPath: store.dbPath, memory },
       };
     },
   });

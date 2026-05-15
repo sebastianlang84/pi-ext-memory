@@ -16,14 +16,13 @@ Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/
 
 ### 1. Tag hygiene and catalog
 
-- Add near-tag suggestions so search/save/update paths can warn about likely duplicate tags such as `agentic-context` vs `agent-context`; plan: [docs/plans/tag-catalog-controlled-folksonomy.md](docs/plans/tag-catalog-controlled-folksonomy.md).
 - Decide how to handle old workflow tags (`todo`, `p1`, `blocked`) that were written before new todo saves stopped adding them: audit recommendation, explicit migration, or leave as historical data.
 - Consider whether a tiny curated preferred-tag seed is needed, or whether the derived `memory_tag_catalog` is sufficient.
 
 ### 2. Ranking and near-miss retrieval
 
 - Make memory retrieval rank exact tag and canonical-key matches ahead of weak semantic/lexical matches; a query containing `git` should surface `git`/`identity`/`commit` tagged memories even if the rest of the query is noise.
-- Improve empty-result behavior by reporting near tag/key misses instead of only `No memories matched`.
+- Improve remaining empty-result behavior by reporting near key/canonical misses and broader non-tag hints instead of only `No memories matched`.
 
 ### 3. Minimal canonical facts
 

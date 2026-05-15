@@ -107,6 +107,8 @@ Use `memory_tag_catalog` before creating unfamiliar tags. It is read-only: it de
 
 Catalog entries show each tag's count, scopes, kinds, and recent example titles. Use the catalog to reuse existing content/context tags instead of creating near-duplicates.
 
+When a tag-filtered `memory_search` has no results, or when `memory_save`, `memory_save_todo`, or `memory_update` receives a new tag that looks close to an existing tag, the tool can return advisory `near_tag_suggestions`. Suggestions never rewrite tags automatically; retry or patch explicitly if the existing tag is the intended one.
+
 ## Write guidance
 
 Save only explicit durable facts, decisions, preferences, reusable context, persistent todos, handoffs, project paths, or information the user explicitly asks the agent to remember.

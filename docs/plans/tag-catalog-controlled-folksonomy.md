@@ -7,7 +7,7 @@ write-when: Tag-catalog scope, implementation order, or acceptance criteria chan
 
 # Plan — Lightweight Tag Catalog and Reuse
 
-Status: partially implemented
+Status: partially implemented; slices 1-3 implemented
 
 ## Purpose
 
@@ -65,12 +65,18 @@ Acceptance:
 - Catalog is scoped/filterable enough to avoid noise: global/repo/session, kind, status.
 - No schema migration required.
 
-### Slice 3 — Add near-tag suggestions
+### Slice 3 — Add near-tag suggestions — implemented
 
 - For a proposed or searched tag, compare against the derived catalog.
 - Start simple: exact prefix, substring, token overlap, and edit-distance-style similarity if cheap.
 - Return suggestions such as: `agentic-context` not found; similar existing tags: `agent-context`.
 - Do not auto-rewrite tags in the MVP.
+
+Implemented behavior:
+
+- Empty tag-filtered `memory_search` output can include advisory `near_tag_suggestions`.
+- `memory_save`, `memory_save_todo`, and `memory_update` can include advisory `near_tag_suggestions` when requested tags look close to existing active tags in the relevant scope.
+- Suggestions are returned only as warnings/details; the tools never rewrite the caller's tags automatically.
 
 Acceptance:
 
@@ -114,7 +120,6 @@ Acceptance:
 
 - Should preferred tags be purely derived from usage, or should there also be a small curated global catalog memory?
 - Should old workflow tags be cleaned by audit recommendations only, by an explicit migration, or left as historical data?
-- Should save/update paths warn when a new tag is close to an existing catalog tag?
 
 ## Risks
 
