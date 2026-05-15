@@ -17,7 +17,7 @@ export const TOKEN_INJECTION_BUDGETS = {
 
 type BudgetName = keyof typeof TOKEN_INJECTION_BUDGETS;
 
-type RegisteredTool = {
+export type RegisteredTool = {
   name: string;
   description?: string;
   promptSnippet?: string;
@@ -122,7 +122,7 @@ function summarizePieces(pieces: TextPiece[]): { estimatedTokens: number; chars:
   };
 }
 
-async function collectRegisteredTools(): Promise<RegisteredTool[]> {
+export async function collectRegisteredTools(): Promise<RegisteredTool[]> {
   installPromptSurfaceMocks();
   const tools: RegisteredTool[] = [];
   const { registerMemoryTools } = await import("../src/pi-extension/tools.ts");
@@ -130,7 +130,7 @@ async function collectRegisteredTools(): Promise<RegisteredTool[]> {
   registerMemoryTools(
     { registerTool(tool: RegisteredTool) { tools.push(tool); } } as never,
     () => {
-      throw new Error("token-injection report only inspects tool metadata; execute() is not available");
+      throw new Error("prompt-surface inspection only reads tool metadata; execute() is not available");
     },
   );
 

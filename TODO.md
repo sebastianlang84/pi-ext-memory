@@ -12,25 +12,15 @@ Rule: Completed items are removed, not checked off.
 
 Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/todo-backlog-review-2026-05-15.md)
 
-## Retrieval quality work packages
+## Retrieval quality evidence gates
 
-### 1. Minimal canonical facts
-
-- Add canonical fact/key support for durable single-source facts such as `git.identity.default`, repo paths, and stable user preferences, so agents can resolve known fact types without relying only on free-text search.
-- Keep canonical facts lightweight: do not reintroduce a `fact` kind, knowledge graph, broad registry, or background resolver; prefer existing tags/metadata or one minimal indexed field if tests prove it necessary.
-
-### 2. Advisory hygiene and conflict audit
-
-- Detect conflicting active memories in the same canonical fact cluster, especially Git identity variants, and return an explicit conflict/canonical-candidate report instead of letting agents guess.
-- Add memory hygiene/dedup support for exact key/tag clusters that recommends a canonical record and archive candidates; keep all archive actions explicit/manual.
-
-## Prompt injection quality
-
-- Build a small prompt-routing eval set before accepting further prompt/schema compression: cover `memory_search`, `memory_list`, `memory_save`, `memory_save_todo`, `memory_save_handoff`, `memory_update`, `memory_audit`, `memory_tag_catalog`, `memory_stats`, and negative cases where no memory tool should be used; verify expected tool choice and key arguments with a real model.
+- Before adding explicit canonical-key write fields or canonical-cluster audit, collect concrete failed retrieval/conflict cases where existing tags, `memory_tag_catalog`, exact tag/`metadata.canonicalKey` ranking, and near-key/tag hints are insufficient.
+- Only promote canonical keys back to implementation if those cases show a high-value gap that cannot be solved with tags/search/audit output without adding prompt-facing tool schema bloat.
 
 ## Deferred until evidence justifies them
 
 - Research whether local autoresearch tooling can help optimize pi-memory prompt injection for lower token cost without degrading agent behavior.
-- Add specialized resolver tools or APIs for high-value facts, starting with Git identity and repo path resolution, only after minimal canonical facts and ranking still leave a concrete gap; prefer one small generic resolver surface over multiple normal tools.
-- Explore a tiny startup canonical-facts card with only pinned/canonical facts, not all memories, only after retrieval evals show search/fallback is insufficient; keep it hard-capped or opt-in.
+- Add optional `canonicalKey` write support and canonical-key conflict audit only if the retrieval-quality evidence gate proves a high-value gap; keep assignment explicit and manual.
+- Add specialized resolver tools or APIs for high-value facts, starting with Git identity and repo path resolution, only after existing tags/search/audit and any proven canonical-key support still leave a concrete gap; prefer one small generic resolver surface over multiple normal tools.
+- Explore a tiny startup canonical-keys card with only pinned/keyed memories, not all memories, only after retrieval evals show search/fallback is insufficient; keep it hard-capped or opt-in.
 

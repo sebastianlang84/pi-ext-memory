@@ -100,6 +100,16 @@ npm run check:token-injection
 
 The check reports estimated tokens and char counts for registered tool prompt metadata, tool schema strings, and representative turn-start memory injections. Regression limits are guardrails only; the target is still as little injected text as possible. The estimate is intentionally simple (`ceil(normalized chars / 4)`) so the check stays local-first and dependency-light.
 
+## Prompt-routing evals
+
+Run the optional prompt-routing eval before further tool prompt/schema compression:
+
+```bash
+npm run eval:prompt-routing
+```
+
+By default, the script validates and reports the eval fixture set without calling a model. Set `PI_MEMORY_PROMPT_ROUTING_EVAL_COMMAND` to a command that reads the prompt on stdin and prints JSON `{ "toolName": string|null, "arguments": object }` to run the same cases against a real model, for example `PI_MEMORY_PROMPT_ROUTING_EVAL_COMMAND='your-model-cli --json' npm run eval:prompt-routing`. The eval checks expected tool choice plus key arguments for all memory tools and no-tool negative cases. It is developer-only and adds no runtime prompt tokens.
+
 ## Version metadata
 
 For release-relevant commits, keep these in sync:

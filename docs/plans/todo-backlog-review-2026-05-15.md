@@ -24,8 +24,10 @@ Review all current `TODO.md` items for:
 - Retrieval eval coverage now includes Git identity, GitHub SSH push, repo path, tag-only lexical retrieval, alias-removal negative controls, and unrelated-noise negative controls.
 - `src/pi-extension/retrieval.ts` already keeps turn-start injection small: staged session/project/repo/global search, result limit 3, no broad unscoped fallback.
 - `CHANGELOG.md` `2.0.9` through `2.0.11` record prompt/guidance compaction, retrieval fallback, and documentation/status freshness work, so more prompt-injection optimization should be measurement-led.
-- `src/pi-extension/audit.ts` handles lifecycle and identity hygiene, but not canonical fact conflicts or fact-cluster deduping.
+- `src/pi-extension/audit.ts` handles lifecycle and identity hygiene, but not canonical-key conflicts or keyed/tag-cluster deduping.
+- Normal `memory_save`/`memory_update` tool schemas do not expose `metadata` or `canonicalKey`, so new canonical-key write support would add prompt-facing schema surface.
 - `README.md` no longer advertises removed `progress_snapshot` writes after the v2.0.11 documentation refresh; broader write-policy hardening remains open.
+- `npm run eval:prompt-routing` now provides an optional developer-only eval fixture set for all memory tools plus no-tool negatives; default mode validates fixtures without a model command and adds no runtime prompt tokens.
 - `TODO.md` no longer keeps the completed v2.0.0 section after the v2.0.11 documentation refresh.
 
 ## Item-by-item review
@@ -34,18 +36,18 @@ Review all current `TODO.md` items for:
 | --- | --- | --- | --- | --- |
 | Research local autoresearch tooling for prompt injection token cost | Medium | Unclear until measured | Good only if local and one-off | Keep as research, but low priority. Recent prompt-shortening work already reduced repeated guidance; next useful step is measurement, not tooling adoption. Avoid adding a resident service or dependency. |
 | Preferred-tag seed vs derived catalog | Medium | Medium | Strongest when derived-only | Resolved: use the on-demand derived `memory_tag_catalog`; do not add a curated preferred-tag seed, catalog memory, alias table, or turn-start tag injection. |
-| Canonical fact/key support (`git.identity.default`, repo paths, stable prefs) | High | High | Good if narrowly scoped | Real problem: agents need deterministic single-source facts. Do not reintroduce `fact` kind; prefer a small canonical key/fact-cluster concept using tags/metadata or one minimal indexed field. |
+| Explicit canonical keys for author-declared memories (`canonicalKey: "git.identity.default"`, repo paths, stable prefs) | Medium hypothesis; low until failures are shown | Low now; read path already exists | Risky unless evidence-gated | Current search already ranks exact tags and existing `metadata.canonicalKey`, and zero-hit search can suggest near canonical keys. The missing piece is write-side explicitness, but adding it to normal tools costs prompt/schema surface. Keep as an evidence gate, not an active implementation package. |
 | Rank exact keys and tag matches ahead of weak semantic/lexical matches | High | High | Strong | Implemented as internal exact tag and `metadata.canonicalKey` ranking signals; no separate prompt-facing resolver was added. |
-| Specialized resolver tools/APIs for Git identity and repo path | High | High | Medium-good if surface stays small | Strong deterministic local value via Git config/repo metadata. Prefer internal resolver API or one generic resolver surface over several new normal tools, to avoid prompt/tool bloat. |
-| Detect conflicting active memories in same fact cluster | High | High | Good if advisory | Useful once canonical keys exist. Return explicit conflict/canonical-candidate reports; never auto-choose on low evidence. |
-| Memory hygiene/dedup support for clusters | Medium | Medium | Good if manual/advisory | ADR 007 rejects semantic duplicate detection as a system feature. Keep this limited to exact key/tag clusters and explicit archive recommendations. |
+| Specialized resolver tools/APIs for Git identity and repo path | Medium hypothesis | Unproven | Medium at best | Potential deterministic value, but likely belongs outside memory unless repeated failures prove tags/search/audit cannot handle it. Prefer no new normal tools unless a concrete gap survives evidence checks. |
+| Detect conflicting active memories in same canonical-key cluster | Medium hypothesis | Low until keyed memories are writable/used | Good only if advisory and gated | Useful only after canonical-key usage exists. Do not build conflict audit for an unused/manual-internal field. |
+| Memory hygiene/dedup support for clusters | Medium | Medium only for exact observed clusters | Good if manual/advisory | ADR 007 rejects semantic duplicate detection as a system feature. Keep this limited to exact key/tag clusters and explicit archive recommendations, and require evidence of recurring duplicates first. |
 | Improve empty-result behavior with fallback keyword/tag searches and near misses | High | Medium-high | Strong | Implemented for `memory_search` as advisory zero-hit hints for near canonical keys, near tags, and broader retry guidance without broadening recall automatically. |
 | Harden write policy docs/tool guidance | High | High | Excellent | README stale `progress_snapshot` wording is fixed. Continue clarifying docs/tool guidance to prevent memory pollution and transient-preference saves. |
-| Tiny startup canonical-facts card with pinned/canonical facts | Medium | Potentially high | Risky unless tiny | Defer until canonical keys and evals prove that search fallback is insufficient. If implemented, cap hard (e.g. only pinned canonical facts, few lines) and measure token cost. |
+| Tiny startup canonical-keys card with pinned/keyed memories | Medium hypothesis | Potentially high only if retrieval gaps recur | Risky unless tiny | Defer until canonical-key evidence and evals prove that search fallback is insufficient. If implemented, cap hard (e.g. only pinned/keyed memories, few lines) and measure token cost. |
 
 ## Applied consolidation
 
-`TODO.md` now keeps the remaining open work in canonical-fact and advisory-audit work packages plus evidence-gated deferred items. The tag-catalog seed question is resolved in favor of the derived catalog:
+`TODO.md` now keeps canonical-key work as an evidence gate plus deferred implementation items, not an active implementation package. The tag-catalog seed question is resolved in favor of the derived catalog:
 
 Resolved tag hygiene/catalog decision:
 
@@ -55,25 +57,26 @@ Resolved tag hygiene/catalog decision:
 
 Remaining open packages:
 
-1. **Minimal canonical facts**
-   - Add canonical keys/facts only in the smallest form that solves deterministic fact lookup.
+1. **Retrieval quality evidence gate**
+   - Collect concrete zero-hit, wrong-hit, or conflict cases where current tags, derived tag catalog, exact tag/`metadata.canonicalKey` ranking, and near-key/tag hints are insufficient.
+   - Only promote explicit canonical-key write support if those cases prove a high-value gap and the tool-schema/token cost stays negligible.
    - Preserve ADR 007: no new `fact` kind, knowledge graph, broad registry, or background resolver.
 
 2. **Advisory hygiene and conflict audit**
-   - Add conflict and dedup recommendations for exact canonical-key/tag clusters.
-   - Keep archive actions explicit/manual; no automatic conflict resolution.
+   - Keep canonical-key conflict audit deferred until keyed memories are actually writable/used.
+   - Consider exact tag-cluster dedup recommendations only for observed recurring duplicates; keep archive actions explicit/manual and no automatic conflict resolution.
 
 Deferred items remain visible but gated by evidence:
 
+- optional canonical-key write support and canonical-key conflict audit,
 - local autoresearch for prompt-injection token cost,
 - specialized resolver tools/APIs,
-- startup canonical-facts card.
+- startup canonical-keys card.
 
 ## Proposed priority order
 
-1. Minimal canonical key/fact support, starting with Git identity and repo path facts only if tests keep the model small.
-2. Advisory canonical-cluster conflict/audit support.
-3. Resolver tools/APIs, token-cost research, and startup canonical-facts card only if evidence still justifies them.
+1. Retrieval-quality evidence gate for canonical-key hypotheses: collect concrete failures before implementation.
+2. Optional canonical-key write support, canonical-cluster audit, resolver tools/APIs, token-cost research, and startup canonical-keys card only if evidence still justifies them.
 
 ## Lightweight guardrails
 
@@ -81,4 +84,4 @@ Deferred items remain visible but gated by evidence:
 - No broad new public tool family unless a single generic resolver proves insufficient.
 - No automatic deletion/archive; recommendations only.
 - No semantic duplicate detector beyond bounded exact-key/tag cluster checks.
-- Keep turn-start injection capped and measured; canonical facts card must be opt-in or tiny by hard limit.
+- Keep turn-start injection capped and measured; canonical-key write fields or startup cards must be opt-in/tiny and justified by concrete retrieval failures.

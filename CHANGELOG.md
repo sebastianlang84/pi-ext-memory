@@ -13,6 +13,11 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.6] - 2026-05-16
+
+### Added
+- Added `npm run eval:prompt-routing`, an optional developer eval runner for memory-tool routing cases with no runtime prompt-token cost.
+
 ## [2.1.5] - 2026-05-16
 
 ### Added
