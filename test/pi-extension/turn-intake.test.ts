@@ -88,7 +88,7 @@ test("runTurnIntake returns compact guidance when no search results match", () =
   try {
     const result = assertTurnMessage(runTurnIntake(store, "memoryonlyneedle", "/repo", "session-abc"));
     assert.match(result.content, /pi-memory: no relevant stored context/);
-    assert.match(result.content, /use memory_search if prior project\/workflow context matters/);
+    assert.match(result.content, /Use memory_search if prior context matters/);
     assert.equal(result.details.query, "memoryonlyneedle");
   } finally {
     store.close();
@@ -111,9 +111,9 @@ test("runTurnIntake returns memory content when search results are present", () 
     });
 
     const result = assertTurnMessage(runTurnIntake(store, "memoryonlyneedle", repoRoot, "session-abc"));
-    assert.match(result.content, /pi-memory context \(user overrides older memory\):/);
+    assert.match(result.content, /pi-memory context \(user wins\):/);
     assert.match(result.content, /Memory only fact/);
-    assert.match(result.content, /Use memory_search if more prior project\/workflow context matters/);
+    assert.match(result.content, /Use memory_search for more/);
     assert.equal(result.details.query, "memoryonlyneedle");
   } finally {
     store.close();

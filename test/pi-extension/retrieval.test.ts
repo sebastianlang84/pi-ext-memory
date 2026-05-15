@@ -430,7 +430,7 @@ test("fallback handoff preload warns agents not to overwrite it", () => {
   );
 
   assert.ok(message);
-  assert.match(message.content, /from another matching session\/repo\/project; do not overwrite unless explicit/);
+  assert.match(message.content, /fallback; do not overwrite unless explicit/);
 });
 
 test("buildTurnMemoryMessage injects latest handoff before normal memories", () => {
@@ -442,7 +442,7 @@ test("buildTurnMemoryMessage injects latest handoff before normal memories", () 
       sessionId: "session-789",
       title: "Context reset handoff",
       summary: "Resume handoff design after context reset.",
-      body: "## Next steps\n- Implement command UX",
+      body: "## Goal\nResume UX work\n\n## Next steps\n- Implement command UX\n- Verify concise preload\n\n## Done\n- This completed detail should stay out of turn-start injection",
       tags: ["handoff"],
       importance: 0.9,
       confidence: 0.9,
@@ -450,7 +450,7 @@ test("buildTurnMemoryMessage injects latest handoff before normal memories", () 
       pinned: false,
       createdAt: "2026-05-08T12:00:00.000Z",
       updatedAt: "2026-05-08T12:30:00.000Z",
-      metadata: {},
+      metadata: { handoff: { resumeInstruction: "Start with command UX" } },
     },
     isFallback: false,
   };
@@ -467,7 +467,10 @@ test("buildTurnMemoryMessage injects latest handoff before normal memories", () 
   assert.ok(message);
   assert.match(message.content, /Latest active handoff:/);
   assert.match(message.content, /Context reset handoff/);
-  assert.match(message.content, /## Next steps/);
+  assert.match(message.content, /Resume: Start with command UX/);
+  assert.match(message.content, /Next: Implement command UX; Verify concise preload/);
+  assert.doesNotMatch(message.content, /## Next steps/);
+  assert.doesNotMatch(message.content, /This completed detail/);
   assert.equal(message.details.latestHandoffId, "handoff-1");
   assert.equal(message.details.latestHandoffIsFallback, false);
 });
@@ -490,7 +493,7 @@ test("buildTurnMemoryMessage injects compact memory guidance even when no result
   assert.ok(message);
   assert.equal(
     message?.content,
-    "pi-memory: no relevant stored context. User overrides older memory; use memory_search if prior project/workflow context matters; save/update only durable notes or persistent todos.",
+    "pi-memory: no relevant stored context. User wins over memory. Use memory_search if prior context matters; save/update durable notes/todos/handoffs only.",
   );
   assert.deepEqual(message?.details.resultIds, []);
 });
@@ -515,7 +518,7 @@ test("buildTurnMemoryMessage self-describes for pi-memory introspection prompts"
     message?.content ?? "",
     /pi-memory: local SQLite memory extension for notes\/todos\/handoffs; no relevant stored context\./,
   );
-  assert.match(message?.content ?? "", /User overrides older memory/);
+  assert.match(message?.content ?? "", /User wins over memory/);
 });
 
 test("buildTurnMemoryMessage injects only a compact top-N context block", () => {
@@ -549,8 +552,8 @@ test("buildTurnMemoryMessage injects only a compact top-N context block", () => 
 
   assert.ok(message);
   assert.equal(message?.display, false);
-  assert.match(message?.content ?? "", /pi-memory context \(user overrides older memory\):/);
-  assert.match(message?.content ?? "", /Use memory_search if more prior project\/workflow context matters/);
+  assert.match(message?.content ?? "", /pi-memory context \(user wins\):/);
+  assert.match(message?.content ?? "", /Use memory_search for more/);
   assert.match(message?.content ?? "", /First memory/);
   assert.match(message?.content ?? "", /Second memory/);
   assert.match(message?.content ?? "", /Third memory/);

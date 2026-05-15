@@ -30,9 +30,9 @@ const MEMORY_CONTEXT_CUSTOM_TYPE = "pi-memory-context";
 const TURN_MEMORY_RESULT_LIMIT = 3;
 const TURN_MEMORY_STAGE_LIMIT = 4;
 const MEMORY_NO_HIT_GUIDANCE =
-  "User overrides older memory; use memory_search if prior project/workflow context matters; save/update only durable notes or persistent todos.";
+  "User wins over memory. Use memory_search if prior context matters; save/update durable notes/todos/handoffs only.";
 const MEMORY_HIT_GUIDANCE =
-  "Use memory_search if more prior project/workflow context matters; save/update only durable notes or persistent todos.";
+  "Use memory_search for more; save/update durable notes/todos/handoffs only.";
 
 export interface RetrieveTurnMemoriesOptions {
   resultLimit?: number;
@@ -229,7 +229,7 @@ function formatTurnContextLines(query: string, topResults: MemorySearchResult[],
 
   if (topResults.length > 0) {
     return [
-      `pi-memory context (${selfDescription}user overrides older memory):`,
+      `pi-memory context (${selfDescription}user wins):`,
       ...topResults.map((result, index) => formatTurnMemoryLine(index + 1, result)),
       MEMORY_HIT_GUIDANCE,
     ];
@@ -247,34 +247,73 @@ function isMemoryIntrospectionQuery(query: string): boolean {
 
 function formatLatestHandoffLines(latestHandoff: LatestHandoffResult): string[] {
   const { memory, isFallback } = latestHandoff;
-  const metadata = [`${memory.scope}`, `updated=${memory.updatedAt}`];
-
-  if (memory.sessionId) {
-    metadata.push(`session=${memory.sessionId}`);
-  }
-
-  if (memory.projectId) {
-    metadata.push(`project=${memory.projectId}`);
-  }
-
-  if (memory.repoPath) {
-    metadata.push(`repo=${memory.repoPath}`);
-  }
+  const metadata = [`${memory.scope}`, `updated=${memory.updatedAt.slice(0, 10)}`];
 
   return [
-    `Latest active handoff${isFallback ? " (from another matching session/repo/project; do not overwrite unless explicit)" : ""}:`,
+    `Latest active handoff${isFallback ? " (fallback; do not overwrite unless explicit)" : ""}:`,
     `- [${metadata.join(" | ")}] ${memory.title} — ${memory.summary}`,
-    ...(memory.body ? [memory.body] : []),
+    ...formatHandoffResumeLines(memory),
   ];
+}
+
+function formatHandoffResumeLines(memory: LatestHandoffResult["memory"]): string[] {
+  const resumeInstruction = getHandoffMetadataString(memory, "resumeInstruction");
+  const nextSteps = extractMarkdownListItems(memory.body, "Next steps", 2).map((item) => compactInlineText(item, 120));
+  const blockers = extractMarkdownListItems(memory.body, "Blockers", 2).map((item) => compactInlineText(item, 120));
+
+  return [
+    ...(resumeInstruction ? [`Resume: ${compactInlineText(resumeInstruction, 180)}`] : []),
+    ...(nextSteps.length > 0 ? [`Next: ${nextSteps.join("; ")}`] : []),
+    ...(blockers.length > 0 ? [`Blockers: ${blockers.join("; ")}`] : []),
+  ];
+}
+
+function getHandoffMetadataString(memory: LatestHandoffResult["memory"], key: string): string | undefined {
+  const handoff = memory.metadata.handoff;
+  if (!handoff || typeof handoff !== "object") return undefined;
+
+  const value = (handoff as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function extractMarkdownListItems(body: string | undefined, heading: string, maxItems: number): string[] {
+  if (!body) return [];
+
+  const lines = body.split(/\r?\n/);
+  const headingPattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "i");
+  const items: string[] = [];
+  let inSection = false;
+
+  for (const line of lines) {
+    if (/^##\s+/.test(line) && inSection) break;
+    if (headingPattern.test(line)) {
+      inSection = true;
+      continue;
+    }
+    if (!inSection) continue;
+
+    const match = /^-\s+(.+)$/.exec(line.trim());
+    if (match?.[1]) {
+      items.push(match[1].trim());
+      if (items.length >= maxItems) break;
+    }
+  }
+
+  return items;
+}
+
+function compactInlineText(text: string, maxChars: number): string {
+  const compacted = text.replace(/\s+/g, " ").trim();
+  return compacted.length <= maxChars ? compacted : `${compacted.slice(0, maxChars - 1).trimEnd()}…`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function formatTurnMemoryLine(index: number, result: MemorySearchResult): string {
   const kindLabel = result.kind ?? "memory";
   const metadata = [`${kindLabel}/${result.scope}`];
-
-  if (result.projectId) {
-    metadata.push(`project=${result.projectId}`);
-  }
 
   return `${index}. [${metadata.join(" | ")}] ${result.title} — ${result.summary}`;
 }

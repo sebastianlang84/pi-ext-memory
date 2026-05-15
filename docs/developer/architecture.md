@@ -90,6 +90,16 @@ The normal tool path is intentionally small:
 
 The durable decision is documented in [ADR 006](../adr/006-normal-and-advanced-tool-surface.md). The minimized memory model is documented in [ADR 007](../adr/007-memory-model-minimisation.md).
 
+## Token injection footprint
+
+Run the dependency-free prompt footprint check when tool metadata, tool schemas, or turn-start memory text changes:
+
+```bash
+npm run check:token-injection
+```
+
+The check reports estimated tokens and char counts for registered tool prompt metadata, tool schema strings, and representative turn-start memory injections. Regression limits are guardrails only; the target is still as little injected text as possible. The estimate is intentionally simple (`ceil(normalized chars / 4)`) so the check stays local-first and dependency-light.
+
 ## Version metadata
 
 For release-relevant commits, keep these in sync:
@@ -105,6 +115,7 @@ Use the smallest relevant check for the change. Common checks:
 
 ```bash
 npm test
+npm run check:token-injection
 git diff --check
 ```
 

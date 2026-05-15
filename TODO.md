@@ -35,6 +35,10 @@ Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/
 - Detect conflicting active memories in the same canonical fact cluster, especially Git identity variants, and return an explicit conflict/canonical-candidate report instead of letting agents guess.
 - Add memory hygiene/dedup support for exact key/tag clusters that recommends a canonical record and archive candidates; keep all archive actions explicit/manual.
 
+## Prompt injection quality
+
+- Build a small prompt-routing eval set before accepting further prompt/schema compression: cover `memory_search`, `memory_list`, `memory_save`, `memory_save_todo`, `memory_save_handoff`, `memory_update`, `memory_audit`, `memory_tag_catalog`, `memory_stats`, and negative cases where no memory tool should be used; verify expected tool choice and key arguments with a real model.
+
 ## Deferred until evidence justifies them
 
 - Research whether local autoresearch tooling can help optimize pi-memory prompt injection for lower token cost without degrading agent behavior.

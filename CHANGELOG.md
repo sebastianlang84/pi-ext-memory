@@ -13,6 +13,14 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-05-15
+
+### Added
+- Added `npm run check:token-injection` and regression tests for prompt-facing tool metadata and turn-start memory injection footprint.
+
+### Changed
+- Reduced prompt-facing memory tool metadata and schema wording, and made turn-start handoff injection more compact.
+
 ## [2.1.0] - 2026-05-15
 
 ### Added

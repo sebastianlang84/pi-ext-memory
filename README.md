@@ -39,6 +39,15 @@ Normal agent tools are `memory_search`, `memory_list`, `memory_save`, `memory_sa
 
 `memory_stats` is available for advanced/admin health and capacity checks, but it is not the normal first-choice tool path.
 
+## Developer checks
+
+```bash
+npm test
+npm run check:token-injection
+```
+
+`check:token-injection` reports estimated token/char counts for prompt-facing tool metadata and turn-start memory injections.
+
 ## Documentation
 
 - [User guide](docs/user/usage.md) — commands, tools, scopes, caps, configuration, and write guidance.
