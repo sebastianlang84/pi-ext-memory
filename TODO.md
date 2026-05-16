@@ -17,7 +17,6 @@ Evidence gate review: [docs/plans/retrieval-quality-evidence-gate-2026-05-16.md]
 
 - Re-open canonical-key retrieval evidence collection only with concrete zero-hit, wrong-hit, or conflict cases where existing tags, `memory_tag_catalog`, exact tag/`metadata.canonicalKey` ranking, and near-key/tag hints are insufficient.
 
-- Research whether local autoresearch tooling can help optimize pi-memory prompt injection for lower token cost without degrading agent behavior.
 - Add optional `canonicalKey` write support and canonical-key conflict audit only if the retrieval-quality evidence gate proves a high-value gap; keep assignment explicit and manual.
 - Add specialized resolver tools or APIs for high-value facts, starting with Git identity and repo path resolution, only after existing tags/search/audit and any proven canonical-key support still leave a concrete gap; prefer one small generic resolver surface over multiple normal tools.
 - Explore a tiny startup canonical-keys card with only pinned/keyed memories, not all memories, only after retrieval evals show search/fallback is insufficient; keep it hard-capped or opt-in.

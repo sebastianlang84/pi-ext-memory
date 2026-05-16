@@ -28,13 +28,14 @@ Review all current `TODO.md` items for:
 - Normal `memory_save`/`memory_update` tool schemas do not expose `metadata` or `canonicalKey`, so new canonical-key write support would add prompt-facing schema surface.
 - `README.md` no longer advertises removed `progress_snapshot` writes after the v2.0.11 documentation refresh; broader write-policy hardening remains open.
 - `npm run eval:prompt-routing` now provides an optional developer-only eval fixture set for all memory tools plus no-tool negatives; default mode validates fixtures without a model command and adds no runtime prompt tokens.
+- The local `~/dev/wasti-research` memory-tool prompt baseline passed 5/5 cases against the current pi-memory prompt surface with a throwaway memory DB; see `docs/plans/prompt-injection-autoresearch-baseline-2026-05-16.md`.
 - `TODO.md` no longer keeps the completed v2.0.0 section after the v2.0.11 documentation refresh.
 
 ## Item-by-item review
 
 | TODO item | Sense | Gain | Lightweight fit | Notes / recommendation |
 | --- | --- | --- | --- | --- |
-| Research local autoresearch tooling for prompt injection token cost | Medium | Unclear until measured | Good only if local and one-off | Keep as research, but low priority. Recent prompt-shortening work already reduced repeated guidance; next useful step is measurement, not tooling adoption. Avoid adding a resident service or dependency. |
+| Research local autoresearch tooling for prompt injection token cost | Resolved | No current change justified | Strong as an on-demand eval only | Measurement showed token budgets are green and `wasti-research` memory-tool prompt behavior is 5/5 pass. Do not change prompt text now; reuse the harness only for concrete future variants. |
 | Preferred-tag seed vs derived catalog | Medium | Medium | Strongest when derived-only | Resolved: use the on-demand derived `memory_tag_catalog`; do not add a curated preferred-tag seed, catalog memory, alias table, or turn-start tag injection. |
 | Explicit canonical keys for author-declared memories (`canonicalKey: "git.identity.default"`, repo paths, stable prefs) | Medium hypothesis; low until failures are shown | Low now; read path already exists | Risky unless evidence-gated | Current search already ranks exact tags and existing `metadata.canonicalKey`, and zero-hit search can suggest near canonical keys. The missing piece is write-side explicitness, but adding it to normal tools costs prompt/schema surface. Keep as an evidence gate, not an active implementation package. |
 | Rank exact keys and tag matches ahead of weak semantic/lexical matches | High | High | Strong | Implemented as internal exact tag and `metadata.canonicalKey` ranking signals; no separate prompt-facing resolver was added. |
@@ -69,14 +70,13 @@ Remaining open packages:
 Deferred items remain visible but gated by evidence:
 
 - optional canonical-key write support and canonical-key conflict audit,
-- local autoresearch for prompt-injection token cost,
 - specialized resolver tools/APIs,
 - startup canonical-keys card.
 
 ## Proposed priority order
 
 1. Retrieval-quality evidence gate for canonical-key hypotheses: collect concrete failures before implementation.
-2. Optional canonical-key write support, canonical-cluster audit, resolver tools/APIs, token-cost research, and startup canonical-keys card only if evidence still justifies them.
+2. Optional canonical-key write support, canonical-cluster audit, resolver tools/APIs, and startup canonical-keys card only if evidence still justifies them.
 
 ## Lightweight guardrails
 
