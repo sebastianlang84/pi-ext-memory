@@ -11,13 +11,11 @@ Purpose: Active work only.
 Rule: Completed items are removed, not checked off.
 
 Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/todo-backlog-review-2026-05-15.md)
+Evidence gate review: [docs/plans/retrieval-quality-evidence-gate-2026-05-16.md](docs/plans/retrieval-quality-evidence-gate-2026-05-16.md)
 
-## Retrieval quality evidence gates
+## Deferred until new evidence justifies them
 
-- Before adding explicit canonical-key write fields or canonical-cluster audit, collect concrete failed retrieval/conflict cases where existing tags, `memory_tag_catalog`, exact tag/`metadata.canonicalKey` ranking, and near-key/tag hints are insufficient.
-- Only promote canonical keys back to implementation if those cases show a high-value gap that cannot be solved with tags/search/audit output without adding prompt-facing tool schema bloat.
-
-## Deferred until evidence justifies them
+- Re-open canonical-key retrieval evidence collection only with concrete zero-hit, wrong-hit, or conflict cases where existing tags, `memory_tag_catalog`, exact tag/`metadata.canonicalKey` ranking, and near-key/tag hints are insufficient.
 
 - Research whether local autoresearch tooling can help optimize pi-memory prompt injection for lower token cost without degrading agent behavior.
 - Add optional `canonicalKey` write support and canonical-key conflict audit only if the retrieval-quality evidence gate proves a high-value gap; keep assignment explicit and manual.

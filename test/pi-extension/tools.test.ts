@@ -582,6 +582,46 @@ test("memory_search adds empty-result hints for near canonical keys", async (t) 
   ]);
 });
 
+test("memory_search explains tag-filter zero hits even when the query names a canonical key", async (t) => {
+  const projectContext = await createTempPiToolContext();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const canonicalMemory = createMemory({
+    id: "git-identity-default",
+    scope: "global",
+    title: "Default Git identity",
+    summary: "Use the default Git author when repository-local config is absent.",
+    tags: ["git", "identity"],
+    metadata: { canonicalKey: "git.identity.default" },
+  });
+  const store = createMinimalStore({
+    searchMemories() { return []; },
+    listAllInternal(filter?: Partial<NormalizedListMemoriesInput>): MemoryRecord[] {
+      return filter?.status === "active" ? [canonicalMemory] : [];
+    },
+  });
+
+  const tools: RegisteredTool[] = [];
+  const registerMemoryTools = await importRegisterMemoryTools();
+  registerMemoryTools({ registerTool(tool: RegisteredTool) { tools.push(tool); } } as never, () => store as never);
+
+  const output = await toolByName(tools, "memory_search").execute(
+    "call-search-canonical-key-with-tag-filter",
+    { query: "git.identity.default", scope: ["global"], tags: ["missing-tag"] },
+    new AbortController().signal,
+    () => undefined,
+    { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
+  );
+
+  assert.match(output.content[0].text, /No memories matched "git\.identity\.default"/);
+  assert.match(output.content[0].text, /empty_result_hints:\n- near_canonical_key: git\.identity\.default -> git\.identity\.default/);
+  assert.match(output.content[0].text, /broaden_search: Retry without tag filters or check memory_tag_catalog for current tags\./);
+  assert.deepEqual(output.details.emptyResultHints, [
+    { type: "near_canonical_key", input: "git.identity.default", suggestions: ["git.identity.default"] },
+    { type: "broaden_search", message: "Retry without tag filters or check memory_tag_catalog for current tags." },
+  ]);
+});
+
 test("memory_search keeps generic empty-result hints when no canonical key is near", async (t) => {
   const projectContext = await createTempPiToolContext();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });

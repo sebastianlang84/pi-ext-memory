@@ -174,6 +174,47 @@ test("searchMemories finds exact canonicalKey matches without prompt-facing reso
   }
 });
 
+test("searchMemories ranks exact canonicalKey matches ahead of exact tag and lexical distractors", () => {
+  const dbPath = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath, embeddingAdapter: createNoSemanticEmbeddingAdapter() });
+
+  try {
+    const canonicalFact = store.createMemory({
+      scope: "global",
+      title: "Default source-control author",
+      summary: "Use this canonical machine setting when creating repository commits.",
+      tags: ["commit"],
+      importance: 0.1,
+      confidence: 0.1,
+      metadata: { canonicalKey: "git.identity.default" },
+    });
+
+    store.createMemory({
+      scope: "global",
+      title: "Exact tag distractor",
+      summary: "A high-confidence noisy note whose tags echo the canonical key but do not declare it.",
+      tags: ["git.identity.default", "git", "identity", "default"],
+      importance: 1,
+      confidence: 1,
+    });
+
+    store.createMemory({
+      scope: "global",
+      title: "Lexical source-control distractor",
+      summary: "git.identity.default appears here as ordinary prose, not as the stable memory key.",
+      tags: ["noise"],
+      importance: 1,
+      confidence: 1,
+    });
+
+    const results = store.searchMemories({ query: "git.identity.default git", scope: ["global"], limit: 5 });
+
+    assert.equal(results[0]?.id, canonicalFact.id);
+  } finally {
+    store.close();
+  }
+});
+
 test("searchMemories relaxed lexical fallback does not expand hardcoded aliases", () => {
   const dbPath = createTempDbPath();
   const store = initializeMemoryStore({ dbPath, embeddingAdapter: createNoSemanticEmbeddingAdapter() });
