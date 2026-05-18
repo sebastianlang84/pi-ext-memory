@@ -1,8 +1,8 @@
 ---
-role: Active implementation plan for tag catalog and tag-reuse behavior
-contains: Scope, decisions, slices, acceptance criteria, and risks for a lightweight pi-memory tag catalog
-not-contains: Completed history, release notes, or a final ADR
-write-when: Tag-catalog scope, implementation order, or acceptance criteria change
+role: Historical completed implementation plan for tag catalog and tag-reuse behavior
+contains: Completed scope, decisions, slices, acceptance criteria, and risks for the lightweight pi-memory tag catalog
+not-contains: Active task tracking, release notes, or a final ADR
+write-when: Historical status or archival routing changes
 ---
 
 # Plan — Lightweight Tag Catalog and Reuse

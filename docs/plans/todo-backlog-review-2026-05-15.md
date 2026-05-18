@@ -28,7 +28,7 @@ Review all current `TODO.md` items for:
 - Normal `memory_save`/`memory_update` tool schemas do not expose `metadata` or `canonicalKey`, so new canonical-key write support would add prompt-facing schema surface.
 - `README.md` no longer advertises removed `progress_snapshot` writes after the v2.0.11 documentation refresh; broader write-policy hardening remains open.
 - `npm run eval:prompt-routing` now provides an optional developer-only eval fixture set for all memory tools plus no-tool negatives; default mode validates fixtures without a model command and adds no runtime prompt tokens.
-- The local `~/dev/wasti-research` memory-tool prompt baseline passed 5/5 cases against the current pi-memory prompt surface with a throwaway memory DB; see `docs/plans/prompt-injection-autoresearch-baseline-2026-05-16.md`.
+- The local `~/dev/wasti-research` memory-tool prompt baseline passed 5/5 cases against the current pi-memory prompt surface with a throwaway memory DB; see `docs/archive/plans/prompt-injection-autoresearch-baseline-2026-05-16.md`.
 - `TODO.md` no longer keeps the completed v2.0.0 section after the v2.0.11 documentation refresh.
 
 ## Item-by-item review
