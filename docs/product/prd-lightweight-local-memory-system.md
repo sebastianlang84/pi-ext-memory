@@ -112,6 +112,19 @@ Durable architecture decisions live in ADRs; this PRD only summarizes the produc
 - Tool surface: normal agents should use the small tool path; `memory_stats` is advanced/admin only. See [ADR 006](../adr/006-normal-and-advanced-tool-surface.md).
 - Memory model: generic kindless memories plus explicit `todo` and `handoff` flows. See [ADR 007](../adr/007-memory-model-minimisation.md).
 
+### Related filesystem-first Pi memory prior art
+
+Two Markdown-first Pi memory repos were inspected on 2026-05-24: `jayzeng/pi-memory` and `tickernelz/pi-memory` under `/home/wasti/dev/github/`.
+
+Findings relevant to this PRD:
+
+- `jayzeng/pi-memory` validates that plain Markdown plus optional qmd can be useful for memory recall, scratchpads, daily logs, and compaction handoffs. Its strongest lessons are optional rebuildable indexes, hard-capped prompt injection, and cache-stable snapshots.
+- `tickernelz/pi-memory` validates a minimal fixed-file model (`MEMORY.md`, `IDENTITY.md`, `USER.md`, daily logs) and a single compact tool, but it also shows the risk of mixing identity/persona instructions with durable memory.
+- These projects support keeping `pi-memory` local-first and explicit, but they do not change the V1 source-of-truth decision: current `pi-memory` remains SQLite-backed to support scoped structured todos/handoffs, metadata filters, updates, audit, tag catalog, and hybrid FTS/vector retrieval.
+- The database-free sibling design belongs in `pi-lightmem`, whose PRD is `/home/wasti/.pi/agent/extensions/pi-lightmem/docs/PRD.md`. `pi-lightmem` should be treated as a separate convention/experiment, not as a replacement for this V1 product line.
+
+Upgrade posture for this repo: borrow measured ideas only when they improve retrieval quality or portability without increasing normal prompt/tool bloat. Good candidates are Markdown export/import research, cache-stable turn-start context, compaction-handoff ergonomics, and filesystem-readable diagnostics. Do not add fixed `IDENTITY.md`/`USER.md` files, broad automatic injection, or qmd as a required dependency to the SQLite V1 design without new evidence and an ADR.
+
 ---
 
 ## 7. Memory Model
