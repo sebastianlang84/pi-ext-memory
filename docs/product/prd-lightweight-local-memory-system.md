@@ -111,6 +111,7 @@ Durable architecture decisions live in ADRs; this PRD only summarizes the produc
 - Scope identity: normal agent-facing scopes are `global`, `repo`, and `session`; `project` remains legacy/advanced compatibility. See [ADR 004](../adr/004-scope-first-memory-identity.md) and [ADR 005](../adr/005-simplified-agent-facing-scopes.md).
 - Tool surface: normal agents should use the small tool path; `memory_stats` is advanced/admin only. See [ADR 006](../adr/006-normal-and-advanced-tool-surface.md).
 - Memory model: generic kindless memories plus explicit `todo` and `handoff` flows. See [ADR 007](../adr/007-memory-model-minimisation.md).
+- Runtime context boundary: no general boot-loaded or AGENTS-like memory segment; memory context remains turn-start, capped, retrieval-driven, and evidence-gated for any future startup card. See [ADR 008](../adr/008-turn-start-context-boundary.md).
 
 ### Related filesystem-first Pi memory prior art
 
@@ -327,7 +328,10 @@ Current posture: manual-first writes with explicit tools and commands.
 6. How tightly should Pi couple to the memory system?
    - Current posture: thin adapter over an independent core.
 
-7. Should import/export become a product feature?
+7. Should pi-memory add a boot-loaded startup context segment?
+   - Current posture: no general startup segment. Keep context turn-start and retrieval-driven; revisit only with concrete evidence and a tiny measured design.
+
+8. Should import/export become a product feature?
    - Not in current V1.
    - Revisit only when backup, migration, or cross-tool portability needs become concrete.
 

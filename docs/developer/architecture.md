@@ -49,6 +49,12 @@ The core should remain usable without Pi-specific command or UI concepts.
 
 Pi-specific modules should delegate policy decisions to `src/core/` rather than duplicating them.
 
+## Startup and turn-start context boundary
+
+pi-memory does not maintain a general boot-loaded, AGENTS-like memory segment. `session_start` is status-only; memory context is injected from `before_agent_start` through turn intake, using the current prompt plus session/repo/project/global context.
+
+Turn-start context is intentionally non-normative, capped, and retrieval-driven. It may include the latest matching active handoff and a small number of staged retrieval results, but it should not become a broad startup preload or generated instruction file. Future startup-card ideas are deferred unless concrete retrieval failures justify a tiny measured design; see [ADR 008](../adr/008-turn-start-context-boundary.md).
+
 ## Storage
 
 The default store is one local SQLite database at:

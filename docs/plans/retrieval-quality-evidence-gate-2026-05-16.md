@@ -33,7 +33,7 @@ Do current tags, `memory_tag_catalog`, exact tag / `metadata.canonicalKey` ranki
 
 No concrete failed retrieval or conflict case was found that justifies expanding prompt-facing tool schemas or turn-start context. Keep canonical-key write support, canonical-cluster audit, resolver tools, and startup canonical-key cards deferred.
 
-Re-open this gate only with a reproducible zero-hit, wrong-hit, or conflicting-active-memory case where existing tags, `memory_tag_catalog`, exact tag / `metadata.canonicalKey` ranking, near-key hints, near-tag suggestions, and broaden-search guidance are insufficient.
+ADR 008 now makes the broader boundary explicit: pi-memory should not add a general boot-loaded or AGENTS-like memory segment. Re-open this gate only with a reproducible zero-hit, wrong-hit, or conflicting-active-memory case where existing turn-start retrieval, latest-handoff preload, explicit `memory_search`/`memory_list`, tags, `memory_tag_catalog`, exact tag / `metadata.canonicalKey` ranking, near-key hints, near-tag suggestions, and broaden-search guidance are insufficient.
 
 ## Verification
 
