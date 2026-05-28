@@ -411,6 +411,7 @@ test("memory_audit returns project migration preview and writes audit metadata",
     repoPath: projectContext.cwd,
     title: "Legacy project record",
     tags: ["todo", "p1", "policy"],
+    updatedAt: new Date().toISOString(),
   });
   const filters: Array<Partial<NormalizedListMemoriesInput> | undefined> = [];
   const metaWrites: Array<{ key: string; value: string }> = [];

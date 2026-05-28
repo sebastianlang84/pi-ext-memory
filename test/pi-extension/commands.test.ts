@@ -6,7 +6,6 @@ import test from "node:test";
 
 import { createMemoryCore, initializeMemoryStore, type MemorySearchResult, type SearchMemoriesInput } from "../../src/core/index.ts";
 import {
-  formatMemoryReview,
   formatMemorySessionSaved,
   formatMemorySessionSaveUsage,
 } from "../../src/pi-extension/formatters.ts";
@@ -99,27 +98,7 @@ function createMockCommandContext(cwd: string, sessionId: string) {
   return { ctx };
 }
 
-test("formatMemoryReview shows read-only guidance, suggested actions, and relevant memories", () => {
-  const searchPlan: SearchMemoriesInput[] = [
-    { query: "review", limit: 6, scope: ["session"], sessionId: "session-123" },
-    { query: "review", limit: 6, scope: ["project"], projectId: "@acme/api" },
-  ];
 
-  const output = formatMemoryReview(
-    [createResult()],
-    searchPlan,
-    { sessionId: "session-123", projectId: "@acme/api", repoPath: "/repo" },
-    "/db.sqlite",
-    "Reviewed retrieval quality and kept the flow manual-first.",
-  );
-
-  assert.match(output, /Manual memory review \(read-only\)\./);
-  assert.match(output, /suggested_actions:/);
-  assert.match(output, /Use memory_update/);
-  assert.match(output, /Use \/memory-session-save <summary>/);
-  assert.match(output, /relevant_memories: 1/);
-  assert.match(output, /Keep writes manual-first/);
-});
 
 test("formatMemorySessionSaveUsage shows explicit usage guidance", () => {
   const output = formatMemorySessionSaveUsage(12);
@@ -167,7 +146,7 @@ test("commands shutdown closes the shared runtime store", async () => {
   assert.equal(closeCount, 1);
 });
 
-test("/memory-review handler writes review output to chat", async () => {
+test("/memory-search without query shows current memory context", async () => {
   const { cwd, repoRoot } = createProjectContext();
   const dbPath = join(createTempDir("pi-memory-command-db-"), "memory.sqlite");
   const store = initializeMemoryStore({ dbPath });
@@ -200,8 +179,8 @@ test("/memory-review handler writes review output to chat", async () => {
     const { pi, commands, messages } = createMockPi();
     registerMemoryCommands(pi as never, createMemoryCore());
 
-    const handler = commands.get("memory-review");
-    assert.ok(handler, "expected memory-review command to be registered");
+    const handler = commands.get("memory-search");
+    assert.ok(handler, "expected memory-search command to be registered");
 
     const { ctx } = createMockCommandContext(cwd, "session-review-123");
     await handler("", ctx);
@@ -209,7 +188,7 @@ test("/memory-review handler writes review output to chat", async () => {
     assert.equal(messages.length, 1);
     assert.equal(messages[0]?.customType, "pi-memory-command-output");
     const output = messages[0]?.content ?? "";
-    assert.match(output, /Manual memory review \(read-only\)\./);
+    assert.match(output, /Current memory context \(read-only\)\. Use \/memory-search <query> for targeted search\./);
     assert.match(output, /session_id: session-review-123/);
     assert.match(output, /session_summary: Reviewed relevant memories before deciding what to persist\./);
     assert.match(output, /Keep writes manual-first for next steps/);
@@ -358,17 +337,16 @@ test("commands cover save -> search -> review -> session summary end to end", as
     registerMemoryCommands(pi as never, core);
 
     const { ctx } = createMockCommandContext(cwd, "session-e2e-123");
-    const memoryReview = commands.get("memory-review");
+    const memorySearch = commands.get("memory-search");
     const memorySessionSave = commands.get("memory-session-save");
 
-    assert.ok(memoryReview, "expected memory-review command to be registered");
+    assert.ok(memorySearch, "expected memory-search command to be registered");
     assert.ok(memorySessionSave, "expected memory-session-save command to be registered");
 
-    await memoryReview("", ctx);
+    await memorySearch("", ctx);
     const reviewOutput = messages[0]?.content ?? "";
-    assert.match(reviewOutput, /Manual memory review \(read-only\)\./);
+    assert.match(reviewOutput, /Current memory context \(read-only\)\. Use \/memory-search <query> for targeted search\./);
     assert.match(reviewOutput, /Close v0\.8\.1 manually/);
-    assert.match(reviewOutput, /Use memory_update/);
 
     await memorySessionSave("Closed v0.8.1 after save, search, review, and explicit session-summary verification.", ctx);
     const sessionOutput = messages[1]?.content ?? "";
@@ -447,7 +425,7 @@ test("/memory-status writes to stdout when hasUI is false", async () => {
 
 // --- /memory-search error path ---
 
-test("/memory-search with short query writes usage hint to chat", async () => {
+test("/memory-search without query shows context mode with usage hint", async () => {
   const { pi, commands, messages } = createMockPi();
   registerMemoryCommands(pi as never, createMemoryCore());
 
@@ -455,11 +433,27 @@ test("/memory-search with short query writes usage hint to chat", async () => {
   assert.ok(handler, "expected memory-search command to be registered");
 
   const { ctx } = createMockCommandContext("/workspace", "session-search-err-123");
+  await handler("", ctx);
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.customType, "pi-memory-command-output");
+  assert.match(messages[0]?.content ?? "", /Current memory context \(read-only\)\. Use \/memory-search <query> for targeted search\./);
+});
+
+test("/memory-search with single-char query runs targeted search", async () => {
+  const { pi, commands, messages } = createMockPi();
+  registerMemoryCommands(pi as never, createMemoryCore());
+
+  const handler = commands.get("memory-search");
+  assert.ok(handler, "expected memory-search command to be registered");
+
+  const { ctx } = createMockCommandContext("/workspace", "session-search-short-123");
   await handler("x", ctx);
 
   assert.equal(messages.length, 1);
   assert.equal(messages[0]?.customType, "pi-memory-command-output");
-  assert.match(messages[0]?.content ?? "", /Usage: \/memory-search/);
+  // targeted search output — not context mode
+  assert.match(messages[0]?.content ?? "", /Manual memory search for "x"/);
 });
 
 // --- /memory-handoff error paths ---

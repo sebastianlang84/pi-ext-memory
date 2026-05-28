@@ -5,7 +5,6 @@ import { formatAuditResults, runMemoryAudit } from "./audit.ts";
 import { findLatestExactSessionHandoff } from "./handoffs.ts";
 import { deriveMemoryTurnContext, findLatestHandoffForTurn, retrieveMemoriesForTurn } from "./retrieval.ts";
 import {
-  formatMemoryReview,
   formatMemorySearchResultLine,
   formatMemorySessionSaved,
   formatMemorySessionSaveUsage,
@@ -16,8 +15,7 @@ import { formatMemoryStatus } from "./status.ts";
 
 const MANUAL_SEARCH_RESULT_LIMIT = 8;
 const MANUAL_SEARCH_STAGE_LIMIT = 6;
-const MEMORY_REVIEW_QUERY = "todos handoffs risks next steps context";
-const MEMORY_REVIEW_RESULT_LIMIT = 8;
+const CONTEXT_QUERY = "todos handoffs risks next steps context";
 const MIN_SESSION_SUMMARY_LENGTH = 12;
 
 export function registerMemoryCommands(
@@ -38,37 +36,28 @@ export function registerMemoryCommands(
   });
 
   pi.registerCommand("memory-search", {
-    description: "Run a manual staged memory search for the current context",
+    description: "Search memories. With a query: targeted search. Without a query: shows current context (todos, handoffs, next steps).",
     handler: async (args, ctx) => {
       const query = args.trim();
-      if (query.length < 2) {
-        sendOutput(pi, "Usage: /memory-search <query>", ctx);
+      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
+      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
+
+      if (query.length === 0) {
+        // No query — context mode: show what the agent currently sees
+        const session = activeStore.getSession(turnContext.sessionId);
+        const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, CONTEXT_QUERY, turnContext, {
+          resultLimit: MANUAL_SEARCH_RESULT_LIMIT,
+          stageLimit: MANUAL_SEARCH_STAGE_LIMIT,
+        });
+        sendOutput(pi, formatContextSearch(results, searchPlan, turnContext, activeStore.dbPath, session?.summary), ctx);
         return;
       }
 
-      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
-
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, query, turnContext, {
         resultLimit: MANUAL_SEARCH_RESULT_LIMIT,
         stageLimit: MANUAL_SEARCH_STAGE_LIMIT,
       });
-
       sendOutput(pi, formatManualMemorySearch(query, results, searchPlan, turnContext, activeStore.dbPath), ctx);
-    },
-  });
-
-  pi.registerCommand("memory-review", {
-    description: "Show relevant existing memories and explicit suggested next actions without saving anything",
-    handler: async (_args, ctx) => {
-      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
-      const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
-      const session = activeStore.getSession(turnContext.sessionId);
-      const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, MEMORY_REVIEW_QUERY, turnContext, {
-        resultLimit: MEMORY_REVIEW_RESULT_LIMIT,
-        stageLimit: MANUAL_SEARCH_STAGE_LIMIT,
-      });
-      sendOutput(pi, formatMemoryReview(results, searchPlan, turnContext, activeStore.dbPath, session?.summary), ctx);
     },
   });
 
@@ -179,6 +168,40 @@ function sendOutput(
     return;
   }
   process.stdout.write(`${output}\n`);
+}
+
+function formatContextSearch(
+  results: MemorySearchResult[],
+  searchPlan: SearchMemoriesInput[],
+  context: { sessionId: string; projectId?: string; repoPath?: string },
+  dbPath: string,
+  sessionSummary?: string,
+): string {
+  const lines = [
+    "Current memory context (read-only). Use /memory-search <query> for targeted search.",
+    `search_plan: ${searchPlan.map(formatSearchPlanStage).join(" -> ") || "none"}`,
+    `session_id: ${context.sessionId}`,
+    `project_id: ${context.projectId ?? "none"}`,
+    `repo_path: ${context.repoPath ?? "none"}`,
+    `session_summary: ${sessionSummary ?? "none"}`,
+    "suggested_actions:",
+    "- Review matching memories before saving anything new.",
+    "- Use memory_update if an existing memory is stale, incomplete, closed, or should be archived.",
+    "- Use /memory-session-save <summary> to persist a compact session recap explicitly.",
+  ];
+
+  if (results.length === 0) {
+    lines.push("relevant_memories: none", `db_path: ${dbPath}`);
+    return lines.join("\n");
+  }
+
+  lines.push(
+    `relevant_memories: ${results.length}`,
+    ...results.map((result, index) => formatMemorySearchResultLine(index + 1, result)),
+    `db_path: ${dbPath}`,
+  );
+
+  return lines.join("\n");
 }
 
 function formatManualMemorySearch(

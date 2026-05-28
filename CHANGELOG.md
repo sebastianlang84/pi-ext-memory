@@ -13,6 +13,11 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.8] - 2026-05-28
+
+### Changed
+- `/memory-review` removed. `/memory-search` without a query now shows the current memory context (todos, handoffs, next steps) with suggested actions — identical output to the former `/memory-review`. `/memory-search <query>` behaviour is unchanged.
+
 ## [2.1.7] - 2026-05-28
 
 ### Fixed

@@ -26,8 +26,8 @@ pi install .
 
 ```text
 /memory-status                 show extension status and configuration
-/memory-search <query>         run a manual memory search
-/memory-review                 show relevant existing memories and suggested cleanup/save actions
+/memory-search <query>         run a targeted memory search
+/memory-search                 show current memory context (todos, handoffs, next steps) with suggested actions
 /memory-handoff                show the active session handoff
 /memory-handoff archive        archive the active session handoff
 /memory-session-save <summary> persist an explicit session summary
