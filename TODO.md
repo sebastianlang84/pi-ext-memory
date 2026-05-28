@@ -13,6 +13,10 @@ Rule: Completed items are removed, not checked off.
 Backlog review notes: [docs/plans/todo-backlog-review-2026-05-15.md](docs/plans/todo-backlog-review-2026-05-15.md)
 Evidence gate review: [docs/plans/retrieval-quality-evidence-gate-2026-05-16.md](docs/plans/retrieval-quality-evidence-gate-2026-05-16.md)
 
+## Active
+
+*No active tasks.*
+
 ## Deferred until new evidence justifies them
 
 - Re-open canonical-key retrieval evidence collection only with concrete zero-hit, wrong-hit, or conflict cases where existing tags, `memory_tag_catalog`, exact tag/`metadata.canonicalKey` ranking, and near-key/tag hints are insufficient.

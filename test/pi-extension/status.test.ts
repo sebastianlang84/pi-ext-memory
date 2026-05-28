@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { getNextStatusWidgetLines } from "../../src/pi-extension/status.ts";
+import { formatMemoryStatus } from "../../src/pi-extension/status.ts";
 import type { MemoryCoreStatus } from "../../src/core/index.ts";
 
 const status: MemoryCoreStatus = {
@@ -20,18 +20,13 @@ const status: MemoryCoreStatus = {
   nextStep: "V1 release is complete; use memory_list for structured listing and monitor local embedding quality in normal use.",
 };
 
-test("getNextStatusWidgetLines shows the status widget when currently hidden", () => {
-  const lines = getNextStatusWidgetLines(false, status, "/repo");
+test("formatMemoryStatus renders all key fields", () => {
+  const output = formatMemoryStatus(status, "/repo");
 
-  assert.ok(lines);
-  assert.equal(lines?.[0], "pi-memory status");
-  assert.match(lines?.join("\n") ?? "", /embedding_model_active: builtin-hash-384-v1/);
-});
-
-test("getNextStatusWidgetLines clears the status widget when currently visible", () => {
-  const lines = getNextStatusWidgetLines(true, status, "/repo");
-
-  assert.equal(lines, undefined);
+  assert.match(output, /^pi-memory status/);
+  assert.match(output, /version: v1\.3\.0/);
+  assert.match(output, /embedding_model_active: builtin-hash-384-v1/);
+  assert.match(output, /cwd: \/repo/);
 });
 
 test("session_start status string stays short", () => {

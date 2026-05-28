@@ -20,10 +20,7 @@ type MockCommandContext = {
   cwd: string;
   hasUI: boolean;
   sessionManager: { getSessionId(): string };
-  ui: {
-    setWidget(name: string, lines: string[] | undefined): void;
-    notify(message: string, level: string): void;
-  };
+  ui: Record<string, never>;
 };
 
 function createResult(): MemorySearchResult {
@@ -69,6 +66,7 @@ function createProjectContext() {
 function createMockPi() {
   const commands = new Map<string, CommandHandler>();
   const eventHandlers = new Map<string, EventHandler[]>();
+  const messages: Array<{ customType: string; content: string; display: string }> = [];
 
   const pi = {
     on(eventName: string, handler: EventHandler) {
@@ -82,30 +80,23 @@ function createMockPi() {
     registerCommand(name: string, command: { handler: CommandHandler }) {
       commands.set(name, command.handler);
     },
+    sendMessage(msg: { customType: string; content: string; display: string }) {
+      messages.push(msg);
+    },
   };
 
-  return { pi, commands, eventHandlers };
+  return { pi, commands, eventHandlers, messages };
 }
 
 function createMockCommandContext(cwd: string, sessionId: string) {
-  const widgets = new Map<string, string[] | undefined>();
-  const notifications: Array<{ message: string; level: string }> = [];
-
   const ctx: MockCommandContext = {
     cwd,
     hasUI: true,
     sessionManager: { getSessionId: () => sessionId },
-    ui: {
-      setWidget(name, lines) {
-        widgets.set(name, lines);
-      },
-      notify(message, level) {
-        notifications.push({ message, level });
-      },
-    },
+    ui: {},
   };
 
-  return { ctx, widgets, notifications };
+  return { ctx };
 }
 
 test("formatMemoryReview shows read-only guidance, suggested actions, and relevant memories", () => {
@@ -154,7 +145,7 @@ test("formatMemorySessionSaved renders the persisted session summary", () => {
   assert.match(output, /repo_path: \/repo/);
 });
 
-test("commands shutdown clears widgets and closes the shared runtime store", async () => {
+test("commands shutdown closes the shared runtime store", async () => {
   let closeCount = 0;
   const runtimeStore: MemoryRuntimeStore = {
     getStoreForCwd() {
@@ -170,28 +161,13 @@ test("commands shutdown clears widgets and closes the shared runtime store", asy
   const shutdownHandlers = eventHandlers.get("session_shutdown");
   assert.ok(shutdownHandlers?.length, "expected session_shutdown handler to be registered");
 
-  const { ctx, widgets } = createMockCommandContext("/workspace", "session-shutdown-123");
-  for (const widgetName of [
-    "pi-memory-status",
-    "pi-memory-search",
-    "pi-memory-review",
-    "pi-memory-session-save",
-    "pi-memory-handoff",
-  ]) {
-    ctx.ui.setWidget(widgetName, ["visible"]);
-  }
-
+  const { ctx } = createMockCommandContext("/workspace", "session-shutdown-123");
   await shutdownHandlers[0]({}, ctx);
 
   assert.equal(closeCount, 1);
-  assert.equal(widgets.get("pi-memory-status"), undefined);
-  assert.equal(widgets.get("pi-memory-search"), undefined);
-  assert.equal(widgets.get("pi-memory-review"), undefined);
-  assert.equal(widgets.get("pi-memory-session-save"), undefined);
-  assert.equal(widgets.get("pi-memory-handoff"), undefined);
 });
 
-test("/memory-review handler toggles review details in the UI", async () => {
+test("/memory-review handler writes review output to chat", async () => {
   const { cwd, repoRoot } = createProjectContext();
   const dbPath = join(createTempDir("pi-memory-command-db-"), "memory.sqlite");
   const store = initializeMemoryStore({ dbPath });
@@ -221,30 +197,22 @@ test("/memory-review handler toggles review details in the UI", async () => {
   process.env.PI_MEMORY_DB_PATH = dbPath;
 
   try {
-    const { pi, commands } = createMockPi();
+    const { pi, commands, messages } = createMockPi();
     registerMemoryCommands(pi as never, createMemoryCore());
 
     const handler = commands.get("memory-review");
     assert.ok(handler, "expected memory-review command to be registered");
 
-    const { ctx, widgets, notifications } = createMockCommandContext(cwd, "session-review-123");
+    const { ctx } = createMockCommandContext(cwd, "session-review-123");
     await handler("", ctx);
 
-    assert.deepEqual(notifications, [{ message: "pi-memory review shown", level: "info" }]);
-    const widget = widgets.get("pi-memory-review")?.join("\n") ?? "";
-    assert.match(widget, /Manual memory review \(read-only\)\./);
-    assert.match(widget, /session_id: session-review-123/);
-    assert.match(widget, /session_summary: Reviewed relevant memories before deciding what to persist\./);
-    assert.match(widget, /Keep writes manual-first for next steps/);
-
-    process.env.PI_MEMORY_DB_PATH = createTempDir("pi-memory-command-unreachable-db-");
-    await handler("", ctx);
-
-    assert.equal(widgets.get("pi-memory-review"), undefined);
-    assert.deepEqual(notifications, [
-      { message: "pi-memory review shown", level: "info" },
-      { message: "pi-memory review cleared", level: "info" },
-    ]);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]?.customType, "pi-memory-command-output");
+    const output = messages[0]?.content ?? "";
+    assert.match(output, /Manual memory review \(read-only\)\./);
+    assert.match(output, /session_id: session-review-123/);
+    assert.match(output, /session_summary: Reviewed relevant memories before deciding what to persist\./);
+    assert.match(output, /Keep writes manual-first for next steps/);
   } finally {
     if (previousDbPath === undefined) {
       delete process.env.PI_MEMORY_DB_PATH;
@@ -279,21 +247,22 @@ test("/memory-handoff shows latest current-session handoff", async () => {
   process.env.PI_MEMORY_DB_PATH = dbPath;
 
   try {
-    const { pi, commands } = createMockPi();
+    const { pi, commands, messages } = createMockPi();
     registerMemoryCommands(pi as never, createMemoryCore());
 
     const handler = commands.get("memory-handoff");
     assert.ok(handler, "expected memory-handoff command to be registered");
 
-    const { ctx, widgets, notifications } = createMockCommandContext(cwd, "session-handoff-123");
+    const { ctx } = createMockCommandContext(cwd, "session-handoff-123");
     await handler("", ctx);
 
-    assert.deepEqual(notifications, [{ message: "pi-memory handoff shown", level: "info" }]);
-    const widget = widgets.get("pi-memory-handoff")?.join("\n") ?? "";
-    assert.match(widget, /Latest active handoff\./);
-    assert.match(widget, /Context reset handoff/);
-    assert.match(widget, /Continue after context reset/);
-    assert.match(widget, new RegExp(`repo_path: ${repoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]?.customType, "pi-memory-command-output");
+    const output = messages[0]?.content ?? "";
+    assert.match(output, /Latest active handoff\./);
+    assert.match(output, /Context reset handoff/);
+    assert.match(output, /Continue after context reset/);
+    assert.match(output, new RegExp(`repo_path: ${repoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   } finally {
     if (previousDbPath === undefined) {
       delete process.env.PI_MEMORY_DB_PATH;
@@ -303,29 +272,30 @@ test("/memory-handoff shows latest current-session handoff", async () => {
   }
 });
 
-test("/memory-session-save handler persists the current session and shows detailed UI confirmation", async () => {
+test("/memory-session-save handler persists the current session and writes confirmation to chat", async () => {
   const { cwd, repoRoot } = createProjectContext();
   const dbPath = join(createTempDir("pi-memory-command-db-"), "memory.sqlite");
   const previousDbPath = process.env.PI_MEMORY_DB_PATH;
   process.env.PI_MEMORY_DB_PATH = dbPath;
 
   try {
-    const { pi, commands, eventHandlers } = createMockPi();
+    const { pi, commands, eventHandlers, messages } = createMockPi();
     registerMemoryCommands(pi as never, createMemoryCore());
 
     const handler = commands.get("memory-session-save");
     assert.ok(handler, "expected memory-session-save command to be registered");
 
-    const { ctx, widgets, notifications } = createMockCommandContext(cwd, "session-save-123");
+    const { ctx } = createMockCommandContext(cwd, "session-save-123");
     await handler("Captured the review outcome and explicit next steps for follow-up.", ctx);
 
-    assert.deepEqual(notifications, [{ message: "pi-memory session summary saved", level: "info" }]);
-    const widget = widgets.get("pi-memory-session-save")?.join("\n") ?? "";
-    assert.match(widget, /Saved session summary for session-save-123\./);
-    assert.match(widget, /summary: Captured the review outcome and explicit next steps for follow-up\./);
-    assert.match(widget, /project_id: @acme\/api/);
-    assert.match(widget, new RegExp(`repo_path: ${repoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
-    assert.match(widget, new RegExp(`db_path: ${dbPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]?.customType, "pi-memory-command-output");
+    const output = messages[0]?.content ?? "";
+    assert.match(output, /Saved session summary for session-save-123\./);
+    assert.match(output, /summary: Captured the review outcome and explicit next steps for follow-up\./);
+    assert.match(output, /project_id: @acme\/api/);
+    assert.match(output, new RegExp(`repo_path: ${repoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(output, new RegExp(`db_path: ${dbPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
 
     const shutdownHandlers = eventHandlers.get("session_shutdown");
     assert.ok(shutdownHandlers?.length, "expected session_shutdown handler to be registered");
@@ -384,10 +354,10 @@ test("commands cover save -> search -> review -> session summary end to end", as
   process.env.PI_MEMORY_DB_PATH = dbPath;
 
   try {
-    const { pi, commands, eventHandlers } = createMockPi();
+    const { pi, commands, eventHandlers, messages } = createMockPi();
     registerMemoryCommands(pi as never, core);
 
-    const { ctx, widgets, notifications } = createMockCommandContext(cwd, "session-e2e-123");
+    const { ctx } = createMockCommandContext(cwd, "session-e2e-123");
     const memoryReview = commands.get("memory-review");
     const memorySessionSave = commands.get("memory-session-save");
 
@@ -395,20 +365,18 @@ test("commands cover save -> search -> review -> session summary end to end", as
     assert.ok(memorySessionSave, "expected memory-session-save command to be registered");
 
     await memoryReview("", ctx);
-    const reviewWidget = widgets.get("pi-memory-review")?.join("\n") ?? "";
-    assert.match(reviewWidget, /Manual memory review \(read-only\)\./);
-    assert.match(reviewWidget, /Close v0\.8\.1 manually/);
-    assert.match(reviewWidget, /Use memory_update/);
+    const reviewOutput = messages[0]?.content ?? "";
+    assert.match(reviewOutput, /Manual memory review \(read-only\)\./);
+    assert.match(reviewOutput, /Close v0\.8\.1 manually/);
+    assert.match(reviewOutput, /Use memory_update/);
 
     await memorySessionSave("Closed v0.8.1 after save, search, review, and explicit session-summary verification.", ctx);
-    const sessionWidget = widgets.get("pi-memory-session-save")?.join("\n") ?? "";
-    assert.match(sessionWidget, /Saved session summary for session-e2e-123\./);
-    assert.match(sessionWidget, /Closed v0\.8\.1 after save, search, review/);
+    const sessionOutput = messages[1]?.content ?? "";
+    assert.match(sessionOutput, /Saved session summary for session-e2e-123\./);
+    assert.match(sessionOutput, /Closed v0\.8\.1 after save, search, review/);
 
-    assert.deepEqual(notifications, [
-      { message: "pi-memory review shown", level: "info" },
-      { message: "pi-memory session summary saved", level: "info" },
-    ]);
+    assert.equal(messages.length, 2);
+    assert.ok(messages.every((m) => m.customType === "pi-memory-command-output"));
 
     const shutdownHandlers = eventHandlers.get("session_shutdown") ?? [];
     for (const handler of shutdownHandlers) {
@@ -431,4 +399,129 @@ test("commands cover save -> search -> review -> session summary end to end", as
       process.env.PI_MEMORY_DB_PATH = previousDbPath;
     }
   }
+});
+
+// --- /memory-status ---
+
+test("/memory-status writes status output to chat", async () => {
+  const { pi, commands, messages } = createMockPi();
+  registerMemoryCommands(pi as never, createMemoryCore());
+
+  const handler = commands.get("memory-status");
+  assert.ok(handler, "expected memory-status command to be registered");
+
+  const { ctx } = createMockCommandContext("/workspace", "session-status-123");
+  await handler("", ctx);
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.customType, "pi-memory-command-output");
+  assert.match(messages[0]?.content ?? "", /^pi-memory status/);
+  assert.match(messages[0]?.content ?? "", /version:/);
+  assert.match(messages[0]?.content ?? "", /cwd: \/workspace/);
+});
+
+test("/memory-status writes to stdout when hasUI is false", async () => {
+  const { pi, commands, messages } = createMockPi();
+  registerMemoryCommands(pi as never, createMemoryCore());
+
+  const handler = commands.get("memory-status");
+  assert.ok(handler, "expected memory-status command to be registered");
+
+  const chunks: string[] = [];
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (chunk: unknown) => {
+    chunks.push(String(chunk));
+    return true;
+  };
+
+  try {
+    const ctx = { cwd: "/workspace", hasUI: false, sessionManager: { getSessionId: () => "s1" }, ui: {} } as never;
+    await handler("", ctx);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+
+  assert.equal(messages.length, 0, "sendMessage must not be called when hasUI is false");
+  assert.ok(chunks.join("").includes("pi-memory status"), "expected stdout output");
+});
+
+// --- /memory-search error path ---
+
+test("/memory-search with short query writes usage hint to chat", async () => {
+  const { pi, commands, messages } = createMockPi();
+  registerMemoryCommands(pi as never, createMemoryCore());
+
+  const handler = commands.get("memory-search");
+  assert.ok(handler, "expected memory-search command to be registered");
+
+  const { ctx } = createMockCommandContext("/workspace", "session-search-err-123");
+  await handler("x", ctx);
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.customType, "pi-memory-command-output");
+  assert.match(messages[0]?.content ?? "", /Usage: \/memory-search/);
+});
+
+// --- /memory-handoff error paths ---
+
+test("/memory-handoff with unknown action writes usage hint to chat", async () => {
+  const { cwd } = createProjectContext();
+  const { pi, commands, messages } = createMockPi();
+  registerMemoryCommands(pi as never, createMemoryCore());
+
+  const handler = commands.get("memory-handoff");
+  assert.ok(handler, "expected memory-handoff command to be registered");
+
+  const { ctx } = createMockCommandContext(cwd, "session-handoff-err-123");
+  await handler("delete", ctx);
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.customType, "pi-memory-command-output");
+  assert.match(messages[0]?.content ?? "", /Usage: \/memory-handoff \[show\|archive\]/);
+});
+
+test("/memory-handoff archive with no matching handoff writes error to chat", async () => {
+  const { cwd } = createProjectContext();
+  const dbPath = join(createTempDir("pi-memory-handoff-nohandoff-"), "memory.sqlite");
+  const previousDbPath = process.env.PI_MEMORY_DB_PATH;
+  process.env.PI_MEMORY_DB_PATH = dbPath;
+
+  try {
+    const { pi, commands, messages } = createMockPi();
+    registerMemoryCommands(pi as never, createMemoryCore());
+
+    const handler = commands.get("memory-handoff");
+    assert.ok(handler, "expected memory-handoff command to be registered");
+
+    const { ctx } = createMockCommandContext(cwd, "session-handoff-missing-123");
+    await handler("archive", ctx);
+
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]?.customType, "pi-memory-command-output");
+    assert.match(messages[0]?.content ?? "", /No active handoff found/);
+  } finally {
+    if (previousDbPath === undefined) {
+      delete process.env.PI_MEMORY_DB_PATH;
+    } else {
+      process.env.PI_MEMORY_DB_PATH = previousDbPath;
+    }
+  }
+});
+
+// --- /memory-session-save error path ---
+
+test("/memory-session-save with short summary writes usage hint to chat", async () => {
+  const { cwd } = createProjectContext();
+  const { pi, commands, messages } = createMockPi();
+  registerMemoryCommands(pi as never, createMemoryCore());
+
+  const handler = commands.get("memory-session-save");
+  assert.ok(handler, "expected memory-session-save command to be registered");
+
+  const { ctx } = createMockCommandContext(cwd, "session-save-err-123");
+  await handler("too short", ctx);
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.customType, "pi-memory-command-output");
+  assert.match(messages[0]?.content ?? "", /Usage: \/memory-session-save/);
 });

@@ -13,6 +13,12 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.7] - 2026-05-28
+
+### Fixed
+- All slash commands now write output directly to chat via `pi.sendMessage()` instead of TUI widgets; eliminates the persistent stuck-widget bug and removes toggle state entirely.
+- Error and usage-hint paths in all commands (`/memory-search`, `/memory-handoff`, `/memory-session-save`) now correctly route through `sendMessage` instead of the removed `writeCommandOutput` helper, preventing a runtime crash on those paths.
+
 ## [2.1.6] - 2026-05-16
 
 ### Added

@@ -12,7 +12,7 @@ import {
   formatSearchPlanStage,
 } from "./formatters.ts";
 import { createMemoryRuntimeStore, type MemoryRuntimeStore } from "./runtime-store.ts";
-import { formatMemoryStatus, getNextStatusWidgetLines } from "./status.ts";
+import { formatMemoryStatus } from "./status.ts";
 
 const MANUAL_SEARCH_RESULT_LIMIT = 8;
 const MANUAL_SEARCH_STAGE_LIMIT = 6;
@@ -21,24 +21,11 @@ const MEMORY_REVIEW_RESULT_LIMIT = 8;
 const MIN_SESSION_SUMMARY_LENGTH = 12;
 
 export function registerMemoryCommands(
-  pi: Pick<ExtensionAPI, "on" | "registerCommand">,
+  pi: Pick<ExtensionAPI, "on" | "registerCommand" | "sendMessage">,
   core: MemoryCore,
   runtimeStore: MemoryRuntimeStore = createMemoryRuntimeStore(core),
 ): void {
-  let isStatusWidgetVisible = false;
-  let isReviewWidgetVisible = false;
-
-  pi.on("session_shutdown", async (_event, ctx) => {
-    if (ctx.hasUI) {
-      ctx.ui.setWidget("pi-memory-status", undefined);
-      ctx.ui.setWidget("pi-memory-search", undefined);
-      ctx.ui.setWidget("pi-memory-review", undefined);
-      ctx.ui.setWidget("pi-memory-session-save", undefined);
-      ctx.ui.setWidget("pi-memory-handoff", undefined);
-    }
-
-    isStatusWidgetVisible = false;
-    isReviewWidgetVisible = false;
+  pi.on("session_shutdown", async () => {
     runtimeStore.close();
   });
 
@@ -46,17 +33,7 @@ export function registerMemoryCommands(
     description: "Show the current pi-memory bootstrap status",
     handler: async (_args, ctx) => {
       const status = core.getStatus();
-      const output = formatMemoryStatus(status, ctx.cwd);
-
-      if (ctx.hasUI) {
-        const widgetLines = getNextStatusWidgetLines(isStatusWidgetVisible, status, ctx.cwd);
-        isStatusWidgetVisible = widgetLines !== undefined;
-        ctx.ui.setWidget("pi-memory-status", widgetLines);
-        ctx.ui.notify(isStatusWidgetVisible ? "pi-memory status shown" : "pi-memory status cleared", "info");
-        return;
-      }
-
-      process.stdout.write(`${output}\n`);
+      sendOutput(pi, formatMemoryStatus(status, ctx.cwd), ctx);
     },
   });
 
@@ -65,7 +42,7 @@ export function registerMemoryCommands(
     handler: async (args, ctx) => {
       const query = args.trim();
       if (query.length < 2) {
-        writeCommandOutput("Usage: /memory-search <query>", ctx);
+        sendOutput(pi, "Usage: /memory-search <query>", ctx);
         return;
       }
 
@@ -77,46 +54,21 @@ export function registerMemoryCommands(
         stageLimit: MANUAL_SEARCH_STAGE_LIMIT,
       });
 
-      const output = formatManualMemorySearch(query, results, searchPlan, turnContext, activeStore.dbPath);
-
-      if (ctx.hasUI) {
-        ctx.ui.setWidget("pi-memory-search", output.split("\n"));
-        ctx.ui.notify("pi-memory search updated", "info");
-        return;
-      }
-
-      process.stdout.write(`${output}\n`);
+      sendOutput(pi, formatManualMemorySearch(query, results, searchPlan, turnContext, activeStore.dbPath), ctx);
     },
   });
 
   pi.registerCommand("memory-review", {
     description: "Show relevant existing memories and explicit suggested next actions without saving anything",
     handler: async (_args, ctx) => {
-      if (ctx.hasUI && isReviewWidgetVisible) {
-        ctx.ui.setWidget("pi-memory-review", undefined);
-        isReviewWidgetVisible = false;
-        ctx.ui.notify("pi-memory review cleared", "info");
-        return;
-      }
-
       const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
-
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
       const session = activeStore.getSession(turnContext.sessionId);
       const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, MEMORY_REVIEW_QUERY, turnContext, {
         resultLimit: MEMORY_REVIEW_RESULT_LIMIT,
         stageLimit: MANUAL_SEARCH_STAGE_LIMIT,
       });
-      const output = formatMemoryReview(results, searchPlan, turnContext, activeStore.dbPath, session?.summary);
-
-      if (ctx.hasUI) {
-        ctx.ui.setWidget("pi-memory-review", output.split("\n"));
-        isReviewWidgetVisible = true;
-        ctx.ui.notify("pi-memory review shown", "info");
-        return;
-      }
-
-      process.stdout.write(`${output}\n`);
+      sendOutput(pi, formatMemoryReview(results, searchPlan, turnContext, activeStore.dbPath, session?.summary), ctx);
     },
   });
 
@@ -131,36 +83,28 @@ export function registerMemoryCommands(
       if (action === "archive") {
         const sessionId = turnContext.sessionId.trim();
         if (sessionId.length === 0) {
-          writeCommandOutput("Cannot archive handoff without a stable Pi session id.", ctx);
+          sendOutput(pi, "Cannot archive handoff without a stable Pi session id.", ctx);
           return;
         }
 
         const current = findLatestExactSessionHandoff(activeStore, sessionId);
         if (!current) {
-          writeCommandOutput("No active handoff found for the current session.", ctx);
+          sendOutput(pi, "No active handoff found for the current session.", ctx);
           return;
         }
 
         const archived = activeStore.archiveMemory({ id: current.id, reason: "handoff archived from /memory-handoff" });
-        writeCommandOutput(formatMemoryHandoffArchived(archived, activeStore.dbPath), ctx);
+        sendOutput(pi, formatMemoryHandoffArchived(archived, activeStore.dbPath), ctx);
         return;
       }
 
       if (action !== "show") {
-        writeCommandOutput("Usage: /memory-handoff [show|archive]\nUse memory_save_handoff to create or update a handoff.", ctx);
+        sendOutput(pi, "Usage: /memory-handoff [show|archive]\nUse memory_save_handoff to create or update a handoff.", ctx);
         return;
       }
 
       const latestHandoff = findLatestHandoffForTurn(activeStore, turnContext);
-      const output = formatMemoryHandoff(latestHandoff?.memory, activeStore.dbPath, latestHandoff?.isFallback ?? false);
-
-      if (ctx.hasUI) {
-        ctx.ui.setWidget("pi-memory-handoff", output.split("\n"));
-        ctx.ui.notify("pi-memory handoff shown", "info");
-        return;
-      }
-
-      process.stdout.write(`${output}\n`);
+      sendOutput(pi, formatMemoryHandoff(latestHandoff?.memory, activeStore.dbPath, latestHandoff?.isFallback ?? false), ctx);
     },
   });
 
@@ -169,7 +113,7 @@ export function registerMemoryCommands(
     handler: async (args, ctx) => {
       const summary = args.trim();
       if (summary.length < MIN_SESSION_SUMMARY_LENGTH) {
-        writeCommandOutput(formatMemorySessionSaveUsage(MIN_SESSION_SUMMARY_LENGTH), ctx);
+        sendOutput(pi, formatMemorySessionSaveUsage(MIN_SESSION_SUMMARY_LENGTH), ctx);
         return;
       }
 
@@ -182,15 +126,7 @@ export function registerMemoryCommands(
         projectId: turnContext.projectId,
         repoPath: turnContext.repoPath,
       });
-      const output = formatMemorySessionSaved(session, activeStore.dbPath);
-
-      if (ctx.hasUI) {
-        ctx.ui.setWidget("pi-memory-session-save", output.split("\n"));
-        ctx.ui.notify("pi-memory session summary saved", "info");
-        return;
-      }
-
-      process.stdout.write(`${output}\n`);
+      sendOutput(pi, formatMemorySessionSaved(session, activeStore.dbPath), ctx);
     },
   });
 
@@ -200,9 +136,7 @@ export function registerMemoryCommands(
       const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
 
       const { staleTodos, oldHandoffs, identityViolations, legacyWorkflowTags, projectMigrationPreview } = runMemoryAudit(activeStore);
-      const output = formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview, legacyWorkflowTags);
-
-      writeCommandOutput(output, ctx);
+      sendOutput(pi, formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview, legacyWorkflowTags), ctx);
     },
   });
 }
@@ -235,12 +169,15 @@ function formatMemoryHandoffArchived(memory: MemoryRecord, dbPath: string): stri
   return [`Archived handoff ${memory.id}.`, `title: ${memory.title}`, `updated_at: ${memory.updatedAt}`, `db_path: ${dbPath}`].join("\n");
 }
 
-function writeCommandOutput(output: string, ctx: ExtensionCommandContext): void {
+function sendOutput(
+  pi: Pick<ExtensionAPI, "sendMessage">,
+  output: string,
+  ctx: ExtensionCommandContext,
+): void {
   if (ctx.hasUI) {
-    ctx.ui.notify(output, "warning");
+    pi.sendMessage({ customType: "pi-memory-command-output", content: output, display: output });
     return;
   }
-
   process.stdout.write(`${output}\n`);
 }
 
