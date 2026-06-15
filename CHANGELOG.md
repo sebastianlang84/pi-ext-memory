@@ -13,6 +13,12 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.1.9] - 2026-06-15
+
+### Changed
+- `memory_search` prompt guideline now describes a two-mode retrieval protocol: targeted lookup (one query suffices) vs. coverage/existence check (vary queries by entity/activity/recency, escalate repo→global, combine with `memory_list`). Replaces vague "compact text search" guidance.
+- No-hit turn-start injection now includes the retrieval-escalation gate: agents are instructed to vary queries and escalate scope before asserting absence or asking the user about prior work.
+
 ## [2.1.8] - 2026-05-28
 
 ### Changed

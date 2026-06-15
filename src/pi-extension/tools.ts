@@ -162,7 +162,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Search",
     description: "Search memory.",
     promptSnippet: "Search memory when automatic context is insufficient.",
-    promptGuidelines: ["Use memory_search for compact text search; filter only when useful."],
+    promptGuidelines: [
+      "Targeted lookup: one query. Coverage/existence check: vary queries (entity/activity/recency) + escalate repo→global + memory_list. Empty result ≠ absence.",
+    ],
     parameters: Type.Object({
       query: Type.String(),
       kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS))),

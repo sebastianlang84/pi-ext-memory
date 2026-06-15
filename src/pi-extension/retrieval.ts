@@ -30,7 +30,7 @@ const MEMORY_CONTEXT_CUSTOM_TYPE = "pi-memory-context";
 const TURN_MEMORY_RESULT_LIMIT = 3;
 const TURN_MEMORY_STAGE_LIMIT = 4;
 const MEMORY_NO_HIT_GUIDANCE =
-  "User wins over memory. Use memory_search if prior context matters; save/update durable notes/todos/handoffs only.";
+  "User wins over memory. Prior-work: vary queries + escalate repo→global + memory_list. Empty ≠ absent. Save/update notes/todos/handoffs only.";
 const MEMORY_HIT_GUIDANCE =
   "Use memory_search for more; save/update durable notes/todos/handoffs only.";
 

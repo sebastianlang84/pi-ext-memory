@@ -88,7 +88,7 @@ test("runTurnIntake returns compact guidance when no search results match", () =
   try {
     const result = assertTurnMessage(runTurnIntake(store, "memoryonlyneedle", "/repo", "session-abc"));
     assert.match(result.content, /pi-memory: no relevant stored context/);
-    assert.match(result.content, /Use memory_search if prior context matters/);
+    assert.match(result.content, /Prior-work: vary queries/);
     assert.equal(result.details.query, "memoryonlyneedle");
   } finally {
     store.close();

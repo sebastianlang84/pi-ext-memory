@@ -493,7 +493,7 @@ test("buildTurnMemoryMessage injects compact memory guidance even when no result
   assert.ok(message);
   assert.equal(
     message?.content,
-    "pi-memory: no relevant stored context. User wins over memory. Use memory_search if prior context matters; save/update durable notes/todos/handoffs only.",
+    "pi-memory: no relevant stored context. User wins over memory. Prior-work: vary queries + escalate repo\u2192global + memory_list. Empty \u2260 absent. Save/update notes/todos/handoffs only.",
   );
   assert.deepEqual(message?.details.resultIds, []);
 });

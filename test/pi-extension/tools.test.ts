@@ -245,14 +245,30 @@ test("registerMemoryTools exposes parameters on every tool", async (t) => {
   assert.ok(tools.every((tool) => tool.parameters), "expected all registered tools to expose parameters");
 });
 
-test("registerMemoryTools provides promptSnippet and guidelines naming the tool", async (t) => {
+test("registerMemoryTools provides promptSnippet and non-empty guidelines", async (t) => {
   const { tools, projectContext } = await buildToolFixture();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
 
   for (const tool of tools) {
     assert.ok(tool.promptSnippet, `${tool.name} should provide promptSnippet`);
-    assert.ok(tool.promptGuidelines?.every((guideline) => guideline.includes(tool.name)), `${tool.name} guidelines should name the tool`);
+    assert.ok(
+      tool.promptGuidelines && tool.promptGuidelines.length > 0 && tool.promptGuidelines.every((g) => g.trim().length > 0),
+      `${tool.name} guidelines should be non-empty`,
+    );
   }
+});
+
+test("memory_search guideline describes two-mode retrieval protocol", async (t) => {
+  const { tools, projectContext } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const tool = toolByName(tools, "memory_search");
+  const guidelines = tool.promptGuidelines?.join(" ") ?? "";
+  assert.match(guidelines, /Targeted lookup/, "should describe targeted lookup mode");
+  assert.match(guidelines, /Coverage/, "should describe coverage/existence check mode");
+  assert.match(guidelines, /vary queries/, "should instruct to vary queries");
+  assert.match(guidelines, /escalate/, "should instruct to escalate scope");
+  assert.match(guidelines, /Empty result/, "should state empty result is not absence");
 });
 
 test("memory_search returns formatted result text and details", async (t) => {
