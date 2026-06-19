@@ -13,6 +13,9 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+### Changed
+- Render the Pi footer status as a self-contained pill (`[Memory ✓]` / `[Memory ✗]`) so adjacent extension statuses remain readable with Pi's current single-space composition.
+
 ## [2.1.9] - 2026-06-15
 
 ### Changed
