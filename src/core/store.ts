@@ -313,7 +313,9 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
         const normalizedId = id.trim();
         if (normalizedId.length === 0) return null;
 
-        return readMemoryById(db, normalizedId);
+        const memory = readMemoryById(db, normalizedId);
+        if (memory) touchLastAccessed(db, [memory.id], new Date().toISOString());
+        return memory;
       },
       listMemories(input = {}) {
         assertStoreOpen(isClosed);
@@ -448,7 +450,9 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
         const normalizedInput = normalizeSearchMemoriesInput(input);
         const queryEmbedding = options?.queryEmbedding ?? embeddingAdapter.generateEmbedding(createQueryEmbeddingContent(normalizedInput.query));
 
-        return searchMemoryResults(db, normalizedInput, queryEmbedding);
+        const results = searchMemoryResults(db, normalizedInput, queryEmbedding);
+        touchLastAccessed(db, results.map((result) => result.id), new Date().toISOString());
+        return results;
       },
       getMeta(key) {
         assertStoreOpen(isClosed);
@@ -570,9 +574,19 @@ function buildMemoryWhere(
     queryParams.push(input.status);
   }
 
-  if (input.kind && input.kind.length > 0) {
-    whereClauses.push(`kind IN (${input.kind.map(() => "?").join(", ")})`);
-    queryParams.push(...input.kind);
+  // "note" is a filter sentinel for kind IS NULL (plain notes). Handle it here
+  // too because listForTool/listAllInternal bypass normalizeListMemoriesInput.
+  const rawKinds = input.kind ?? [];
+  const realKinds = rawKinds.filter((value) => value !== "note");
+  const matchNullKind = input.matchNullKind === true || rawKinds.includes("note" as (typeof rawKinds)[number]);
+  if (realKinds.length > 0 || matchNullKind) {
+    const kindParts: string[] = [];
+    if (realKinds.length > 0) {
+      kindParts.push(`kind IN (${realKinds.map(() => "?").join(", ")})`);
+      queryParams.push(...realKinds);
+    }
+    if (matchNullKind) kindParts.push("kind IS NULL");
+    whereClauses.push(`(${kindParts.join(" OR ")})`);
   }
 
   if (input.scope && input.scope.length > 0) {
@@ -639,6 +653,23 @@ function readMemoryList(db: DatabaseSync, input: NormalizedListMemoriesInput, un
     .all(...queryParams) as MemoryRow[];
 
   return rows.map(mapMemoryRow);
+}
+
+/**
+ * Records a read-side access signal. Best-effort: a failure here must never
+ * break a search or get. Only updates last_accessed_at, which — thanks to the
+ * guarded FTS update trigger — does not rebuild the FTS index.
+ */
+function touchLastAccessed(db: DatabaseSync, ids: string[], timestamp: string): void {
+  if (ids.length === 0) return;
+
+  try {
+    db.prepare(
+      `UPDATE memories SET last_accessed_at = ? WHERE id IN (${ids.map(() => "?").join(", ")});`,
+    ).run(timestamp, ...ids);
+  } catch {
+    // Access tracking is advisory; ignore write failures.
+  }
 }
 
 function findExactDuplicate(db: DatabaseSync, memory: MemoryRecord): MemoryRecord | null {

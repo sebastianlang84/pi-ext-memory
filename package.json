@@ -20,6 +20,7 @@
     "test": "node --experimental-strip-types --test",
     "check:token-injection": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/check-token-injection.ts",
     "eval:prompt-routing": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/eval-prompt-routing.ts",
+    "eval:retrieval-quality": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/eval-retrieval-quality.ts",
     "smoke:memory-status": "pi -p \"/memory-status\"",
     "smoke:package-status": "pi --no-extensions -e . -p \"/memory-status\""
   }

@@ -4,6 +4,7 @@ import { Type } from "typebox";
 
 import {
   MEMORY_KINDS,
+  MEMORY_KIND_FILTERS,
   MEMORY_LIST_ORDER_BY,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
@@ -17,6 +18,7 @@ import {
   type MemoryScope,
   type MemoryStatus,
   type MemoryStore,
+  findNearDuplicateMemories,
   getCapForKindScope,
 } from "../core/index.ts";
 import {
@@ -24,6 +26,7 @@ import {
   buildTodoSummary,
   formatListResult,
   formatMemoryArchived,
+  formatMemoryDetail,
   formatMemorySearchResults,
   formatMemorySaved,
   formatMemoryUpdated,
@@ -34,7 +37,12 @@ import { decorateCreateMemoryInput } from "./retrieval.ts";
 import { formatAuditResults, runMemoryAudit } from "./audit.ts";
 import { buildTagCatalog, formatTagCatalog, suggestNearTags, type NearTagSuggestion } from "./tag-catalog.ts";
 import { createToolShell } from "./tool-shell.ts";
+import { formatObservabilityLines, recordSearch } from "./observability.ts";
 
+
+// Finding classes memory_audit can batch-archive: safe because expired handoffs
+// are past policy and stale notes have been untouched for the note window.
+const APPLYABLE_AUDIT_TYPES = ["expired_handoff", "stale_note"] as const;
 
 function normalizeOptionalArray<T>(value?: T | T[]): T[] | undefined {
   if (value === undefined) return undefined;
@@ -49,6 +57,24 @@ function buildNearTagSuggestions(
   if (!requestedTags || requestedTags.length === 0) return [];
 
   return buildNearTagSuggestionsFromMemories(requestedTags, store.listAllInternal({ status: "active", ...filter }));
+}
+
+/**
+ * Fetch active memories in the write scope once, so save handlers can derive
+ * both near-tag suggestions and near-duplicate hints from a single scan.
+ */
+function listActiveInScope(
+  store: MemoryStore,
+  scope: MemoryScope,
+  identity: { sessionId?: string; projectId?: string; repoPath?: string },
+): MemoryRecord[] {
+  return store.listAllInternal({
+    status: "active",
+    scope: [scope],
+    ...(identity.sessionId ? { sessionId: identity.sessionId } : {}),
+    ...(identity.projectId ? { projectId: identity.projectId } : {}),
+    ...(identity.repoPath ? { repoPath: identity.repoPath } : {}),
+  });
 }
 
 function buildNearTagSuggestionsFromMemories(requestedTags: string[] | undefined, memories: MemoryRecord[]): NearTagSuggestion[] {
@@ -167,7 +193,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     ],
     parameters: Type.Object({
       query: Type.String(),
-      kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS))),
+      kind: Type.Optional(Type.Array(StringEnum(MEMORY_KIND_FILTERS, { description: "todo/handoff/note" }))),
       scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "global/repo/session; project legacy" }))),
       tags: Type.Optional(Type.Array(Type.String())),
       projectId: Type.Optional(Type.String({ description: "Legacy project id; prefer repoPath" })),
@@ -184,7 +210,12 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         sessionId: identity.sessionId,
         projectId: identity.projectId,
         repoPath: identity.repoPath,
+        // Ranking-only anchors to the current repo/project so scope-less searches
+        // prefer the current repo without filtering out cross-repo matches.
+        preferRepoPath: turnContext.repoPath,
+        preferProjectId: turnContext.projectId,
       });
+      recordSearch(store, results.length);
       const emptySearchFilter = {
         scope: params.scope as MemoryScope[] | undefined,
         kind: params.kind as MemoryKind[] | undefined,
@@ -192,10 +223,16 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         projectId: identity.projectId,
         repoPath: identity.repoPath,
       };
-      const activeMemoriesForEmptySearch = results.length === 0 ? store.listAllInternal({ status: "active", ...emptySearchFilter }) : [];
-      const nearTagSuggestions = results.length === 0 ? buildNearTagSuggestionsFromMemories(params.tags, activeMemoriesForEmptySearch) : [];
+      const hasTagFilter = Array.isArray(params.tags) && params.tags.length > 0;
+      // Fetch the active-in-scope set when we need it for empty-result hints or
+      // (on any result count) to flag tag drift against the requested tags.
+      const activeMemoriesForHints =
+        results.length === 0 || hasTagFilter ? store.listAllInternal({ status: "active", ...emptySearchFilter }) : [];
+      const nearTagSuggestions = hasTagFilter
+        ? buildNearTagSuggestionsFromMemories(params.tags, activeMemoriesForHints)
+        : [];
       const emptyResultHints = results.length === 0
-        ? buildEmptySearchHints(params.query, { ...emptySearchFilter, tags: params.tags }, activeMemoriesForEmptySearch)
+        ? buildEmptySearchHints(params.query, { ...emptySearchFilter, tags: params.tags }, activeMemoriesForHints)
         : [];
       return {
         content: [{ type: "text", text: withLegacyNotice(formatMemorySearchResults(params.query, results, store.dbPath, nearTagSuggestions, emptyResultHints), params.scope as MemoryScope[] | undefined) }],
@@ -214,9 +251,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory List",
     description: "List memories.",
     promptSnippet: "List structured memories, especially todos/handoffs.",
-    promptGuidelines: ["Use memory_list for structured todo/handoff lists; use memory_search for text search."],
+    promptGuidelines: ["Use memory_list for todo/handoff lists; memory_search for text."],
     parameters: Type.Object({
-      kind: Type.Optional(Type.Union([StringEnum(MEMORY_KINDS), Type.Array(StringEnum(MEMORY_KINDS))])),
+      kind: Type.Optional(Type.Union([StringEnum(MEMORY_KIND_FILTERS, { description: "todo/handoff/note" }), Type.Array(StringEnum(MEMORY_KIND_FILTERS))])),
       scope: Type.Optional(Type.Union([StringEnum(MEMORY_SCOPES, { description: "global/repo/session; project legacy" }), Type.Array(StringEnum(MEMORY_SCOPES))])),
       tags: Type.Optional(Type.Array(Type.String())),
       sessionId: Type.Optional(Type.String()),
@@ -263,11 +300,36 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   });
 
   pi.registerTool({
+    name: "memory_get",
+    label: "Memory Get",
+    description: "Get one memory by id, including its full body.",
+    promptSnippet: "Read a memory's full body by id.",
+    promptGuidelines: ["Read a hit's body before updating it."],
+    parameters: Type.Object({
+      id: Type.String(),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const { store } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
+      const memory = store.getMemory(params.id);
+      if (!memory) {
+        return {
+          content: [{ type: "text", text: `Memory ${params.id} was not found.\ndb_path: ${store.dbPath}` }],
+          details: { dbPath: store.dbPath },
+        };
+      }
+      return {
+        content: [{ type: "text", text: formatMemoryDetail(memory, store.dbPath) }],
+        details: { dbPath: store.dbPath, memory },
+      };
+    },
+  });
+
+  pi.registerTool({
     name: "memory_save",
     label: "Memory Save",
     description: "Save durable notes.",
     promptSnippet: "Save durable notes/facts/decisions/context.",
-    promptGuidelines: ["Use memory_save only for durable notes/facts/decisions; use memory_save_todo/handoff for tasks/handoffs."],
+    promptGuidelines: ["Use memory_save_todo/handoff for tasks/handoffs, not memory_save."],
     parameters: Type.Object({
       scope: Type.Optional(StringEnum(MEMORY_SCOPES, { description: "default repo in Git, else global; project legacy" })),
       title: Type.String(),
@@ -293,12 +355,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         { requirePrimary: requestedScope !== "global" },
       );
       if (identity.error) return identityErrorResponse(identity.error);
-      const nearTagSuggestions = buildNearTagSuggestions(store, params.tags, {
-        scope: [requestedScope],
-        sessionId: identity.sessionId,
-        projectId: identity.projectId,
-        repoPath: identity.repoPath,
-      });
+      const activeInScope = listActiveInScope(store, requestedScope, identity);
+      const nearTagSuggestions = buildNearTagSuggestionsFromMemories(params.tags, activeInScope);
+      const similarExisting = findNearDuplicateMemories({ title: params.title, summary: params.summary }, activeInScope);
       const memory = store.createMemory({
         ...decorateCreateMemoryInput(
           {
@@ -314,8 +373,13 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         sourceAgent: "pi",
       });
       return {
-        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store, nearTagSuggestions), requestedScope) }],
-        details: nearTagSuggestions.length > 0 ? { dbPath: store.dbPath, memory, nearTagSuggestions } : { dbPath: store.dbPath, memory },
+        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store, nearTagSuggestions, similarExisting), requestedScope) }],
+        details: {
+          dbPath: store.dbPath,
+          memory,
+          ...(nearTagSuggestions.length > 0 ? { nearTagSuggestions } : {}),
+          ...(similarExisting.length > 0 ? { similarExisting } : {}),
+        },
       };
     },
   });
@@ -602,14 +666,11 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       if (identity.error) return identityErrorResponse(identity.error);
 
       const tags = stripTodoWorkflowTags(params.tags ?? []);
-      const nearTagSuggestions = buildNearTagSuggestions(store, tags, {
-        scope: [requestedScope],
-        sessionId: identity.sessionId,
-        projectId: identity.projectId,
-        repoPath: identity.repoPath,
-      });
+      const activeInScope = listActiveInScope(store, requestedScope, identity);
+      const nearTagSuggestions = buildNearTagSuggestionsFromMemories(tags, activeInScope);
 
       const summary = buildTodoSummary(params);
+      const similarExisting = findNearDuplicateMemories({ title: params.title, summary }, activeInScope);
 
       const memory = store.createMemory({
         ...decorateCreateMemoryInput(
@@ -631,8 +692,13 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         sourceAgent: "pi",
       });
       return {
-        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store, nearTagSuggestions), requestedScope) }],
-        details: nearTagSuggestions.length > 0 ? { dbPath: store.dbPath, memory, nearTagSuggestions } : { dbPath: store.dbPath, memory },
+        content: [{ type: "text", text: withLegacyNotice(formatMemorySaved(memory, store, nearTagSuggestions, similarExisting), requestedScope) }],
+        details: {
+          dbPath: store.dbPath,
+          memory,
+          ...(nearTagSuggestions.length > 0 ? { nearTagSuggestions } : {}),
+          ...(similarExisting.length > 0 ? { similarExisting } : {}),
+        },
       };
     },
   });
@@ -640,24 +706,44 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
   pi.registerTool({
     name: "memory_audit",
     label: "Memory Audit",
-    description: "Audit memory hygiene.",
+    description: "Audit memory hygiene; optionally apply safe archives.",
     promptSnippet: "Inspect hygiene and legacy-scope migration.",
-    promptGuidelines: ["Use memory_audit for hygiene or legacy-scope review."],
+    promptGuidelines: ["Use memory_audit for hygiene/legacy review; apply archives only safe classes."],
     parameters: Type.Object({
       scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES, { description: "global/repo/session; project legacy" }))),
       repoPath: Type.Optional(Type.String()),
+      apply: Type.Optional(Type.Array(StringEnum(APPLYABLE_AUDIT_TYPES, { description: "Batch-archive these safe finding classes" }))),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const { store, withLegacyNotice } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
-      const { staleTodos, oldHandoffs, identityViolations, legacyWorkflowTags, projectMigrationPreview } = runMemoryAudit(store, params.scope, params.repoPath);
+      const { staleTodos, oldHandoffs, staleNotes, identityViolations, legacyWorkflowTags, projectMigrationPreview } = runMemoryAudit(store, params.scope, params.repoPath);
+
+      const applyTypes = (params.apply ?? []) as Array<(typeof APPLYABLE_AUDIT_TYPES)[number]>;
+      const applied: Array<{ id: string; type: string }> = [];
+      if (applyTypes.includes("expired_handoff")) {
+        for (const candidate of oldHandoffs) {
+          store.archiveMemory({ id: candidate.id, reason: "expired handoff archived via memory_audit apply" });
+          applied.push({ id: candidate.id, type: "expired_handoff" });
+        }
+      }
+      if (applyTypes.includes("stale_note")) {
+        for (const candidate of staleNotes) {
+          store.archiveMemory({ id: candidate.id, reason: "stale note archived via memory_audit apply" });
+          applied.push({ id: candidate.id, type: "stale_note" });
+        }
+      }
+
       const now = new Date().toISOString();
-      const totalFindings = staleTodos.length + oldHandoffs.length + identityViolations.length + legacyWorkflowTags.length + projectMigrationPreview.length;
+      const totalFindings = staleTodos.length + oldHandoffs.length + staleNotes.length + identityViolations.length + legacyWorkflowTags.length + projectMigrationPreview.length;
       store.setMeta("lastAuditAt", now);
-      store.setMeta("lastAuditSummary", `${totalFindings} finding(s): ${staleTodos.length} stale_todo, ${oldHandoffs.length} old_handoff, ${identityViolations.length} identity_violation, ${legacyWorkflowTags.length} legacy_workflow_tag, ${projectMigrationPreview.length} migration_preview`);
-      const output = withLegacyNotice(formatAuditResults(staleTodos, oldHandoffs, store.dbPath, identityViolations, projectMigrationPreview, legacyWorkflowTags), params.scope as MemoryScope[] | undefined);
+      store.setMeta("lastAuditSummary", `${totalFindings} finding(s): ${staleTodos.length} stale_todo, ${oldHandoffs.length} old_handoff, ${staleNotes.length} stale_note, ${identityViolations.length} identity_violation, ${legacyWorkflowTags.length} legacy_workflow_tag, ${projectMigrationPreview.length} migration_preview`);
+      const auditOutput = withLegacyNotice(formatAuditResults(staleTodos, oldHandoffs, store.dbPath, identityViolations, projectMigrationPreview, legacyWorkflowTags, staleNotes), params.scope as MemoryScope[] | undefined);
+      const output = applied.length > 0
+        ? `Applied: archived ${applied.length} memor${applied.length !== 1 ? "ies" : "y"} (${applyTypes.join(", ")}).\n${auditOutput}`
+        : auditOutput;
       return {
         content: [{ type: "text", text: output }],
-        details: { dbPath: store.dbPath, staleTodos, oldHandoffs, identityViolations, legacyWorkflowTags, projectMigrationPreview },
+        details: { dbPath: store.dbPath, staleTodos, oldHandoffs, staleNotes, identityViolations, legacyWorkflowTags, projectMigrationPreview, ...(applied.length > 0 ? { applied } : {}) },
       };
     },
   });
@@ -667,7 +753,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Tag Catalog",
     description: "List active tags.",
     promptSnippet: "Inspect tags before adding new ones.",
-    promptGuidelines: ["Use memory_tag_catalog before unfamiliar tags."],
+    promptGuidelines: ["Check memory_tag_catalog before new tags."],
     parameters: Type.Object({
       scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES))),
       kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS))),
@@ -699,7 +785,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Stats",
     description: "Show store health/caps.",
     promptSnippet: "Check memory-store health and caps.",
-    promptGuidelines: ["Use memory_stats only for store health/capacity."],
+    promptGuidelines: ["Use memory_stats only for store health/caps."],
     parameters: Type.Object({
       scope: StringEnum(MEMORY_SCOPES, { description: "global/repo/session; project legacy" }),
       repoPath: Type.Optional(Type.String()),
@@ -757,6 +843,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         ...(warnings.length > 0 ? [`warnings:`, ...warnings.map((w) => `  ${w}`)] : []),
         `last_audit: ${store.getMeta("lastAuditAt") ?? "never"}`,
         `last_audit_summary: ${store.getMeta("lastAuditSummary") ?? "n/a"}`,
+        ...formatObservabilityLines(store),
         `db_path: ${store.dbPath}`,
       ].join("\n");
 

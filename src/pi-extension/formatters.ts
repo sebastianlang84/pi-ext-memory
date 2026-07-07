@@ -157,7 +157,21 @@ export function appendMarkdownList(lines: string[], heading: string, values?: st
   lines.push("", `## ${heading}`, ...cleaned.map((value) => `- ${value}`));
 }
 
-export function formatMemorySaved(memory: MemoryRecord, store: MemoryStore, nearTagSuggestions: NearTagSuggestion[] = []): string {
+export function formatSimilarMemoryLines(similar: Array<Pick<MemoryRecord, "id" | "title">>): string[] {
+  if (similar.length === 0) return [];
+
+  return [
+    "similar_existing (consider memory_update instead of a duplicate):",
+    ...similar.map((memory) => `- ${memory.id} "${memory.title}"`),
+  ];
+}
+
+export function formatMemorySaved(
+  memory: MemoryRecord,
+  store: MemoryStore,
+  nearTagSuggestions: NearTagSuggestion[] = [],
+  similarExisting: Array<Pick<MemoryRecord, "id" | "title">> = [],
+): string {
   const lines = [
     `Saved memory ${memory.id}.`,
     `kind: ${memory.kind ?? "unset"}`,
@@ -180,6 +194,7 @@ export function formatMemorySaved(memory: MemoryRecord, store: MemoryStore, near
   }
 
   lines.push(
+    ...formatSimilarMemoryLines(similarExisting),
     ...formatNearTagSuggestionLines(nearTagSuggestions),
     `embedding_model: ${store.embeddingModel}`,
     `embedding_dimensions: ${store.embeddingDimensions}`,
@@ -245,6 +260,35 @@ export function formatListResult(result: ListForToolResult, dbPath: string): str
   return lines.join("\n");
 }
 
+export function formatMemoryDetail(memory: MemoryRecord, dbPath: string): string {
+  const lines = [
+    `Memory ${memory.id}.`,
+    `kind: ${memory.kind ?? "note"}`,
+    `scope: ${memory.scope}`,
+    `status: ${memory.status}`,
+    `pinned: ${memory.pinned ? "yes" : "no"}`,
+    `title: ${memory.title}`,
+    `summary: ${memory.summary}`,
+    `tags: ${memory.tags.join(", ") || "none"}`,
+  ];
+
+  if (memory.sessionId) lines.push(`session_id: ${memory.sessionId}`);
+  if (memory.projectId) lines.push(`project_id: ${memory.projectId}`);
+  if (memory.repoPath) lines.push(`repo_path: ${memory.repoPath}`);
+
+  lines.push(
+    `importance: ${memory.importance}`,
+    `confidence: ${memory.confidence}`,
+    `created_at: ${memory.createdAt}`,
+    `updated_at: ${memory.updatedAt}`,
+    `body:`,
+    memory.body ?? "(none)",
+    `db_path: ${dbPath}`,
+  );
+
+  return lines.join("\n");
+}
+
 export function formatMemoryListResultLine(index: number, memory: MemoryRecord): string {
   const tags = memory.tags.length > 0 ? ` tags=${memory.tags.join(",")}` : "";
   const kindLabel = memory.kind ?? "memory";
@@ -270,6 +314,7 @@ export function formatMemorySearchResults(
   return [
     `Found ${results.length} memory result${results.length === 1 ? "" : "s"} for \"${query}\".`,
     ...results.map((result, index) => formatMemorySearchResultLine(index + 1, result)),
+    ...formatNearTagSuggestionLines(nearTagSuggestions),
     `db_path: ${dbPath}`,
   ].join("\n");
 }
@@ -309,7 +354,9 @@ export function formatMemorySearchResultLine(index: number, result: MemorySearch
     metadata.push(`sem=${result.semanticScore.toFixed(3)}`);
   }
 
-  return `${index}. [${metadata.join(" | ")}] ${result.title} — ${result.summary}`;
+  // Include the id so the agent can memory_update / memory_get a hit directly
+  // instead of re-saving a duplicate.
+  return `${index}. [${metadata.join(" | ")}] ${result.title} (${result.id}) — ${result.summary}`;
 }
 
 export function formatWithLegacyProjectScopeNotice(text: string, scope?: MemoryScope | MemoryScope[]): string {

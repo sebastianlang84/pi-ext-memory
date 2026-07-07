@@ -32,6 +32,7 @@ export interface ProjectMigrationPreviewCandidate extends AuditCandidate {
 export interface AuditSummary {
   staleTodos: AuditCandidate[];
   oldHandoffs: AuditCandidate[];
+  staleNotes: AuditCandidate[];
   identityViolations: AuditCandidate[];
   legacyWorkflowTags: AuditCandidate[];
   projectMigrationPreview: ProjectMigrationPreviewCandidate[];
@@ -39,6 +40,7 @@ export interface AuditSummary {
   activeHandoffsCount: number;
   staleTodosCount: number;
   expiredHandoffsCount: number;
+  staleNotesCount: number;
   identityViolationsCount: number;
   legacyWorkflowTagsCount: number;
   projectMigrationPreviewCount: number;
@@ -50,11 +52,12 @@ export function runMemoryAudit(
   store: MemoryStore,
   scopeFilter?: string[],
   repoPathFilter?: string,
-): { staleTodos: AuditCandidate[]; oldHandoffs: AuditCandidate[]; identityViolations: AuditCandidate[]; legacyWorkflowTags: AuditCandidate[]; projectMigrationPreview: ProjectMigrationPreviewCandidate[] } {
+): { staleTodos: AuditCandidate[]; oldHandoffs: AuditCandidate[]; staleNotes: AuditCandidate[]; identityViolations: AuditCandidate[]; legacyWorkflowTags: AuditCandidate[]; projectMigrationPreview: ProjectMigrationPreviewCandidate[] } {
   const summary = runMemoryAuditFull(store, scopeFilter, repoPathFilter);
   return {
     staleTodos: summary.staleTodos,
     oldHandoffs: summary.oldHandoffs,
+    staleNotes: summary.staleNotes,
     identityViolations: summary.identityViolations,
     legacyWorkflowTags: summary.legacyWorkflowTags,
     projectMigrationPreview: summary.projectMigrationPreview,
@@ -77,6 +80,7 @@ export function runMemoryAuditFull(
   const memories = store.listAllInternal(internalFilter);
   const todos = store.listAllInternal({ ...internalFilter, kind: ["todo"] });
   const handoffs = store.listAllInternal({ ...internalFilter, kind: ["handoff"] });
+  const notes = memories.filter((m) => !m.kind);
 
   const identityViolations = memories.flatMap((m) => buildIdentityViolationCandidate(m));
   const legacyWorkflowTags = memories.flatMap((m) => buildLegacyWorkflowTagCandidate(m));
@@ -117,6 +121,21 @@ export function runMemoryAuditFull(
     }];
   });
 
+  const staleNotes: AuditCandidate[] = notes.flatMap((m) => {
+    const finding = classifyLifecycleAuditFinding(m, now);
+    if (finding?.type !== "stale_note") return [];
+    return [{
+      id: m.id,
+      title: m.title,
+      kind: m.kind ?? "note",
+      tags: m.tags,
+      updatedAt: m.updatedAt,
+      scope: m.scope,
+      reason: finding.reason,
+      suggestedAction: finding.suggestedAction,
+    }];
+  });
+
   const warnings: string[] = [];
   const suggestedActions: string[] = [];
 
@@ -148,6 +167,10 @@ export function runMemoryAuditFull(
     suggestedActions.push("Review stale todos");
   }
 
+  if (staleNotes.length > 0) {
+    suggestedActions.push("Review stale notes");
+  }
+
   if (identityViolations.length > 0) {
     warnings.push(`${identityViolations.length} active memor${identityViolations.length !== 1 ? "ies have" : "y has"} scope identity issues`);
     suggestedActions.push("Review identity violations before any migration");
@@ -165,6 +188,7 @@ export function runMemoryAuditFull(
   return {
     staleTodos,
     oldHandoffs,
+    staleNotes,
     identityViolations,
     legacyWorkflowTags,
     projectMigrationPreview,
@@ -172,6 +196,7 @@ export function runMemoryAuditFull(
     activeHandoffsCount: handoffs.length,
     staleTodosCount: staleTodos.length,
     expiredHandoffsCount: oldHandoffs.length,
+    staleNotesCount: staleNotes.length,
     identityViolationsCount: identityViolations.length,
     legacyWorkflowTagsCount: legacyWorkflowTags.length,
     projectMigrationPreviewCount: projectMigrationPreview.length,
@@ -291,9 +316,10 @@ export function formatAuditResults(
   identityViolations: AuditCandidate[] = [],
   projectMigrationPreview: ProjectMigrationPreviewCandidate[] = [],
   legacyWorkflowTags: AuditCandidate[] = [],
+  staleNotes: AuditCandidate[] = [],
 ): string {
   const lines: string[] = [];
-  const total = staleTodos.length + oldHandoffs.length + identityViolations.length + projectMigrationPreview.length + legacyWorkflowTags.length;
+  const total = staleTodos.length + oldHandoffs.length + staleNotes.length + identityViolations.length + projectMigrationPreview.length + legacyWorkflowTags.length;
 
   if (total === 0) {
     lines.push("Memory audit: no items need attention.", "Project migration preview: no legacy project records included.", `db_path: ${dbPath}`);
@@ -318,6 +344,19 @@ export function formatAuditResults(
   if (oldHandoffs.length > 0) {
     lines.push("", `Old handoffs (${oldHandoffs.length}):`);
     oldHandoffs.forEach((c, i) => {
+      lines.push(
+        `  ${i + 1}. [${c.scope}] ${c.title} (${c.id})`,
+        `     tags: ${c.tags.join(", ") || "none"}`,
+        `     updated_at: ${c.updatedAt}`,
+        `     reason: ${c.reason}`,
+        `     action: ${c.suggestedAction}`,
+      );
+    });
+  }
+
+  if (staleNotes.length > 0) {
+    lines.push("", `Stale notes (${staleNotes.length}):`);
+    staleNotes.forEach((c, i) => {
       lines.push(
         `  ${i + 1}. [${c.scope}] ${c.title} (${c.id})`,
         `     tags: ${c.tags.join(", ") || "none"}`,

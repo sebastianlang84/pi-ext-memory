@@ -116,6 +116,16 @@ npm run eval:prompt-routing
 
 By default, the script validates and reports the eval fixture set without calling a model. Set `PI_MEMORY_PROMPT_ROUTING_EVAL_COMMAND` to a command that reads the prompt on stdin and prints JSON `{ "toolName": string|null, "arguments": object }` to run the same cases against a real model, for example `PI_MEMORY_PROMPT_ROUTING_EVAL_COMMAND='your-model-cli --json' npm run eval:prompt-routing`. The eval checks expected tool choice plus key arguments for all memory tools and no-tool negative cases. It is developer-only and adds no runtime prompt tokens.
 
+## Retrieval-quality eval
+
+Run the deterministic retrieval-quality eval when changing ranking, FTS, scope scoring, or embedding behavior:
+
+```bash
+npm run eval:retrieval-quality
+```
+
+It seeds a labeled in-memory fixture store and scores ranking against expected-relevant ids — no model or network. Metrics are precision@1, recall@3, MRR, and current-repo/pinned anchor accuracy. A regression test (`test/core/retrieval-quality.test.ts`) guards a conservative bar below the current baseline so ranking regressions fail while normal tuning has headroom. The per-case output also surfaces known limits (e.g. strict-first FTS reaching prefix variants only on a total miss).
+
 ## Version metadata
 
 For release-relevant commits, keep these in sync:

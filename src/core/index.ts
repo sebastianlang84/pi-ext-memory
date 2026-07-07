@@ -26,6 +26,7 @@ export {
 } from "./todos.ts";
 export {
   MEMORY_KINDS,
+  MEMORY_KIND_FILTERS,
   MEMORY_LIST_ORDER_BY,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
@@ -37,6 +38,7 @@ export {
   normalizeUpdateMemoryInput,
 } from "./memories.ts";
 export { initializeMemoryStore } from "./store.ts";
+export { findNearDuplicateMemories, isPlaceholderEmbeddingModel } from "./search.ts";
 export type {
   MemoryIdentityContext,
   MemoryIdentityFields,
@@ -81,12 +83,14 @@ export type {
 } from "./store.ts";
 export {
   MEMORY_POLICY,
+  NOTE_STALE_AFTER_DAYS,
   buildActiveCapCountFilter,
   checkActiveCap,
   classifyLifecycleAuditFinding,
   getCapForKindScope,
   getEffectiveLifecycleScope,
   isActiveHandoff,
+  isHandoffExpired,
 } from "./policy.ts";
 export type { ActiveCapCountFilter, CapPolicy, LifecycleAuditFinding, LifecycleAuditFindingType } from "./policy.ts";
 export { DEFAULT_HYBRID_RETRIEVAL_POLICY } from "./retrieval-policy.ts";

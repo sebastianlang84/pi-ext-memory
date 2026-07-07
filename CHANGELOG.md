@@ -13,8 +13,32 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+### Added
+- `memory_get` tool: read a single memory's full body by id (ids now appear in `memory_search` result lines, closing the update-instead-of-duplicate loop).
+- `memory_save`/`memory_save_todo` surface `similar_existing` hints when a near-duplicate memory already exists, advising `memory_update` over a paraphrased duplicate.
+- `memory_audit apply` mode batch-archives safe finding classes (`expired_handoff`, `stale_note`).
+- Note lifecycle: notes untouched for the note-staleness window are flagged by `memory_audit`; `last_accessed_at` is now recorded on read.
+- Session summaries saved via `/memory-session-save` are also persisted as searchable `session-summary` memories.
+- `/memory-export <file.json>` and `/memory-import <file.json>` for backup and machine migration.
+- `kind: ["note"]` filter selects plain (kindless) notes in `memory_list` and `memory_search`.
+- Retrieval observability counters (`memory_search` calls, zero-hit rate, turn injections) surfaced in `memory_stats`.
+- `npm run eval:retrieval-quality`: deterministic precision@1 / recall@3 / MRR harness over a labeled fixture, guarded by a regression test.
+- Configurable knobs via env: `PI_MEMORY_MIN_VECTOR_SIMILARITY`, `PI_MEMORY_WEIGHT_LEXICAL`, `PI_MEMORY_WEIGHT_SEMANTIC`, `PI_MEMORY_TURN_RESULT_LIMIT`, `PI_MEMORY_NOTE_STALE_DAYS`.
+
 ### Changed
+- Turn-start retrieval distills the prompt (drops stopwords, caps tokens) and re-ranks candidates across all scope stages by match score instead of stage order.
+- `pinned` memories now receive a ranking boost (previously stored but unused).
+- Relaxed FTS fallback uses prefix matching so morphological variants match (`deploy` → `deployment`).
+- Scope-less `memory_search` anchors ranking to the current repo/project without filtering out cross-repo matches.
+- Deterministic-hash embedding is treated as a semantic-inactive placeholder: the meaningless semantic channel is skipped and `/memory-status` reports `semantic_search: inactive`.
+- Per-turn hygiene audit is cached (short TTL) instead of re-scanning every turn; the no-hit guidance is shown in full only on the first no-hit turn per session.
 - Render the Pi footer status as a self-contained pill (`[Memory ✓]` / `[Memory ✗]`) so adjacent extension statuses remain readable with Pi's current single-space composition.
+
+### Fixed
+- Handoff expiry is now enforced at read time. `isActiveHandoff(memory, now)` previously ignored `now`, so expired handoffs kept being injected as current context.
+
+### Schema
+- Migration v9: guards the FTS update trigger so metadata-only writes (`last_accessed_at`, `status`, `pinned`) no longer rebuild the FTS index; adds a `last_accessed_at` index.
 
 ## [2.1.9] - 2026-06-15
 

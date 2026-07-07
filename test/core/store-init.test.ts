@@ -16,8 +16,8 @@ test("initializeMemoryStore creates a fresh database and applies schema v8", () 
 
   assert.equal(existsSync(dbPath), true);
   assert.equal(store.dbPath, dbPath);
-  assert.equal(store.schemaVersion, 8);
-  assert.equal(store.latestSchemaVersion, 8);
+  assert.equal(store.schemaVersion, 9);
+  assert.equal(store.latestSchemaVersion, 9);
   assert.equal(store.embeddingModel, "builtin-hash-384-v1");
   assert.equal(store.fallbackEmbeddingModel, "builtin-hash-384-v1");
   assert.equal(store.embeddingDimensions, 384);
@@ -27,7 +27,7 @@ test("initializeMemoryStore creates a fresh database and applies schema v8", () 
 
   try {
     const schemaVersion = db.prepare("PRAGMA user_version;").get() as { user_version: number };
-    assert.equal(schemaVersion.user_version, 8);
+    assert.equal(schemaVersion.user_version, 9);
 
     const coreTables = db
       .prepare(
@@ -113,8 +113,8 @@ test("initializeMemoryStore is idempotent for an already-migrated database", () 
   const secondStore = initializeMemoryStore({ dbPath, preferLowFootprintEmbeddings: true });
 
   try {
-    assert.equal(secondStore.schemaVersion, 8);
-    assert.equal(secondStore.latestSchemaVersion, 8);
+    assert.equal(secondStore.schemaVersion, 9);
+    assert.equal(secondStore.latestSchemaVersion, 9);
     assert.equal(secondStore.embeddingModel, "builtin-hash-64-v1");
     assert.equal(secondStore.fallbackEmbeddingModel, "builtin-hash-64-v1");
     assert.equal(secondStore.embeddingDimensions, 64);

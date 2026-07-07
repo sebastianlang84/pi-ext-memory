@@ -366,7 +366,7 @@ test("findLatestHandoffForTurn orders exact session before repo fallback before 
   }
 });
 
-test("findLatestHandoffForTurn excludes expired active handoffs", () => {
+test("findLatestHandoffForTurn excludes handoffs past the expiry policy window", () => {
   const dbPath = join(createTempDir("pi-memory-handoff-expired-"), "memory.sqlite");
   const store = initializeMemoryStore({ dbPath });
 
@@ -377,24 +377,18 @@ test("findLatestHandoffForTurn excludes expired active handoffs", () => {
       sessionId: "session-789",
       repoPath: "/repo",
       title: "Session handoff",
-      summary: "Session handoff is always returned since expiresAt is removed.",
-    });
-    const fallback = store.createMemory({
-      kind: "handoff",
-      scope: "repo",
-      repoPath: "/repo",
-      title: "Repo fallback handoff",
-      summary: "Repo fallback handoff is always returned since expiresAt is removed.",
+      summary: "Session handoff should be returned while inside the expiry window.",
     });
 
-    // expiresAt removed in slice5 — all active handoffs are returned regardless
-    const latest = findLatestHandoffForTurn(store, { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" });
-    assert.ok(latest !== undefined, "expected session handoff to be returned");
-    assert.equal(latest?.memory.id, session.id);
+    const context = { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" };
 
-    store.archiveMemory({ id: fallback.id });
-    // session handoff is still returned after repo fallback is archived
-    assert.ok(findLatestHandoffForTurn(store, { cwd: "/repo", sessionId: "session-789", repoPath: "/repo" }) !== undefined);
+    // Inside the window (age 0) — returned.
+    const fresh = findLatestHandoffForTurn(store, context);
+    assert.equal(fresh?.memory.id, session.id);
+
+    // 8 days later — past the 7-day handoff expiry window — excluded.
+    const eightDaysLater = new Date(new Date(session.updatedAt).getTime() + 8 * 24 * 60 * 60 * 1000);
+    assert.equal(findLatestHandoffForTurn(store, context, eightDaysLater), undefined);
   } finally {
     store.close();
   }

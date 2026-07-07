@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
+import { readIntEnv } from "../core/env-config.ts";
 import { applyRuntimeIdentityEnrichment } from "../core/identity-policy.ts";
 import type {
   CreateMemoryInput,
@@ -27,10 +28,47 @@ const PROJECT_MARKER_FILES = [
 ] as const;
 
 const MEMORY_CONTEXT_CUSTOM_TYPE = "pi-memory-context";
-const TURN_MEMORY_RESULT_LIMIT = 3;
+const TURN_MEMORY_RESULT_LIMIT = readIntEnv(process.env, "PI_MEMORY_TURN_RESULT_LIMIT", 3, { min: 1, max: 10 });
 const TURN_MEMORY_STAGE_LIMIT = 4;
+const MAX_DISTILLED_QUERY_TOKENS = 12;
+
+// Low-information tokens dropped from turn/manual queries so the strict AND
+// query is not over-constrained and the relaxed OR query does not match on
+// filler words. English + a few common German words (memories may be German).
+const QUERY_STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "is", "are", "was", "were",
+  "be", "this", "that", "it", "as", "at", "by", "from", "how", "what", "why", "when", "where", "do",
+  "does", "did", "i", "you", "we", "my", "your", "our", "can", "should", "would", "could", "please",
+  "me", "us", "so", "not", "no", "yes", "any", "all", "into", "out", "up", "about", "then", "than",
+  "der", "die", "das", "und", "oder", "für", "mit", "ist", "sind", "ein", "eine", "einen", "wie",
+  "was", "warum", "bitte", "um", "zu", "den", "dem", "von", "auf", "im", "am", "des", "auch",
+]);
+
+/**
+ * Reduce a raw prompt to its informative tokens for retrieval: drop stopwords
+ * and cap the token count so the strict AND query can still match and the
+ * relaxed OR query stays precise. Short queries are returned unchanged so
+ * single-keyword lookups are never mangled.
+ */
+export function distillQuery(query: string): string {
+  const raw = query.trim();
+  const tokens = raw.match(/[\p{L}\p{N}][\p{L}\p{N}_.:/-]*/gu) ?? [];
+  if (tokens.length <= 3) return raw;
+
+  const informative = tokens.filter((token) => {
+    const lower = token.toLowerCase();
+    if (QUERY_STOPWORDS.has(lower)) return false;
+    return lower.length >= 3 || /[._:/-]/.test(lower) || /\d/.test(lower);
+  });
+
+  const kept = (informative.length >= 2 ? informative : tokens).slice(0, MAX_DISTILLED_QUERY_TOKENS);
+  return kept.join(" ");
+}
 const MEMORY_NO_HIT_GUIDANCE =
   "User wins over memory. Prior-work: vary queries + escalate repo→global + memory_list. Empty ≠ absent. Save/update notes/todos/handoffs only.";
+// Shown after the first no-hit turn of a session — the full guidance has already
+// been injected once, so later no-hit turns only need a compact reminder.
+const MEMORY_NO_HIT_GUIDANCE_SHORT = "User wins; empty ≠ absent.";
 const MEMORY_HIT_GUIDANCE =
   "Use memory_search for more; save/update durable notes/todos/handoffs only.";
 
@@ -91,7 +129,7 @@ export function buildTurnSearchPlan(
   context: MemoryTurnContext,
   options: Pick<RetrieveTurnMemoriesOptions, "stageLimit"> = {},
 ): SearchMemoriesInput[] {
-  const normalizedQuery = query.trim();
+  const normalizedQuery = distillQuery(query);
   if (normalizedQuery.length < 2) {
     return [];
   }
@@ -156,27 +194,23 @@ export function retrieveMemoriesForTurn(
   const queryEmbedding = store.createSearchQueryEmbedding?.(searchPlan[0]?.query ?? query);
   const searchOptions: SearchMemoriesOptions | undefined = queryEmbedding ? { queryEmbedding } : undefined;
 
+  // Collect every stage's candidates, then rank across all stages by matchScore.
+  // A strong repo/global match must not be displaced by a weak session/project
+  // match that merely came from an earlier stage.
   for (const stage of searchPlan) {
-    const stageResults = store.searchMemories(stage, searchOptions);
-
-    for (const result of stageResults) {
-      if (!dedupedResults.has(result.id)) {
+    for (const result of store.searchMemories(stage, searchOptions)) {
+      const existing = dedupedResults.get(result.id);
+      if (!existing || result.matchScore > existing.matchScore) {
         dedupedResults.set(result.id, result);
-      }
-
-      if (dedupedResults.size >= resultLimit) {
-        return {
-          results: Array.from(dedupedResults.values()).slice(0, resultLimit),
-          searchPlan,
-        };
       }
     }
   }
 
-  return {
-    results: Array.from(dedupedResults.values()).slice(0, resultLimit),
-    searchPlan,
-  };
+  const results = Array.from(dedupedResults.values())
+    .sort((left, right) => right.matchScore - left.matchScore)
+    .slice(0, resultLimit);
+
+  return { results, searchPlan };
 }
 
 export function buildTurnMemoryMessage(
@@ -186,6 +220,7 @@ export function buildTurnMemoryMessage(
   dbPath: string,
   searchPlan: SearchMemoriesInput[],
   latestHandoff?: LatestHandoffResult,
+  options: { compactNoHitGuidance?: boolean } = {},
 ): TurnMemoryMessage | null {
   if (query.trim().length < 2 && !latestHandoff) {
     return null;
@@ -193,7 +228,7 @@ export function buildTurnMemoryMessage(
 
   return {
     customType: MEMORY_CONTEXT_CUSTOM_TYPE,
-    content: formatTurnMemoryContext(query, results, latestHandoff),
+    content: formatTurnMemoryContext(query, results, latestHandoff, options.compactNoHitGuidance),
     display: false,
     details: {
       dbPath,
@@ -214,15 +249,21 @@ export function formatTurnMemoryContext(
   query: string,
   results: MemorySearchResult[],
   latestHandoff?: LatestHandoffResult,
+  compactNoHitGuidance = false,
 ): string {
   const topResults = results.slice(0, TURN_MEMORY_RESULT_LIMIT);
-  const contextLines = formatTurnContextLines(query, topResults, latestHandoff !== undefined);
+  const contextLines = formatTurnContextLines(query, topResults, latestHandoff !== undefined, compactNoHitGuidance);
   const handoffLines = latestHandoff ? formatLatestHandoffLines(latestHandoff) : [];
 
   return [...handoffLines, ...contextLines].join("\n");
 }
 
-function formatTurnContextLines(query: string, topResults: MemorySearchResult[], hasHandoff: boolean): string[] {
+function formatTurnContextLines(
+  query: string,
+  topResults: MemorySearchResult[],
+  hasHandoff: boolean,
+  compactNoHitGuidance: boolean,
+): string[] {
   const selfDescription = isMemoryIntrospectionQuery(query)
     ? "local SQLite memory extension for notes/todos/handoffs; "
     : "";
@@ -236,7 +277,8 @@ function formatTurnContextLines(query: string, topResults: MemorySearchResult[],
   }
 
   const noHitLabel = hasHandoff ? "no additional stored context" : "no relevant stored context";
-  return [`pi-memory: ${selfDescription}${noHitLabel}. ${MEMORY_NO_HIT_GUIDANCE}`];
+  const guidance = compactNoHitGuidance ? MEMORY_NO_HIT_GUIDANCE_SHORT : MEMORY_NO_HIT_GUIDANCE;
+  return [`pi-memory: ${selfDescription}${noHitLabel}. ${guidance}`];
 }
 
 function isMemoryIntrospectionQuery(query: string): boolean {
