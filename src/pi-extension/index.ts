@@ -23,8 +23,11 @@ export default function registerPiMemoryExtension(pi: ExtensionAPI) {
         return { message };
       }
     } catch (error) {
+      // Memory augmentation is best-effort context: a store/DB hiccup must not
+      // abort the user's turn. Surface the failure via the status pill and
+      // continue without an injected memory message instead of rethrowing.
+      void error;
       if (ctx.hasUI) ctx.ui.setStatus("pi-memory", "[Memory ✗]");
-      throw error;
     }
   });
 

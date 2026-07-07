@@ -409,7 +409,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       nextAction: Type.Optional(Type.String({ description: "todo only" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const { store, identityErrorResponse, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
+      const { store, identityErrorResponse, identityErrorText, withLegacyNotice, resolveWriteIdentity, turnContext } = shell.forCwd(ctx.cwd, ctx.sessionManager.getSessionId());
 
       const existingMemory = store.getMemory(params.id);
       if (!existingMemory) {
@@ -465,21 +465,21 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
       if (params.scope !== undefined || params.projectId !== undefined || params.repoPath !== undefined) {
         if (params.scope === "global" && (existingMemory.sessionId || existingMemory.projectId || existingMemory.repoPath)) {
           return {
-            content: [{ type: "text", text: identityErrorResponse("memory_update cannot change an identified memory to scope=global because project/repo/session identifiers cannot be cleared by this tool.").content[0].text }],
+            content: [{ type: "text", text: identityErrorText("memory_update cannot change an identified memory to scope=global because project/repo/session identifiers cannot be cleared by this tool.") }],
             details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
 
         if (params.scope === "session" && !existingMemory.sessionId) {
           return {
-            content: [{ type: "text", text: identityErrorResponse("memory_update cannot change a non-session memory to scope=session because sessionId cannot be patched by this tool.").content[0].text }],
+            content: [{ type: "text", text: identityErrorText("memory_update cannot change a non-session memory to scope=session because sessionId cannot be patched by this tool.") }],
             details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
 
         if (params.scope !== undefined && params.scope !== "session" && existingMemory.sessionId) {
           return {
-            content: [{ type: "text", text: identityErrorResponse("memory_update cannot change a session memory to repo/project/global because sessionId cannot be cleared by this tool.").content[0].text }],
+            content: [{ type: "text", text: identityErrorText("memory_update cannot change a session memory to repo/project/global because sessionId cannot be cleared by this tool.") }],
             details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }
@@ -496,7 +496,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         );
         if (identity.error) {
           return {
-            content: [{ type: "text", text: identityErrorResponse(identity.error).content[0].text }],
+            content: [{ type: "text", text: identityErrorText(identity.error) }],
             details: { dbPath: store.dbPath, memory: existingMemory },
           };
         }

@@ -279,6 +279,40 @@ function buildProjectMigrationPreviewCandidate(m: MemoryRecord, now: Date): Proj
   };
 }
 
+/**
+ * Counts stale todos and expired handoffs relevant to the current turn only:
+ * the active repo (when inside one) plus repo-less global memories. Memories
+ * belonging to other repos are intentionally excluded so the per-turn hygiene
+ * warning stays about the current workspace instead of leaking cross-repo noise.
+ * Use the `memory_audit` tool to inspect other scopes/repos explicitly.
+ *
+ * Only "todo" and "handoff" rows are scanned (via indexed kind/status/repo
+ * filters), so this stays cheap regardless of overall store size.
+ */
+export function countHygieneFindings(
+  store: MemoryStore,
+  repoPath?: string,
+  now: Date = new Date(),
+): { staleTodos: number; oldHandoffs: number } {
+  const buckets: Array<{ repoPath?: string; scope?: MemoryScope[] }> = repoPath
+    ? [{ repoPath }, { scope: ["global"] }]
+    : [{ scope: ["global"] }];
+
+  let staleTodos = 0;
+  let oldHandoffs = 0;
+
+  for (const bucket of buckets) {
+    for (const todo of store.listAllInternal({ status: "active", kind: ["todo"], ...bucket })) {
+      if (classifyLifecycleAuditFinding(todo, now)?.type === "stale_todo") staleTodos += 1;
+    }
+    for (const handoff of store.listAllInternal({ status: "active", kind: ["handoff"], ...bucket })) {
+      if (classifyLifecycleAuditFinding(handoff, now)?.type === "expired_handoff") oldHandoffs += 1;
+    }
+  }
+
+  return { staleTodos, oldHandoffs };
+}
+
 export function buildHygieneLine(staleTodoCount: number, oldHandoffCount: number): string | null {
   if (staleTodoCount === 0 && oldHandoffCount === 0) return null;
   return `⚠ Memory hygiene: ${staleTodoCount} stale todo${staleTodoCount !== 1 ? "s" : ""}, ${oldHandoffCount} old handoff${oldHandoffCount !== 1 ? "s" : ""}. Run memory_audit for details.`;

@@ -7,7 +7,7 @@ import {
   retrieveMemoriesForTurn,
   type TurnMemoryMessage,
 } from "./retrieval.ts";
-import { buildHygieneLine, runMemoryAudit } from "./audit.ts";
+import { buildHygieneLine, countHygieneFindings } from "./audit.ts";
 
 /**
  * Orchestrates all turn-message logic: context derivation, memory retrieval,
@@ -27,8 +27,8 @@ export function runTurnIntake(
   const { results, searchPlan } = retrieveMemoriesForTurn(store, prompt, turnContext);
   const baseMessage = buildTurnMemoryMessage(prompt, results, turnContext, store.dbPath, searchPlan, latestHandoff);
 
-  const { staleTodos, oldHandoffs } = runMemoryAudit(store);
-  const hygieneLine = buildHygieneLine(staleTodos.length, oldHandoffs.length);
+  const { staleTodos, oldHandoffs } = countHygieneFindings(store, turnContext.repoPath);
+  const hygieneLine = buildHygieneLine(staleTodos, oldHandoffs);
 
   if (baseMessage && hygieneLine) {
     return {

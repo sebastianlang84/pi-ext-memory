@@ -56,6 +56,8 @@ export interface ToolExecutionContext {
   turnContext: ReturnType<typeof deriveMemoryTurnContext>;
   /** Build a standard identity-error response with dbPath in details. */
   identityErrorResponse(error: string): ToolResponse;
+  /** Formatted identity-error text, for embedding into a custom response. */
+  identityErrorText(error: string): string;
   /** Wrap text with the legacy project scope notice when scope is project. */
   withLegacyNotice(text: string, scope?: MemoryScope | MemoryScope[]): string;
   /** Resolve search/list identity (single-scope, no primary requirement). */
@@ -101,6 +103,10 @@ export function createToolShell(getActiveStore: (cwd: string) => MemoryStore): T
             content: [{ type: "text", text: formatIdentityError(error, store.dbPath) }],
             details: { dbPath: store.dbPath },
           };
+        },
+
+        identityErrorText(error: string): string {
+          return formatIdentityError(error, store.dbPath);
         },
 
         withLegacyNotice(text: string, scope?: MemoryScope | MemoryScope[]): string {

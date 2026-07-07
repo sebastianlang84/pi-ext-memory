@@ -15,6 +15,13 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ### Changed
 - Render the Pi footer status as a self-contained pill (`[Memory ✓]` / `[Memory ✗]`) so adjacent extension statuses remain readable with Pi's current single-space composition.
+- Scope the automatic per-turn hygiene warning (stale todos / expired handoffs) to the active repo plus global memories instead of scanning the entire cross-repo store, so warnings stay relevant to the current workspace. Other repos remain inspectable via the `memory_audit` tool.
+
+### Fixed
+- A memory store/DB error during turn intake no longer aborts the user's turn; memory augmentation now degrades gracefully and only flags the failure via the status pill.
+
+### Added
+- `npm run bench:retrieval` performance tripwire for the O(N) per-turn retrieval path, documenting the store size at which a real vector index becomes worthwhile.
 
 ## [2.1.9] - 2026-06-15
 

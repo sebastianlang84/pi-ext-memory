@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { initializeMemoryStore } from "../../src/core/index.ts";
-import { formatAuditResults, runMemoryAuditFull } from "../../src/pi-extension/audit.ts";
+import { countHygieneFindings, formatAuditResults, runMemoryAuditFull } from "../../src/pi-extension/audit.ts";
 
 function createTempDbPath(): { dbPath: string; tempRoot: string } {
   const tempRoot = mkdtempSync(join(tmpdir(), "pi-memory-audit-"));
@@ -322,6 +322,54 @@ test("memory audit detects expired handoffs in oldHandoffs list", () => {
     assert.ok(summary.expiredHandoffsCount >= 1, `expected at least 1 expired handoff, got ${summary.expiredHandoffsCount}`);
     assert.ok(summary.oldHandoffs.some((c) => c.title === "Active handoff"), "expected Active handoff in oldHandoffs");
     assert.ok(summary.warnings.some((w) => w.includes("expired")), "expected expired warning");
+  } finally {
+    store.close();
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("countHygieneFindings scopes to the active repo plus global and excludes other repos", () => {
+  const { dbPath, tempRoot } = createTempDbPath();
+  const store = initializeMemoryStore({ dbPath });
+  // Far-future reference time so freshly-created rows count as stale/expired.
+  const now = new Date(Date.now() + 1000 * 60 * 60 * 24 * 100);
+
+  try {
+    store.createMemory({
+      kind: "todo",
+      scope: "repo",
+      repoPath: "/repo/current",
+      title: "Current repo todo",
+      summary: "Belongs to the repo the turn is running in.",
+    });
+    store.createMemory({
+      kind: "handoff",
+      scope: "repo",
+      repoPath: "/repo/current",
+      title: "Current repo handoff",
+      summary: "Handoff that should be counted for the current repo.",
+    });
+    store.createMemory({
+      kind: "todo",
+      scope: "repo",
+      repoPath: "/repo/other",
+      title: "Foreign repo todo",
+      summary: "Belongs to an unrelated repo and must not leak into the warning.",
+    });
+    store.createMemory({
+      kind: "todo",
+      scope: "global",
+      title: "Global todo",
+      summary: "Global memory relevant regardless of the active repo.",
+    });
+
+    const current = countHygieneFindings(store, "/repo/current", now);
+    assert.equal(current.staleTodos, 2, "current repo todo + global todo, foreign repo excluded");
+    assert.equal(current.oldHandoffs, 1, "current repo handoff counted");
+
+    const noRepo = countHygieneFindings(store, undefined, now);
+    assert.equal(noRepo.staleTodos, 1, "outside a repo only global memories count");
+    assert.equal(noRepo.oldHandoffs, 0);
   } finally {
     store.close();
     rmSync(tempRoot, { recursive: true, force: true });
