@@ -126,6 +126,8 @@ npm run eval:retrieval-quality
 
 It seeds a labeled in-memory fixture store and scores ranking against expected-relevant ids — no model or network. Metrics are precision@1, recall@3, MRR, and current-repo/pinned anchor accuracy. A regression test (`test/core/retrieval-quality.test.ts`) guards a conservative bar below the current baseline so ranking regressions fail while normal tuning has headroom. The per-case output also surfaces known limits (e.g. strict-first FTS reaching prefix variants only on a total miss).
 
+The same script prints an adversarial known-gap ledger (`ADVERSARIAL_EVAL_CASES`) that is not scored into the headline metrics. Each case documents a gap the lexical + scope + recency stack cannot close by construction — code-identifier subtokens, cross-lingual (DE→EN) intent, and zero-overlap paraphrase — via a verified `expectedFound` flag. The ledger test fails on a silent regression and on a silent improvement, so closing a gap (e.g. identifier subtoken indexing) must flip the flag deliberately in the same change.
+
 ## Version metadata
 
 For release-relevant commits, keep these in sync:

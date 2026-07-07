@@ -50,6 +50,10 @@ function seedFixtureStore(): SeededStore {
   seed("g-unrelated", { scope: "global", title: "Coffee machine notes", summary: "The office coffee machine needs descaling monthly." });
   seed("r1-cache", { kind: "todo", scope: "repo", repoPath: REPO_ONE, title: "Cache rollout plan", summary: "Cache rollout uses a staged feature flag per environment." });
   seed("r2-cache", { kind: "todo", scope: "repo", repoPath: REPO_TWO, title: "Cache rollout plan", summary: "Cache rollout in the other service relies on Redis TTL windows." });
+  // Identifier-heavy code memory. The camelCase identifier is a single FTS token
+  // (`buildftsmatchquery`); the summary deliberately shares no token with the
+  // subtoken query, so only camelCase/snake_case subtoken indexing can reach it.
+  seed("g-identifier", { scope: "global", title: "buildFtsMatchQuery helper", summary: "Internal helper that assembles the ranking predicate from raw user input." });
 
   return { store, keyToId };
 }
@@ -89,6 +93,89 @@ export const RETRIEVAL_EVAL_CASES: RetrievalEvalCase[] = [
     expectedTopKey: "r1-cache",
   },
 ];
+
+/**
+ * Adversarial cases document retrieval gaps that the lexical + scope + recency
+ * stack cannot close by construction. Each carries `expectedFound`: the current,
+ * verified behavior of whether ANY relevant memory surfaces at all. These are not
+ * scored into the headline metrics; they are a falsifiable ledger of known gaps
+ * that flips when a gap is genuinely closed (e.g. identifier subtoken indexing)
+ * or silently regresses.
+ */
+export interface AdversarialEvalCase {
+  id: string;
+  description: string;
+  gap: "identifier" | "cross-lingual" | "paraphrase";
+  input: SearchMemoriesInput;
+  relevantKeys: string[];
+  /** Verified current behavior: does at least one relevant memory appear in results? */
+  expectedFound: boolean;
+}
+
+export const ADVERSARIAL_EVAL_CASES: AdversarialEvalCase[] = [
+  {
+    id: "identifier-subtokens",
+    description: "'fts match query' should reach the buildFtsMatchQuery helper (needs camelCase subtoken indexing).",
+    gap: "identifier",
+    input: { query: "fts match query", scope: ["global"], limit: 5 },
+    relevantKeys: ["g-identifier"],
+    expectedFound: false,
+  },
+  {
+    id: "cross-lingual-de",
+    description: "German intent 'bereitstellung ausrollen' should reach English deploy memories (zero token overlap; needs semantics or English-query guidance).",
+    gap: "cross-lingual",
+    input: { query: "bereitstellung ausrollen", scope: ["global"], limit: 5 },
+    relevantKeys: ["g-deploy", "g-deploy-main"],
+    expectedFound: false,
+  },
+  {
+    id: "paraphrase-zero-overlap",
+    description: "'ship code to production' should reach deploy-from-main (zero token overlap; needs real semantics).",
+    gap: "paraphrase",
+    input: { query: "ship code to production", scope: ["global"], limit: 5 },
+    relevantKeys: ["g-deploy-main", "g-deploy"],
+    expectedFound: false,
+  },
+];
+
+export interface AdversarialFinding {
+  id: string;
+  gap: AdversarialEvalCase["gap"];
+  found: boolean;
+  expectedFound: boolean;
+  regressed: boolean;
+}
+
+export function computeAdversarialFindings(cases: AdversarialEvalCase[] = ADVERSARIAL_EVAL_CASES): AdversarialFinding[] {
+  const { store, keyToId } = seedFixtureStore();
+  try {
+    return cases.map((testCase) => {
+      const relevantIds = new Set(testCase.relevantKeys.map((key) => keyToId.get(key)));
+      const ids = store.searchMemories(testCase.input).map((result) => result.id);
+      const found = ids.some((id) => relevantIds.has(id));
+      return {
+        id: testCase.id,
+        gap: testCase.gap,
+        found,
+        expectedFound: testCase.expectedFound,
+        regressed: found !== testCase.expectedFound,
+      };
+    });
+  } finally {
+    store.close();
+  }
+}
+
+export function formatAdversarialFindings(findings: AdversarialFinding[]): string {
+  const closed = findings.filter((f) => f.found).length;
+  return [
+    `Adversarial known-gap ledger (${closed}/${findings.length} currently reachable; not scored into headline metrics)`,
+    ...findings.map(
+      (f) => `- ${f.id} [${f.gap}]: ${f.found ? "reachable" : "gap"}${f.regressed ? ` !! CHANGED (expected ${f.expectedFound ? "reachable" : "gap"})` : ""}`,
+    ),
+  ].join("\n");
+}
 
 export interface RetrievalQualityMetrics {
   cases: number;
@@ -170,6 +257,8 @@ export function formatRetrievalQuality(metrics: RetrievalQualityMetrics): string
 async function main(): Promise<void> {
   const metrics = computeRetrievalQuality();
   console.log(formatRetrievalQuality(metrics));
+  console.log("");
+  console.log(formatAdversarialFindings(computeAdversarialFindings()));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
