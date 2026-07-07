@@ -30,8 +30,10 @@ pi install .
 /memory-search                 show current memory context (todos, handoffs, next steps) with suggested actions
 /memory-handoff                show the active session handoff
 /memory-handoff archive        archive the active session handoff
-/memory-session-save <summary> persist an explicit session summary
+/memory-session-save <summary> persist an explicit session summary (also stored as a searchable session-summary memory)
 /memory-audit                  run the memory audit and print results
+/memory-export <file.json>     export all memories (active + archived) to JSON for backup/migration
+/memory-import <file.json>     import memories from an export file (content-preserving; assigns fresh ids)
 ```
 
 ## Normal tools
@@ -39,13 +41,14 @@ pi install .
 Normal agent-facing tools are:
 
 ```text
-memory_search                  search durable memory (semantic + lexical)
-memory_list                    list/filter structured memories; kind and scope are optional; paginated with total_count, has_more, next_offset
+memory_search                  search durable memory (semantic + lexical); result lines include the memory id; kind accepts "note" for kindless notes
+memory_list                    list/filter structured memories; kind (todo/handoff/note) and scope are optional; paginated with total_count, has_more, next_offset
+memory_get                     read one memory's full body by id (ids come from memory_search/memory_list)
 memory_save                    save kindless durable notes, facts, decisions, preferences, and context
 memory_save_todo               save actionable open tasks with priority/status/scope
 memory_save_handoff            save or refresh resumable agent handoff state
 memory_update                  patch, close, or archive an existing memory by id; use archiveReason with status=archived when archiving
-memory_audit                   report lifecycle hygiene, legacy workflow-tag hygiene, scope identity issues, and read-only legacy project migration previews
+memory_audit                   report lifecycle hygiene (stale todos, expired handoffs, stale notes), legacy workflow-tag hygiene, scope identity issues, and read-only legacy project migration previews; pass apply=["expired_handoff","stale_note"] to batch-archive those safe classes
 memory_tag_catalog             show existing active tags with counts, scopes/kinds, and recent examples
 ```
 
@@ -57,7 +60,7 @@ Use `memory_list` for normal listing and `memory_update(status="archived", archi
 memory_stats                   advanced/admin health, cap, and last-audit summary by scope
 ```
 
-Use `memory_stats` only for memory-store health or capacity checks. It is intentionally not part of the normal first-choice tool path.
+Use `memory_stats` only for memory-store health or capacity checks. It is intentionally not part of the normal first-choice tool path. It also reports retrieval observability counters (`memory_search` calls, zero-hit rate, turn injections and no-hit turns) so retrieval quality can be tracked over time.
 
 ## Scope identity
 
@@ -77,9 +80,9 @@ Tools reject contradictory filters such as `scope="repo"` plus `projectId`, avoi
 
 ## Memory kinds and status
 
-- Generic memories are kindless and are used for notes, facts, decisions, preferences, and context.
+- Generic memories are kindless and are used for notes, facts, decisions, preferences, and context. Filter for them explicitly with `kind: ["note"]` in `memory_list`/`memory_search`.
 - `todo` memories are created through `memory_save_todo`.
-- `handoff` memories are created or refreshed through `memory_save_handoff`.
+- `handoff` memories are created or refreshed through `memory_save_handoff`. Handoffs older than the expiry window are treated as expired and are no longer surfaced as the active handoff.
 - Active memories use `status="active"`.
 - Closed memories use `status="archived"`; archive semantics should be captured with `archiveReason`.
 
@@ -98,8 +101,15 @@ Saving past the hard cap returns an `active_*_cap_exceeded` error with cleanup s
 - By default, pi-memory stores SQLite state at `~/.pi/agent/state/pi-memory/memory.sqlite`.
 - On first startup with the default path, if the new DB does not exist but the legacy `~/.pi/agent/pi-memory.sqlite` file does, pi-memory copies the legacy DB plus SQLite `-wal`/`-shm` sidecars into the new state path.
 - `PI_MEMORY_DB_PATH` overrides the SQLite database path and disables the legacy default-path copy.
-- `PI_MEMORY_BGE_M3_COMMAND` enables a local BGE-M3 embedding command adapter.
+- `PI_MEMORY_BGE_M3_COMMAND` enables a local BGE-M3 embedding command adapter. Without it, the built-in embedding is a deterministic-hash placeholder and semantic search is inactive (lexical + scope + recency ranking only); `/memory-status` reports `semantic_search: inactive` in that case.
 - `PI_MEMORY_BGE_M3_TIMEOUT_MS` configures the BGE-M3 command timeout; the default is 15 seconds.
+
+Optional retrieval/lifecycle tuning (all have sane defaults; invalid values fall back):
+
+- `PI_MEMORY_MIN_VECTOR_SIMILARITY` — cosine floor for semantic candidates (default `0.15`).
+- `PI_MEMORY_WEIGHT_LEXICAL` / `PI_MEMORY_WEIGHT_SEMANTIC` — hybrid ranking weights (defaults `0.35` / `0.35`).
+- `PI_MEMORY_TURN_RESULT_LIMIT` — number of memories injected at turn start (default `3`).
+- `PI_MEMORY_NOTE_STALE_DAYS` — note staleness window for the audit (default `180`).
 
 ## Tag catalog
 
@@ -108,6 +118,8 @@ Use `memory_tag_catalog` before creating unfamiliar tags. It is read-only: it de
 Catalog entries show each tag's count, scopes, kinds, and recent example titles. Use the catalog to reuse existing content/context tags instead of creating near-duplicates; preferred tags are inferred from current active usage. The catalog is intentionally on-demand and is not injected at turn start.
 
 When `memory_search` has no results, it can return advisory `empty_result_hints`: near `metadata.canonicalKey` suggestions for likely key typos or token matches, plus a short broaden-search retry hint. When a tag-filtered `memory_search` has no results, or when `memory_save`, `memory_save_todo`, or `memory_update` receives a new tag that looks close to an existing tag, the tool can also return advisory `near_tag_suggestions`. Suggestions never rewrite tags automatically; retry or patch explicitly if the existing tag/key is the intended one.
+
+When `memory_save` or `memory_save_todo` writes content that closely matches an existing active memory in the same scope, the tool returns advisory `similar_existing` lines with the existing id(s). Prefer `memory_update` on that id over writing a paraphrased duplicate; the save still succeeds so genuinely distinct records are never dropped.
 
 `memory_audit` also reports active memories that still carry legacy todo workflow tags such as `todo`, `p1`, or `blocked`. These findings are advisory-only: review and patch/archive explicitly if needed; pi-memory does not migrate, rewrite, or archive them automatically.
 

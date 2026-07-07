@@ -1,3 +1,4 @@
+import { readIntEnv } from "./env-config.ts";
 import type { MemoryKind, MemoryRecord, MemoryScope, NormalizedListMemoriesInput } from "./memories.ts";
 import { MemoryValidationError } from "./memories.ts";
 
@@ -22,7 +23,10 @@ export interface CapPolicy {
   activeHardMax: number;
 }
 
-export type LifecycleAuditFindingType = "stale_todo" | "expired_handoff" | "legacy_read_only";
+export type LifecycleAuditFindingType = "stale_todo" | "expired_handoff" | "stale_note" | "legacy_read_only";
+
+/** Notes (kind=null) are flagged for review when untouched this long (env-configurable). */
+export const NOTE_STALE_AFTER_DAYS = readIntEnv(process.env, "PI_MEMORY_NOTE_STALE_DAYS", 180, { min: 1 });
 
 export interface LifecycleAuditFinding {
   type: LifecycleAuditFindingType;
@@ -71,8 +75,37 @@ export function buildActiveCapCountFilter(memory: Pick<MemoryRecord, "kind" | "s
   };
 }
 
-export function isActiveHandoff(memory: Pick<MemoryRecord, "kind" | "status">): boolean {
-  return (memory.kind as string | null | undefined) === "handoff" && memory.status === "active";
+/**
+ * Returns true for a handoff that is active and — when `now` and lifecycle
+ * fields are supplied — not yet expired. Without `now` this only checks
+ * kind/status, preserving the cheap status-only predicate for callers that do
+ * not carry a reference time. Passing `now` enforces the handoff expiry policy
+ * so stale handoffs stop being surfaced as current context.
+ */
+export function isActiveHandoff(
+  memory: Pick<MemoryRecord, "kind" | "status"> & Partial<Pick<MemoryRecord, "scope" | "updatedAt">>,
+  now?: Date,
+): boolean {
+  if ((memory.kind as string | null | undefined) !== "handoff" || memory.status !== "active") {
+    return false;
+  }
+
+  if (now === undefined || memory.scope === undefined || memory.updatedAt === undefined) {
+    return true;
+  }
+
+  return !isHandoffExpired({ scope: memory.scope, updatedAt: memory.updatedAt }, now);
+}
+
+/**
+ * Returns true when a handoff is older than its scope's `expireAfterDays`
+ * policy window, measured from `updatedAt`.
+ */
+export function isHandoffExpired(memory: Pick<MemoryRecord, "scope" | "updatedAt">, now: Date = new Date()): boolean {
+  const effectiveScope = getEffectiveLifecycleScope(memory.scope);
+  const threshold = MEMORY_POLICY[effectiveScope].handoff.expireAfterDays;
+  const ageDays = (now.getTime() - new Date(memory.updatedAt).getTime()) / (1000 * 60 * 60 * 24);
+  return ageDays >= threshold;
 }
 
 export function classifyLifecycleAuditFinding(memory: MemoryRecord, now: Date = new Date()): LifecycleAuditFinding | null {
@@ -99,6 +132,20 @@ export function classifyLifecycleAuditFinding(memory: MemoryRecord, now: Date = 
         type: "expired_handoff",
         reason: `Handoff has not been updated in ${Math.floor(ageDays)} days (threshold: ${threshold} days)`,
         suggestedAction: "Archive this handoff if it is no longer active",
+      };
+    }
+  }
+
+  if (!memory.kind) {
+    // Notes carry no cap; flag them for review when neither accessed nor updated
+    // within the note staleness window (using the most recent of the two).
+    const lastTouchedMs = new Date(memory.lastAccessedAt ?? memory.updatedAt).getTime();
+    const noteAgeDays = (now.getTime() - lastTouchedMs) / (1000 * 60 * 60 * 24);
+    if (noteAgeDays >= NOTE_STALE_AFTER_DAYS) {
+      return {
+        type: "stale_note",
+        reason: `Note not accessed or updated in ${Math.floor(noteAgeDays)} days (threshold: ${NOTE_STALE_AFTER_DAYS} days)`,
+        suggestedAction: "Review and update this note, or archive it if no longer accurate",
       };
     }
   }

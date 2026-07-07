@@ -15,6 +15,7 @@ test("prompt-routing eval set covers all memory tools plus negative cases", () =
   const expected = new Set([
     "memory_search",
     "memory_list",
+    "memory_get",
     "memory_save",
     "memory_save_todo",
     "memory_save_handoff",
@@ -90,7 +91,7 @@ test("prompt-routing eval CLI lists cases without a model command", async () => 
   ]);
 
   assert.match(stdout, /pi-memory prompt-routing eval/);
-  assert.match(stdout, /Cases: 11/);
+  assert.match(stdout, /Cases: 12/);
   assert.match(stdout, /memory_search: 1/);
   assert.match(stdout, /no-memory-for-code-search: <none>/);
 });

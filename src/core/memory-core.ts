@@ -37,8 +37,8 @@ export function createMemoryCore(): MemoryCore {
         fallbackEmbeddingModel: embeddingStatus.fallbackModel,
         activeEmbeddingModel: embeddingStatus.activeModel,
         embeddingDimensions: embeddingStatus.dimensions,
-        availableCommands: ["/memory-status", "/memory-search", "/memory-handoff", "/memory-session-save", "/memory-audit"],
-        availableTools: ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_tag_catalog", "memory_stats"],
+        availableCommands: ["/memory-status", "/memory-search", "/memory-handoff", "/memory-session-save", "/memory-audit", "/memory-export", "/memory-import"],
+        availableTools: ["memory_search", "memory_list", "memory_get", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_tag_catalog", "memory_stats"],
         nextStep: "See TODO.md for active retrieval reliability, write-policy, and memory-quality backlog items.",
       };
     },

@@ -8,6 +8,7 @@ import { collectRegisteredTools, estimateTokens, type RegisteredTool } from "./c
 export type ExpectedToolName =
   | "memory_search"
   | "memory_list"
+  | "memory_get"
   | "memory_save"
   | "memory_save_todo"
   | "memory_save_handoff"
@@ -55,6 +56,11 @@ export const PROMPT_ROUTING_EVAL_CASES: PromptRoutingEvalCase[] = [
     id: "list-active-repo-todos",
     scenario: "List active repo todos so we can choose the next backlog item.",
     expectation: { toolName: "memory_list", args: { kind: "todo", status: "active" }, argIncludes: { scope: ["repo"] } },
+  },
+  {
+    id: "get-memory-body-by-id",
+    scenario: "A memory_search hit with id mem-777 looks relevant; read its full body before updating it.",
+    expectation: { toolName: "memory_get", args: { id: "mem-777" } },
   },
   {
     id: "save-durable-note",

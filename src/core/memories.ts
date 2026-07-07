@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import { findScopeIdentityIssues } from "./identity-policy.ts";
 
 export const MEMORY_KINDS = ["todo", "handoff"] as const;
+/** Kind values accepted as tool filters, including the "note" sentinel for kind IS NULL. */
+export const MEMORY_KIND_FILTERS = ["todo", "handoff", "note"] as const;
+export const NOTE_KIND_FILTER = "note";
 export const MEMORY_SCOPES = ["global", "project", "repo", "session"] as const;
 export const MEMORY_STATUSES = ["active", "archived"] as const;
 export const MEMORY_LIST_ORDER_BY = ["updatedAt", "createdAt"] as const;
@@ -58,6 +61,9 @@ export interface SearchMemoriesInput {
   sessionId?: string;
   projectId?: string;
   repoPath?: string;
+  /** Ranking-only anchors: boost matches from this repo/project without filtering to it. */
+  preferRepoPath?: string;
+  preferProjectId?: string;
   limit?: number;
 }
 
@@ -75,6 +81,8 @@ export interface ListMemoriesInput {
 
 export interface NormalizedListMemoriesInput {
   kind?: MemoryKind[];
+  /** When true, also match notes (kind IS NULL). */
+  matchNullKind?: boolean;
   scope?: MemoryScope[];
   tags: string[];
   sessionId?: string;
@@ -91,11 +99,14 @@ export interface NormalizedSearchMemoriesInput {
   matchQuery: string;
   relaxedMatchQuery: string;
   kind?: MemoryKind[];
+  matchNullKind?: boolean;
   scope?: MemoryScope[];
   tags: string[];
   sessionId?: string;
   projectId?: string;
   repoPath?: string;
+  preferRepoPath?: string;
+  preferProjectId?: string;
   limit: number;
 }
 
@@ -298,7 +309,8 @@ export function normalizeArchiveMemoryInput(input: ArchiveMemoryInput): { id: st
 export function normalizeListMemoriesInput(input: ListMemoriesInput): NormalizedListMemoriesInput {
   const issues: string[] = [];
 
-  const kind = normalizeEnumList("kind", input.kind, MEMORY_KINDS, issues);
+  const { kind: kindInput, matchNullKind } = splitNoteKindFilter(input.kind);
+  const kind = normalizeEnumList("kind", kindInput, MEMORY_KINDS, issues);
   const scope = normalizeEnumList("scope", input.scope, MEMORY_SCOPES, issues);
   const tags = normalizeTags(input.tags, issues);
   const sessionId = normalizeOptionalText(input.sessionId);
@@ -316,6 +328,7 @@ export function normalizeListMemoriesInput(input: ListMemoriesInput): Normalized
 
   return {
     kind,
+    matchNullKind,
     scope,
     tags,
     sessionId,
@@ -331,12 +344,15 @@ export function normalizeSearchMemoriesInput(input: SearchMemoriesInput): Normal
   const issues: string[] = [];
 
   const query = normalizeRequiredText("query", input.query, issues, 2);
-  const kind = normalizeEnumList("kind", input.kind, MEMORY_KINDS, issues);
+  const { kind: kindInput, matchNullKind } = splitNoteKindFilter(input.kind);
+  const kind = normalizeEnumList("kind", kindInput, MEMORY_KINDS, issues);
   const scope = normalizeEnumList("scope", input.scope, MEMORY_SCOPES, issues);
   const tags = normalizeTags(input.tags, issues);
   const sessionId = normalizeOptionalText(input.sessionId);
   const projectId = normalizeOptionalText(input.projectId);
   const repoPath = normalizeOptionalText(input.repoPath);
+  const preferRepoPath = normalizeOptionalText(input.preferRepoPath);
+  const preferProjectId = normalizeOptionalText(input.preferProjectId);
   const limit = normalizeLimit(input.limit, issues);
   const matchQuery = query ? buildFtsMatchQuery(query, issues, "AND") : undefined;
   const relaxedMatchQuery = query ? buildFtsMatchQuery(query, issues, "OR") : undefined;
@@ -352,11 +368,14 @@ export function normalizeSearchMemoriesInput(input: SearchMemoriesInput): Normal
     matchQuery,
     relaxedMatchQuery,
     kind,
+    matchNullKind,
     scope,
     tags,
     sessionId,
     projectId,
     repoPath,
+    preferRepoPath,
+    preferProjectId,
     limit,
   };
 }
@@ -375,6 +394,21 @@ function normalizeEnum<T extends string>(
 
   onChange?.();
   return value as T;
+}
+
+/**
+ * Splits a raw kind filter into concrete kinds and the "note" sentinel
+ * (kind IS NULL). Lets callers filter for plain notes, which are not part of
+ * MEMORY_KINDS. Invalid non-note entries are left for normalizeEnumList to flag.
+ */
+export function splitNoteKindFilter(
+  rawKind: readonly string[] | undefined,
+): { kind?: string[]; matchNullKind: boolean } {
+  if (!Array.isArray(rawKind)) return { kind: rawKind as string[] | undefined, matchNullKind: false };
+
+  const matchNullKind = rawKind.includes(NOTE_KIND_FILTER);
+  const kind = rawKind.filter((value) => value !== NOTE_KIND_FILTER);
+  return { kind, matchNullKind };
 }
 
 function normalizeEnumList<T extends string>(
@@ -559,7 +593,13 @@ function buildFtsMatchQuery(
     return undefined;
   }
 
-  return uniqueTokens.map(quoteFtsToken).join(` ${operator} `);
+  // The relaxed (OR) fallback uses FTS5 prefix matching so morphological
+  // variants match ("deploy" -> "deployment", "migration" -> "migrations").
+  // The strict (AND) query stays exact to keep precise multi-term matches tight.
+  const usePrefix = operator === "OR";
+  return uniqueTokens
+    .map((token) => (usePrefix && token.length >= 3 ? `${quoteFtsToken(token)}*` : quoteFtsToken(token)))
+    .join(` ${operator} `);
 }
 
 function quoteFtsToken(token: string): string {

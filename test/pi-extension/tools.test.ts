@@ -190,6 +190,9 @@ async function buildToolFixture() {
     repoPath: projectContext.cwd,
     sessionId: projectContext.sessionId,
     sourceAgent: "pi",
+    // Fresh timestamp so the handoff is not treated as expired by the
+    // read-time expiry policy (isActiveHandoff), keeping the update path active.
+    updatedAt: new Date().toISOString(),
   });
   const updatedMemory = createMemory({ id: "memory-updated", title: "Updated title", pinned: true });
   const store = {
@@ -233,7 +236,7 @@ test("registerMemoryTools registers all expected tool names", async (t) => {
   const { tools, projectContext } = await buildToolFixture();
   t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
 
-  const expectedToolNames = ["memory_search", "memory_list", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_tag_catalog", "memory_stats"];
+  const expectedToolNames = ["memory_search", "memory_list", "memory_get", "memory_save", "memory_save_todo", "memory_save_handoff", "memory_update", "memory_audit", "memory_tag_catalog", "memory_stats"];
   assert.equal(tools.length, expectedToolNames.length);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)), new Set(expectedToolNames));
 });
@@ -293,6 +296,32 @@ test("memory_list shows legacy project notice and result summary", async (t) => 
   assert.match(output.content[0].text, /Keep writes manual-first/);
   assert.match(output.content[0].text, /Use explicit review and save tools for durable memory updates/);
   assert.deepEqual(output.details, { dbPath: store.dbPath, total_count: 1, count: 1, has_more: false, next_offset: null, items: [savedMemory] });
+});
+
+test("memory_get returns a memory detail with body for a known id", async (t) => {
+  const { tools, store, ctx, signal, projectContext, savedMemory } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const output = await toolByName(tools, "memory_get").execute("call-get", { id: "memory-saved" }, signal, () => undefined, ctx);
+  assert.match(output.content[0].text, /Memory memory-saved\./);
+  assert.match(output.content[0].text, /body:/);
+  assert.deepEqual(output.details, { dbPath: store.dbPath, memory: savedMemory });
+});
+
+test("memory_get reports not found for an unknown id", async (t) => {
+  const { tools, ctx, signal, projectContext } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const output = await toolByName(tools, "memory_get").execute("call-get-missing", { id: "does-not-exist" }, signal, () => undefined, ctx);
+  assert.match(output.content[0].text, /Memory does-not-exist was not found\./);
+});
+
+test("memory_search results include the memory id for the update loop", async (t) => {
+  const { tools, ctx, signal, projectContext } = await buildToolFixture();
+  t.after(async () => { await rm(projectContext.cwd, { recursive: true, force: true }); });
+
+  const output = await toolByName(tools, "memory_search").execute("call-search", { query: "cache" }, signal, () => undefined, ctx);
+  assert.match(output.content[0].text, /\(memory-1\)/);
 });
 
 test("memory_save returns saved memory id and enriched identity fields in output", async (t) => {
@@ -1445,7 +1474,14 @@ test("public tools consistently reject contradictory scope identity filters", as
   );
 
   assert.ok(capturedCounts.some((filter) => Array.isArray(filter.scope) && filter.scope[0] === "repo" && filter.repoPath === projectContext.cwd));
-  assert.deepEqual(capturedSearches.at(-1), { query: "identity", repoPath: projectContext.cwd, sessionId: undefined, projectId: undefined });
+  assert.deepEqual(capturedSearches.at(-1), {
+    query: "identity",
+    repoPath: projectContext.cwd,
+    sessionId: undefined,
+    projectId: undefined,
+    preferRepoPath: projectContext.cwd,
+    preferProjectId: projectContext.projectId,
+  });
   assert.deepEqual(capturedCreates, []);
 });
 

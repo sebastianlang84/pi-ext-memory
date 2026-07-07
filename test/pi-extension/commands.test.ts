@@ -298,6 +298,43 @@ test("/memory-session-save handler persists the current session and writes confi
   }
 });
 
+test("/memory-session-save also persists a searchable session-summary memory", async () => {
+  const { cwd, repoRoot } = createProjectContext();
+  const dbPath = join(createTempDir("pi-memory-command-summary-"), "memory.sqlite");
+  const previousDbPath = process.env.PI_MEMORY_DB_PATH;
+  process.env.PI_MEMORY_DB_PATH = dbPath;
+
+  try {
+    const { pi, commands, eventHandlers } = createMockPi();
+    registerMemoryCommands(pi as never, createMemoryCore());
+
+    const handler = commands.get("memory-session-save");
+    assert.ok(handler, "expected memory-session-save command to be registered");
+
+    const { ctx } = createMockCommandContext(cwd, "session-summary-search-1");
+    await handler("Investigated searchsummaryneedle and recorded the decision for later retrieval.", ctx);
+
+    for (const shutdown of eventHandlers.get("session_shutdown") ?? []) {
+      await shutdown({}, ctx);
+    }
+
+    const persistedStore = initializeMemoryStore({ dbPath });
+    try {
+      const results = persistedStore.searchMemories({ query: "searchsummaryneedle", scope: ["repo"], repoPath: repoRoot });
+      assert.ok(results.length > 0, "expected the session summary to be discoverable via search");
+      assert.ok(results.some((r) => r.tags.includes("session-summary")));
+    } finally {
+      persistedStore.close();
+    }
+  } finally {
+    if (previousDbPath === undefined) {
+      delete process.env.PI_MEMORY_DB_PATH;
+    } else {
+      process.env.PI_MEMORY_DB_PATH = previousDbPath;
+    }
+  }
+});
+
 test("commands cover save -> search -> review -> session summary end to end", async () => {
   const { cwd, repoRoot } = createProjectContext();
   const dbPath = join(createTempDir("pi-memory-e2e-db-"), "memory.sqlite");

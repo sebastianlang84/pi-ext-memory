@@ -1,6 +1,9 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
-import { type MemoryCore, type MemoryRecord, type MemorySearchResult, type SearchMemoriesInput } from "../core/index.ts";
+import { type CreateMemoryInput, type MemoryCore, type MemoryRecord, type MemorySearchResult, type MemoryStore, type SearchMemoriesInput } from "../core/index.ts";
 import { formatAuditResults, runMemoryAudit } from "./audit.ts";
 import { findLatestExactSessionHandoff } from "./handoffs.ts";
 import { deriveMemoryTurnContext, findLatestHandoffForTurn, retrieveMemoriesForTurn } from "./retrieval.ts";
@@ -115,7 +118,90 @@ export function registerMemoryCommands(
         projectId: turnContext.projectId,
         repoPath: turnContext.repoPath,
       });
+      persistSessionSummaryMemory(activeStore, turnContext, summary);
       sendOutput(pi, formatMemorySessionSaved(session, activeStore.dbPath), ctx);
+    },
+  });
+
+  pi.registerCommand("memory-export", {
+    description: "Export all memories (active + archived) to a JSON file for backup or migration",
+    handler: async (args, ctx) => {
+      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
+      const target = args.trim();
+      if (target.length === 0) {
+        sendOutput(pi, "Usage: /memory-export <file.json>\nWrites all memories to the given path.", ctx);
+        return;
+      }
+
+      const memories = [
+        ...activeStore.listAllInternal({ status: "active" }),
+        ...activeStore.listAllInternal({ status: "archived" }),
+      ];
+      const payload = {
+        format: "pi-memory-export",
+        version: 1,
+        dbPath: activeStore.dbPath,
+        count: memories.length,
+        memories,
+      };
+
+      const outPath = resolve(target);
+      try {
+        writeFileSync(outPath, JSON.stringify(payload, null, 2), "utf8");
+      } catch (error) {
+        sendOutput(pi, `Export failed: ${(error as Error).message}`, ctx);
+        return;
+      }
+      sendOutput(pi, `Exported ${memories.length} memor${memories.length !== 1 ? "ies" : "y"} to ${outPath}.`, ctx);
+    },
+  });
+
+  pi.registerCommand("memory-import", {
+    description: "Import memories from a /memory-export JSON file (content-preserving; assigns fresh ids)",
+    handler: async (args, ctx) => {
+      const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
+      const target = args.trim();
+      if (target.length === 0) {
+        sendOutput(pi, "Usage: /memory-import <file.json>\nRe-creates memories from an export (fresh ids; duplicates are skipped).", ctx);
+        return;
+      }
+
+      let parsed: { memories?: unknown };
+      try {
+        parsed = JSON.parse(readFileSync(resolve(target), "utf8")) as { memories?: unknown };
+      } catch (error) {
+        sendOutput(pi, `Import failed: ${(error as Error).message}`, ctx);
+        return;
+      }
+
+      const memories = Array.isArray(parsed.memories) ? (parsed.memories as MemoryRecord[]) : [];
+      let imported = 0;
+      let skipped = 0;
+      for (const memory of memories) {
+        try {
+          const input: CreateMemoryInput = {
+            kind: memory.kind ?? undefined,
+            scope: memory.scope,
+            title: memory.title,
+            summary: memory.summary,
+            body: memory.body,
+            tags: memory.tags,
+            importance: memory.importance,
+            confidence: memory.confidence,
+            projectId: memory.projectId,
+            repoPath: memory.repoPath,
+            sessionId: memory.sessionId,
+            pinned: memory.pinned,
+            metadata: memory.metadata,
+            sourceAgent: memory.sourceAgent,
+          };
+          activeStore.createMemory(input);
+          imported += 1;
+        } catch {
+          skipped += 1;
+        }
+      }
+      sendOutput(pi, `Imported ${imported} memor${imported !== 1 ? "ies" : "y"} from ${resolve(target)} (${skipped} skipped).`, ctx);
     },
   });
 
@@ -124,10 +210,55 @@ export function registerMemoryCommands(
     handler: async (_args, ctx) => {
       const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
 
-      const { staleTodos, oldHandoffs, identityViolations, legacyWorkflowTags, projectMigrationPreview } = runMemoryAudit(activeStore);
-      sendOutput(pi, formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview, legacyWorkflowTags), ctx);
+      const { staleTodos, oldHandoffs, staleNotes, identityViolations, legacyWorkflowTags, projectMigrationPreview } = runMemoryAudit(activeStore);
+      sendOutput(pi, formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview, legacyWorkflowTags, staleNotes), ctx);
     },
   });
+}
+
+const SESSION_SUMMARY_TAG = "session-summary";
+
+/**
+ * Persist the session summary as an ordinary searchable memory (in addition to
+ * the sessions table) so past summaries surface through memory_search and
+ * turn-start retrieval. Deduped per session via metadata.sessionId so repeated
+ * /memory-session-save calls update one memory instead of accumulating.
+ */
+function persistSessionSummaryMemory(
+  store: MemoryStore,
+  context: ReturnType<typeof deriveMemoryTurnContext>,
+  summary: string,
+): void {
+  const scope = context.repoPath ? "repo" : "global";
+  const existing = store
+    .listAllInternal({
+      status: "active",
+      scope: [scope],
+      tags: [SESSION_SUMMARY_TAG],
+      ...(context.repoPath ? { repoPath: context.repoPath } : {}),
+    })
+    .find((memory) => memory.metadata?.sessionId === context.sessionId);
+
+  try {
+    if (existing) {
+      store.updateMemory({ id: existing.id, summary });
+      return;
+    }
+
+    store.createMemory({
+      scope,
+      title: `Session summary ${context.sessionId.slice(0, 8)}`,
+      summary,
+      tags: [SESSION_SUMMARY_TAG],
+      repoPath: context.repoPath,
+      projectId: context.projectId,
+      metadata: { sessionId: context.sessionId },
+      sourceAgent: "pi",
+    });
+  } catch {
+    // Mirroring the summary into a searchable memory is best-effort; the
+    // authoritative copy already lives in the sessions table.
+  }
 }
 
 function formatMemoryHandoff(memory: MemoryRecord | undefined, dbPath: string, isFallback: boolean): string {

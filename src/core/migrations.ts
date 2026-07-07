@@ -265,6 +265,26 @@ export const memoryMigrations: MemoryMigration[] = [
       ${buildMemoryFtsTriggersDdl()}
     `,
   },
+  {
+    version: 9,
+    name: "guard_fts_update_trigger",
+    sql: `
+      DROP TRIGGER IF EXISTS memories_au;
+
+      CREATE TRIGGER memories_au AFTER UPDATE ON memories
+      WHEN old.title IS NOT new.title
+        OR old.summary IS NOT new.summary
+        OR old.body IS NOT new.body
+        OR old.tags_json IS NOT new.tags_json
+      BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.rowid;
+        INSERT INTO memory_fts(rowid, title, summary, body, tags)
+        VALUES (new.rowid, new.title, new.summary, coalesce(new.body, ''), coalesce(new.tags_json, '[]'));
+      END;
+
+      CREATE INDEX IF NOT EXISTS idx_memories_last_accessed_at ON memories(last_accessed_at);
+    `,
+  },
 ];
 
 export const LATEST_MEMORY_SCHEMA_VERSION = memoryMigrations.at(-1)?.version ?? 0;

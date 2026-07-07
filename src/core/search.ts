@@ -17,6 +17,7 @@ interface MemorySearchBaseRow {
   repo_path: string | null;
   importance: number;
   confidence: number;
+  pinned: number;
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +45,7 @@ interface RankedMemorySearchCandidate {
   repoPath?: string;
   importance: number;
   confidence: number;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
   matchScore: number;
@@ -111,6 +113,7 @@ function queryLexicalMemoryRows(
         m.repo_path,
         m.importance,
         m.confidence,
+        m.pinned,
         m.created_at,
         m.updated_at,
         bm25(memory_fts, 10.0, 5.0, 1.0, 1.0) AS lexical_match_score
@@ -123,12 +126,27 @@ function queryLexicalMemoryRows(
     .all(...filters.params, matchQuery, limit) as LexicalMemorySearchRow[];
 }
 
+/**
+ * The deterministic-hash embedding is a placeholder: it derives vectors from a
+ * content hash, so cosine similarity carries no semantic signal. When it is the
+ * active model, skip the semantic channel entirely rather than letting random
+ * near-threshold similarities pollute ranking. Configure a real embedder
+ * (PI_MEMORY_BGE_M3_COMMAND) to activate semantic search.
+ */
+export function isPlaceholderEmbeddingModel(model: string): boolean {
+  return model.startsWith("builtin-hash");
+}
+
 function searchSemanticMemoryRows(
   db: DatabaseSync,
   input: NormalizedSearchMemoriesInput,
   queryEmbedding: GeneratedMemoryEmbedding,
   limit: number,
 ): SemanticMemorySearchRow[] {
+  if (isPlaceholderEmbeddingModel(queryEmbedding.model)) {
+    return [];
+  }
+
   const filters = buildMemorySearchFilters(input, "m");
   const rows = db
     .prepare(`
@@ -144,6 +162,7 @@ function searchSemanticMemoryRows(
         m.repo_path,
         m.importance,
         m.confidence,
+        m.pinned,
         m.created_at,
         m.updated_at,
         e.vector_json
@@ -187,6 +206,7 @@ function searchExactTagMemoryRows(
         m.repo_path,
         m.importance,
         m.confidence,
+        m.pinned,
         m.created_at,
         m.updated_at
       FROM memories AS m
@@ -224,6 +244,7 @@ function searchExactCanonicalKeyMemoryRows(
         m.repo_path,
         m.importance,
         m.confidence,
+        m.pinned,
         m.created_at,
         m.updated_at
       FROM memories AS m
@@ -244,9 +265,15 @@ function buildMemorySearchFilters(
   const clauses = [`${alias}.status = 'active'`];
   const params: Array<string | number> = [];
 
-  if (input.kind && input.kind.length > 0) {
-    clauses.push(`${alias}.kind IN (${createPlaceholders(input.kind.length)})`);
-    params.push(...input.kind);
+  const searchKinds = input.kind ?? [];
+  if (searchKinds.length > 0 || input.matchNullKind) {
+    const kindParts: string[] = [];
+    if (searchKinds.length > 0) {
+      kindParts.push(`${alias}.kind IN (${createPlaceholders(searchKinds.length)})`);
+      params.push(...searchKinds);
+    }
+    if (input.matchNullKind) kindParts.push(`${alias}.kind IS NULL`);
+    clauses.push(`(${kindParts.join(" OR ")})`);
   }
 
   if (input.scope && input.scope.length > 0) {
@@ -353,6 +380,7 @@ function upsertRankedCandidate(
     repoPath: row.repo_path ?? undefined,
     importance: row.importance,
     confidence: row.confidence,
+    pinned: row.pinned === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     matchScore: 0,
@@ -420,11 +448,17 @@ function calculateScopeScore(
     score += 0.15;
   }
 
-  if (input.projectId && candidate.projectId === input.projectId) {
+  // Anchor ranking to the current project/repo even when the search is not
+  // filtered to it (scope-less memory_search), so same-repo memories rank above
+  // equally-matching memories from other repos.
+  const preferredProjectId = input.projectId ?? input.preferProjectId;
+  const preferredRepoPath = input.repoPath ?? input.preferRepoPath;
+
+  if (preferredProjectId && candidate.projectId === preferredProjectId) {
     score += candidate.scope === "project" ? 0.2 : 0.1;
   }
 
-  if (input.repoPath && candidate.repoPath === input.repoPath) {
+  if (preferredRepoPath && candidate.repoPath === preferredRepoPath) {
     score += candidate.scope === "repo" ? 0.2 : 0.1;
   }
 
@@ -442,7 +476,7 @@ function calculateRecencyScore(updatedAt: string, referenceTime: number): number
 }
 
 function calculateHybridMatchScore(
-  candidate: Pick<RankedMemorySearchCandidate, "lexicalScore" | "semanticScore" | "importance" | "confidence">,
+  candidate: Pick<RankedMemorySearchCandidate, "lexicalScore" | "semanticScore" | "importance" | "confidence" | "pinned">,
   scopeScore: number,
   recencyScore: number,
 ): number {
@@ -452,7 +486,8 @@ function calculateHybridMatchScore(
     scopeScore * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.scope +
     recencyScore * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.recency +
     candidate.importance * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.importance +
-    candidate.confidence * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.confidence;
+    candidate.confidence * DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.confidence +
+    (candidate.pinned ? DEFAULT_HYBRID_RETRIEVAL_POLICY.weights.pinned : 0);
 
   return Number(score.toFixed(6));
 }
@@ -501,6 +536,20 @@ function dedupeRankedCandidates(candidates: RankedMemorySearchCandidate[]): Memo
     scopeScore: candidate.scopeScore,
     recencyScore: candidate.recencyScore,
   }));
+}
+
+/**
+ * Returns active memories that are near-duplicates of the given candidate
+ * (same token-set similarity heuristic used to dedupe search results). Used at
+ * save time to advise the agent to update an existing memory instead of writing
+ * a paraphrased duplicate.
+ */
+export function findNearDuplicateMemories<T extends { title: string; summary: string }>(
+  candidate: { title: string; summary: string },
+  memories: T[],
+  limit = 3,
+): T[] {
+  return memories.filter((memory) => areNearDuplicateCandidates(candidate, memory)).slice(0, limit);
 }
 
 function areNearDuplicateCandidates(

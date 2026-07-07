@@ -35,7 +35,14 @@ Save an explicit session summary:
 /memory-session-save <summary>
 ```
 
-Normal agent tools are `memory_search`, `memory_list`, `memory_save`, `memory_save_todo`, `memory_save_handoff`, `memory_update`, `memory_audit`, and the read-only `memory_tag_catalog`.
+Export or import the store (backup / machine migration):
+
+```text
+/memory-export <file.json>
+/memory-import <file.json>
+```
+
+Normal agent tools are `memory_search`, `memory_list`, `memory_get`, `memory_save`, `memory_save_todo`, `memory_save_handoff`, `memory_update`, `memory_audit`, and the read-only `memory_tag_catalog`.
 
 `memory_stats` is available for advanced/admin health and capacity checks, but it is not the normal first-choice tool path.
 
