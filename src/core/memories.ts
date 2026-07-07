@@ -586,9 +586,9 @@ function buildFtsMatchQuery(
   issues: string[],
   operator: "AND" | "OR",
 ): string | undefined {
-  const uniqueTokens = Array.from(new Set(extractFtsTokens(query)));
+  const baseTokens = Array.from(new Set(extractFtsTokens(query)));
 
-  if (uniqueTokens.length === 0) {
+  if (baseTokens.length === 0) {
     issues.push("query must contain searchable terms");
     return undefined;
   }
@@ -597,9 +597,73 @@ function buildFtsMatchQuery(
   // variants match ("deploy" -> "deployment", "migration" -> "migrations").
   // The strict (AND) query stays exact to keep precise multi-term matches tight.
   const usePrefix = operator === "OR";
-  return uniqueTokens
+
+  // In relaxed mode also expand snake_case/kebab query tokens into their
+  // subtokens ("spawn_sync" -> spawn, sync) so glued-identifier queries reach
+  // the indexed `terms` subtokens. camelCase splitting is index-side only
+  // (query tokens are already lowercased, so their camel boundaries are gone).
+  let tokens = baseTokens;
+  if (operator === "OR") {
+    const expanded = new Set(baseTokens);
+    for (const token of baseTokens) {
+      for (const subtoken of splitIdentifierSubtokens(token)) {
+        expanded.add(subtoken);
+      }
+    }
+    tokens = Array.from(expanded);
+  }
+
+  return tokens
     .map((token) => (usePrefix && token.length >= 3 ? `${quoteFtsToken(token)}*` : quoteFtsToken(token)))
     .join(` ${operator} `);
+}
+
+/**
+ * Split a raw token into identifier subtokens. Handles snake_case, kebab-case,
+ * camelCase, PascalCase, and acronym boundaries (`FTSMatch` -> fts, match).
+ * Returns lowercased subtokens (length >= 2) only when the token actually splits
+ * into 2+ parts — a plain word yields `[]`, so callers add nothing for it.
+ */
+export function splitIdentifierSubtokens(token: string): string[] {
+  const parts: string[] = [];
+  for (const segment of token.split(/[_-]+/)) {
+    if (!segment) continue;
+    const camelSplit = segment
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+      .split(/\s+/);
+    for (const piece of camelSplit) {
+      if (piece) parts.push(piece.toLowerCase());
+    }
+  }
+
+  const subtokens = parts.filter((part) => part.length >= 2);
+  return subtokens.length >= 2 ? Array.from(new Set(subtokens)) : [];
+}
+
+/**
+ * Derive the space-joined identifier subtokens for a memory's searchable content.
+ * Indexed into the FTS `terms` column so code identifiers become reachable by
+ * their parts (`buildFtsMatchQuery` -> "build fts match query"). Empty when the
+ * content contains no splittable identifiers.
+ */
+export function deriveSearchTerms(content: MemorySearchTermsContent): string {
+  const text = [content.title, content.summary, content.body ?? "", content.tags.join(" ")].join(" ");
+  const rawTokens = text.match(/[\p{L}\p{N}][\p{L}\p{N}_-]*/gu) ?? [];
+  const subtokens = new Set<string>();
+  for (const raw of rawTokens) {
+    for (const subtoken of splitIdentifierSubtokens(raw)) {
+      subtokens.add(subtoken);
+    }
+  }
+  return Array.from(subtokens).join(" ");
+}
+
+export interface MemorySearchTermsContent {
+  title: string;
+  summary: string;
+  body?: string;
+  tags: string[];
 }
 
 function quoteFtsToken(token: string): string {

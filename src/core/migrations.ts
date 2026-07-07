@@ -285,6 +285,53 @@ export const memoryMigrations: MemoryMigration[] = [
       CREATE INDEX IF NOT EXISTS idx_memories_last_accessed_at ON memories(last_accessed_at);
     `,
   },
+  {
+    version: 10,
+    name: "fts_identifier_subtokens",
+    sql: `
+      ALTER TABLE memories ADD COLUMN search_terms TEXT NOT NULL DEFAULT '';
+
+      DROP TRIGGER IF EXISTS memories_ai;
+      DROP TRIGGER IF EXISTS memories_ad;
+      DROP TRIGGER IF EXISTS memories_au;
+      DROP TABLE IF EXISTS memory_fts;
+
+      CREATE VIRTUAL TABLE memory_fts USING fts5(
+        title,
+        summary,
+        body,
+        tags,
+        terms,
+        tokenize='unicode61 remove_diacritics 2'
+      );
+
+      INSERT INTO memory_fts(rowid, title, summary, body, tags, terms)
+      SELECT rowid, title, summary, coalesce(body, ''), coalesce(tags_json, '[]'), coalesce(search_terms, '')
+      FROM memories;
+
+      CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+        INSERT INTO memory_fts(rowid, title, summary, body, tags, terms)
+        VALUES (new.rowid, new.title, new.summary, coalesce(new.body, ''), coalesce(new.tags_json, '[]'), coalesce(new.search_terms, ''));
+      END;
+
+      CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.rowid;
+      END;
+
+      CREATE TRIGGER memories_au AFTER UPDATE ON memories
+      WHEN old.title IS NOT new.title
+        OR old.summary IS NOT new.summary
+        OR old.body IS NOT new.body
+        OR old.tags_json IS NOT new.tags_json
+        OR old.search_terms IS NOT new.search_terms
+      BEGIN
+        DELETE FROM memory_fts WHERE rowid = old.rowid;
+        INSERT INTO memory_fts(rowid, title, summary, body, tags, terms)
+        VALUES (new.rowid, new.title, new.summary, coalesce(new.body, ''), coalesce(new.tags_json, '[]'), coalesce(new.search_terms, ''));
+      END;
+    `,
+    requiresFkOff: true,
+  },
 ];
 
 export const LATEST_MEMORY_SCHEMA_VERSION = memoryMigrations.at(-1)?.version ?? 0;

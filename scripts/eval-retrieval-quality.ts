@@ -115,11 +115,11 @@ export interface AdversarialEvalCase {
 export const ADVERSARIAL_EVAL_CASES: AdversarialEvalCase[] = [
   {
     id: "identifier-subtokens",
-    description: "'fts match query' should reach the buildFtsMatchQuery helper (needs camelCase subtoken indexing).",
+    description: "'fts match query' reaches the buildFtsMatchQuery helper via camelCase subtoken indexing (closed).",
     gap: "identifier",
     input: { query: "fts match query", scope: ["global"], limit: 5 },
     relevantKeys: ["g-identifier"],
-    expectedFound: false,
+    expectedFound: true,
   },
   {
     id: "cross-lingual-de",

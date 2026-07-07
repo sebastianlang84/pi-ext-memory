@@ -31,11 +31,13 @@ export {
   MEMORY_SCOPES,
   MEMORY_STATUSES,
   MemoryValidationError,
+  deriveSearchTerms,
   normalizeArchiveMemoryInput,
   normalizeCreateMemoryInput,
   normalizeListMemoriesInput,
   normalizeSearchMemoriesInput,
   normalizeUpdateMemoryInput,
+  splitIdentifierSubtokens,
 } from "./memories.ts";
 export { initializeMemoryStore } from "./store.ts";
 export { findNearDuplicateMemories, isPlaceholderEmbeddingModel } from "./search.ts";

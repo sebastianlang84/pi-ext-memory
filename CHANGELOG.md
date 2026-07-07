@@ -14,6 +14,7 @@ Older non-monotonic entries are preserved as legacy release-line history.
 ## [Unreleased]
 
 ### Added
+- Code identifiers are indexed by their subtokens (camelCase / snake_case / kebab-case), so a query like `fts match query` reaches a memory about `buildFtsMatchQuery`.
 - `memory_get` tool: read a single memory's full body by id (ids now appear in `memory_search` result lines, closing the update-instead-of-duplicate loop).
 - `memory_save`/`memory_save_todo` surface `similar_existing` hints when a near-duplicate memory already exists, advising `memory_update` over a paraphrased duplicate.
 - `memory_audit apply` mode batch-archives safe finding classes (`expired_handoff`, `stale_note`).
@@ -39,6 +40,7 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ### Schema
 - Migration v9: guards the FTS update trigger so metadata-only writes (`last_accessed_at`, `status`, `pinned`) no longer rebuild the FTS index; adds a `last_accessed_at` index.
+- Migration v10: adds a derived `search_terms` column and an FTS `terms` column for identifier subtokens; existing databases are backfilled once on first open.
 
 ## [2.1.9] - 2026-06-15
 

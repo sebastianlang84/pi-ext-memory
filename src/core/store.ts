@@ -19,6 +19,7 @@ import {
   type SearchMemoriesInput,
   type UpdateMemoryInput,
   MemoryValidationError,
+  deriveSearchTerms,
   normalizeArchiveMemoryInput,
   normalizeCreateMemoryInput,
   normalizeListMemoriesInput,
@@ -115,6 +116,7 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
   try {
     configureDatabase(db);
     applyMigrations(db);
+    backfillSearchTerms(db);
 
     const schemaVersion = getSchemaVersion(db);
     const embeddingStatus = embeddingAdapter.getStatus();
@@ -175,8 +177,9 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
               pinned,
               created_at,
               updated_at,
-              metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+              metadata_json,
+              search_terms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `).run(
             memory.id,
             memory.kind,
@@ -197,6 +200,7 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
             memory.createdAt,
             memory.updatedAt,
             JSON.stringify(memory.metadata),
+            deriveSearchTerms(createMemoryContentForEmbedding(memory)),
           );
 
           writeMemoryEmbedding(db, memory.id, embedding, timestamp);
@@ -509,6 +513,60 @@ function getSchemaVersion(db: DatabaseSync): number {
   return row.user_version;
 }
 
+const SEARCH_TERMS_BACKFILL_META_KEY = "search_terms_backfilled_v10";
+
+/**
+ * One-time backfill of the derived `search_terms` column for rows created before
+ * the FTS subtoken migration. Runs once (guarded by a meta flag); the update
+ * trigger reindexes `memory_fts.terms` for rows that gain subtokens. Fresh DBs
+ * are already at the latest schema and skip straight past the empty scan.
+ */
+function backfillSearchTerms(db: DatabaseSync): void {
+  const done = db.prepare("SELECT value FROM meta WHERE key = ?;").get(SEARCH_TERMS_BACKFILL_META_KEY) as
+    | { value: string }
+    | undefined;
+  if (done?.value === "1") return;
+
+  const rows = db.prepare("SELECT id, title, summary, body, tags_json FROM memories;").all() as Array<{
+    id: string;
+    title: string;
+    summary: string;
+    body: string | null;
+    tags_json: string;
+  }>;
+
+  const update = db.prepare("UPDATE memories SET search_terms = ? WHERE id = ?;");
+  db.exec("BEGIN IMMEDIATE;");
+  try {
+    for (const row of rows) {
+      let tags: string[] = [];
+      try {
+        const parsed = JSON.parse(row.tags_json ?? "[]");
+        if (Array.isArray(parsed)) tags = parsed.filter((tag): tag is string => typeof tag === "string");
+      } catch {
+        tags = [];
+      }
+
+      const terms = deriveSearchTerms({
+        title: row.title,
+        summary: row.summary,
+        body: row.body ?? undefined,
+        tags,
+      });
+      update.run(terms, row.id);
+    }
+
+    db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;").run(
+      SEARCH_TERMS_BACKFILL_META_KEY,
+      "1",
+    );
+    db.exec("COMMIT;");
+  } catch (error) {
+    db.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
 function readMemoryById(db: DatabaseSync, id: string): MemoryRecord | null {
   const row = db
     .prepare(
@@ -752,7 +810,8 @@ function writeMemoryRow(db: DatabaseSync, memory: MemoryRecord): void {
       status = ?,
       pinned = ?,
       updated_at = ?,
-      metadata_json = ?
+      metadata_json = ?,
+      search_terms = ?
     WHERE id = ?;
   `).run(
     memory.kind,
@@ -772,6 +831,7 @@ function writeMemoryRow(db: DatabaseSync, memory: MemoryRecord): void {
     memory.pinned ? 1 : 0,
     memory.updatedAt,
     JSON.stringify(memory.metadata),
+    deriveSearchTerms(createMemoryContentForEmbedding(memory)),
     memory.id,
   );
 }
