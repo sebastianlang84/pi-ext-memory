@@ -267,11 +267,13 @@ test("memory_search guideline describes two-mode retrieval protocol", async (t) 
 
   const tool = toolByName(tools, "memory_search");
   const guidelines = tool.promptGuidelines?.join(" ") ?? "";
-  assert.match(guidelines, /Targeted lookup/, "should describe targeted lookup mode");
+  assert.match(guidelines, /English/, "should instruct to query in English (store language)");
+  assert.match(guidelines, /identifiers/, "should instruct to include code identifiers");
+  assert.match(guidelines, /Targeted/, "should describe targeted lookup mode");
   assert.match(guidelines, /Coverage/, "should describe coverage/existence check mode");
-  assert.match(guidelines, /vary queries/, "should instruct to vary queries");
+  assert.match(guidelines, /vary terms/, "should instruct to vary query terms");
   assert.match(guidelines, /escalate/, "should instruct to escalate scope");
-  assert.match(guidelines, /Empty result/, "should state empty result is not absence");
+  assert.match(guidelines, /Empty ≠ absence/, "should state empty result is not absence");
 });
 
 test("memory_search returns formatted result text and details", async (t) => {

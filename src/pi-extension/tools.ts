@@ -189,7 +189,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     description: "Search memory.",
     promptSnippet: "Search memory when automatic context is insufficient.",
     promptGuidelines: [
-      "Targeted lookup: one query. Coverage/existence check: vary queries (entity/activity/recency) + escalate repo→global + memory_list. Empty result ≠ absence.",
+      "Query in English incl. code identifiers. Targeted: 1 query. Coverage: vary terms (entity/activity), escalate repo→global, add memory_list. Empty ≠ absence.",
     ],
     parameters: Type.Object({
       query: Type.String(),
