@@ -163,6 +163,7 @@ function createMinimalStore(overrides: Partial<{
     archiveMemory(_input: ArchiveMemoryInput) { return base; },
     setMeta(_key: string, _value: string) { return; },
     getMeta(_key: string): string | null { return null; },
+    recordMemoryAccess(_ids: string[]) { return; },
     ...overrides,
   };
 }
@@ -215,6 +216,7 @@ async function buildToolFixture() {
     archiveMemory(_input: ArchiveMemoryInput) {
       return createMemory({ id: "memory-archived", status: "archived", metadata: { archive: { archivedReason: "superseded" } } });
     },
+    recordMemoryAccess(_ids: string[]) { return; },
   };
 
   const tools: RegisteredTool[] = [];

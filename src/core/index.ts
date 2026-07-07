@@ -80,13 +80,16 @@ export type {
   SessionRecord,
 } from "./store.ts";
 export {
+  EVICTED_NOTE_PURGE_AFTER_DAYS,
   MEMORY_POLICY,
+  REPO_NOTE_ACTIVE_CAP,
   buildActiveCapCountFilter,
   checkActiveCap,
   classifyLifecycleAuditFinding,
   getCapForKindScope,
   getEffectiveLifecycleScope,
   isActiveHandoff,
+  isRepoScopedNote,
 } from "./policy.ts";
 export type { ActiveCapCountFilter, CapPolicy, LifecycleAuditFinding, LifecycleAuditFindingType } from "./policy.ts";
 export { DEFAULT_HYBRID_RETRIEVAL_POLICY } from "./retrieval-policy.ts";

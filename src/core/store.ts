@@ -25,7 +25,13 @@ import {
   normalizeSearchMemoriesInput,
   normalizeUpdateMemoryInput,
 } from "./memories.ts";
-import { buildActiveCapCountFilter, checkActiveCap } from "./policy.ts";
+import {
+  buildActiveCapCountFilter,
+  checkActiveCap,
+  isRepoScopedNote,
+  EVICTED_NOTE_PURGE_AFTER_DAYS,
+  REPO_NOTE_ACTIVE_CAP,
+} from "./policy.ts";
 import {
   type MemoryEmbeddingRow,
   type MemoryRow,
@@ -100,6 +106,8 @@ export interface MemoryStore extends MemoryStoreStatus {
   searchMemories(input: SearchMemoriesInput, options?: SearchMemoriesOptions): MemorySearchResult[];
   getMeta(key: string): string | null;
   setMeta(key: string, value: string): void;
+  /** Bump last_accessed_at and access_count for surfaced memories (LRU/LFU signal). */
+  recordMemoryAccess(ids: string[]): void;
   close(): void;
 }
 
@@ -200,6 +208,15 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
           );
 
           writeMemoryEmbedding(db, memory.id, embedding, timestamp);
+
+          // Durable notes are uncapped; keep a repo's active notes bounded by
+          // evicting the weakest (least-used/oldest, never pinned) and purging
+          // long-archived evicted notes. Runs in the same transaction as the insert.
+          if (isRepoScopedNote(memory) && memory.repoPath) {
+            evictExcessRepoNotes(db, memory.repoPath, memory.id, timestamp);
+            purgeExpiredEvictedNotes(db, memory.repoPath, timestamp);
+          }
+
           db.exec("COMMIT;");
         } catch (error) {
           db.exec("ROLLBACK;");
@@ -459,6 +476,20 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
         assertStoreOpen(isClosed);
         db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;').run(key, value);
       },
+      recordMemoryAccess(ids) {
+        assertStoreOpen(isClosed);
+
+        const uniqueIds = Array.from(
+          new Set(ids.map((id) => id.trim()).filter((id) => id.length > 0)),
+        );
+        if (uniqueIds.length === 0) return;
+
+        const timestamp = new Date().toISOString();
+        const placeholders = uniqueIds.map(() => "?").join(", ");
+        db.prepare(
+          `UPDATE memories SET last_accessed_at = ?, access_count = access_count + 1 WHERE id IN (${placeholders});`,
+        ).run(timestamp, ...uniqueIds);
+      },
       close() {
         if (isClosed) return;
         isClosed = true;
@@ -528,6 +559,7 @@ function readMemoryById(db: DatabaseSync, id: string): MemoryRecord | null {
         created_at,
         updated_at,
         last_accessed_at,
+        access_count,
         metadata_json
       FROM memories
       WHERE id = ?;`,
@@ -557,6 +589,7 @@ const MEMORY_SELECT_COLUMNS = `
   created_at,
   updated_at,
   last_accessed_at,
+  access_count,
   metadata_json`;
 
 function buildMemoryWhere(
@@ -816,6 +849,62 @@ function buildArchivedMetadata(
       ...archived,
     },
   };
+}
+
+const NOTE_EVICTION_REASON = "evicted: repo note capacity reached";
+
+/**
+ * Keeps a repo's active durable notes at or below REPO_NOTE_ACTIVE_CAP by
+ * archiving the weakest ones. Weakness = least/never accessed, then least
+ * recently accessed, then least important, then oldest. Pinned notes are never
+ * evicted. Runs inside the caller's transaction.
+ */
+function evictExcessRepoNotes(db: DatabaseSync, repoPath: string, newMemoryId: string, timestamp: string): void {
+  const { cnt } = db
+    .prepare(
+      `SELECT COUNT(*) AS cnt FROM memories
+       WHERE kind IS NULL AND status = 'active' AND scope = 'repo' AND repo_path = ?;`,
+    )
+    .get(repoPath) as { cnt: number };
+
+  const excess = cnt - REPO_NOTE_ACTIVE_CAP;
+  if (excess <= 0) return;
+
+  db.prepare(
+    `UPDATE memories
+     SET status = 'archived',
+         updated_at = ?,
+         metadata_json = json_set(
+           metadata_json,
+           '$.archive',
+           json_object('archivedAt', ?, 'archivedReason', ?, 'evicted', json('true'))
+         )
+     WHERE id IN (
+       SELECT id FROM memories
+       WHERE kind IS NULL AND status = 'active' AND scope = 'repo' AND repo_path = ?
+         AND pinned = 0 AND id <> ?
+       ORDER BY access_count ASC, last_accessed_at ASC, importance ASC, updated_at ASC, created_at ASC, id ASC
+       LIMIT ?
+     );`,
+  ).run(timestamp, timestamp, NOTE_EVICTION_REASON, repoPath, newMemoryId, excess);
+}
+
+/**
+ * Hard-deletes evicted notes that have been archived longer than
+ * EVICTED_NOTE_PURGE_AFTER_DAYS. Only notes the eviction path marked
+ * (`$.archive.evicted`) are purged, so manually archived memories are never
+ * deleted. Cascades to embeddings (FK) and the FTS index (trigger).
+ */
+function purgeExpiredEvictedNotes(db: DatabaseSync, repoPath: string, timestamp: string): void {
+  const cutoff = new Date(Date.parse(timestamp) - EVICTED_NOTE_PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  db.prepare(
+    `DELETE FROM memories
+     WHERE kind IS NULL AND status = 'archived' AND scope = 'repo' AND repo_path = ?
+       AND json_extract(metadata_json, '$.archive.evicted') = 1
+       AND json_extract(metadata_json, '$.archive.archivedAt') IS NOT NULL
+       AND json_extract(metadata_json, '$.archive.archivedAt') < ?;`,
+  ).run(repoPath, cutoff);
 }
 
 function assertStoreOpen(isClosed: boolean): void {

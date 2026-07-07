@@ -185,6 +185,9 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
         projectId: identity.projectId,
         repoPath: identity.repoPath,
       });
+      // Record access on surfaced memories so frequently-retrieved notes survive
+      // repo note eviction (LRU/LFU signal).
+      store.recordMemoryAccess(results.map((result) => result.id));
       const emptySearchFilter = {
         scope: params.scope as MemoryScope[] | undefined,
         kind: params.kind as MemoryKind[] | undefined,

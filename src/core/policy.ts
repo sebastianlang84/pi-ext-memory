@@ -22,6 +22,23 @@ export interface CapPolicy {
   activeHardMax: number;
 }
 
+/**
+ * Durable notes (kind === null) are the only memory category without a hard
+ * cap, so they are the only way the store can grow without bound. Rather than
+ * rejecting new notes (as todos/handoffs do), a repo's notes behave like human
+ * memory: capacity is bounded and the weakest entries fade. When a repo exceeds
+ * REPO_NOTE_ACTIVE_CAP active notes, the least-used/oldest non-pinned notes are
+ * archived (marked `evicted`); evicted archives older than
+ * EVICTED_NOTE_PURGE_AFTER_DAYS are then hard-deleted to bound disk use.
+ */
+export const REPO_NOTE_ACTIVE_CAP = 50;
+export const EVICTED_NOTE_PURGE_AFTER_DAYS = 90;
+
+/** True when the memory is a durable note (no kind) scoped to a specific repo. */
+export function isRepoScopedNote(memory: Pick<MemoryRecord, "kind" | "scope" | "repoPath">): boolean {
+  return (memory.kind === null || memory.kind === undefined) && memory.scope === "repo" && Boolean(memory.repoPath);
+}
+
 export type LifecycleAuditFindingType = "stale_todo" | "expired_handoff" | "legacy_read_only";
 
 export interface LifecycleAuditFinding {

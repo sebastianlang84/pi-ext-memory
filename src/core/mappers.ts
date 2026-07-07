@@ -22,6 +22,7 @@ export interface MemoryRow {
   created_at: string;
   updated_at: string;
   last_accessed_at: string | null;
+  access_count: number | null;
   metadata_json: string;
 }
 
@@ -67,6 +68,7 @@ export function mapMemoryRow(row: MemoryRow): MemoryRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastAccessedAt: row.last_accessed_at ?? undefined,
+    accessCount: row.access_count ?? 0,
     metadata: parseObject(row.metadata_json),
   };
 }

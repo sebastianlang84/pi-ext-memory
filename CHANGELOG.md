@@ -21,6 +21,7 @@ Older non-monotonic entries are preserved as legacy release-line history.
 - A memory store/DB error during turn intake no longer aborts the user's turn; memory augmentation now degrades gracefully and only flags the failure via the status pill.
 
 ### Added
+- Bounded per-repo capacity for durable notes (`memory_save`), the only previously uncapped memory kind. A repo keeps at most `REPO_NOTE_ACTIVE_CAP` (default 50) active notes; exceeding it archives the weakest notes — least/never accessed, then oldest, never pinned — and evicted archives older than 90 days are purged. Note access is now tracked (`access_count` / `last_accessed_at`, schema v9) whenever a note is surfaced via search or turn injection, so frequently-used notes are retained.
 - `npm run bench:retrieval` performance tripwire for the O(N) per-turn retrieval path, documenting the store size at which a real vector index becomes worthwhile.
 
 ## [2.1.9] - 2026-06-15

@@ -25,6 +25,9 @@ export function runTurnIntake(
   const turnContext = deriveMemoryTurnContext(cwd, sessionId);
   const latestHandoff = findLatestHandoffForTurn(store, turnContext);
   const { results, searchPlan } = retrieveMemoriesForTurn(store, prompt, turnContext);
+  // Injected memories count as accessed: keeps repeatedly-relevant notes alive
+  // under repo note eviction (LRU/LFU signal).
+  store.recordMemoryAccess(results.map((result) => result.id));
   const baseMessage = buildTurnMemoryMessage(prompt, results, turnContext, store.dbPath, searchPlan, latestHandoff);
 
   const { staleTodos, oldHandoffs } = countHygieneFindings(store, turnContext.repoPath);

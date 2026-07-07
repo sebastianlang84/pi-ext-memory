@@ -265,6 +265,15 @@ export const memoryMigrations: MemoryMigration[] = [
       ${buildMemoryFtsTriggersDdl()}
     `,
   },
+  {
+    version: 9,
+    name: "note_access_tracking",
+    sql: `
+      ALTER TABLE memories ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX IF NOT EXISTS idx_memories_access_count ON memories(access_count);
+      CREATE INDEX IF NOT EXISTS idx_memories_last_accessed_at ON memories(last_accessed_at);
+    `,
+  },
 ];
 
 export const LATEST_MEMORY_SCHEMA_VERSION = memoryMigrations.at(-1)?.version ?? 0;

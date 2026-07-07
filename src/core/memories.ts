@@ -134,6 +134,7 @@ export interface MemoryRecord {
   createdAt: string;
   updatedAt: string;
   lastAccessedAt?: string;
+  accessCount?: number;
   metadata: Record<string, unknown>;
 }
 

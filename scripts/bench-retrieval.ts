@@ -38,12 +38,11 @@ const STORE_SIZES = [100, 500, 2000, 8000];
 
 function seedStore(store: MemoryStore, count: number): void {
   for (let index = 0; index < count; index += 1) {
-    // Spread ~1/3 of memories into the active repo, the rest into other repos,
-    // so the repo+global hygiene scan sees a realistic mix.
-    const repoPath = index % 3 === 0 ? REPO : `/repo/other-${index % 7}`;
+    // Seed global-scoped notes: repo notes are capped/evicted at
+    // REPO_NOTE_ACTIVE_CAP, so global notes are the remaining unbounded growth
+    // path and thus the meaningful subject for a large-N retrieval tripwire.
     store.createMemory({
-      scope: "repo",
-      repoPath,
+      scope: "global",
       title: `Note ${index} about subsystem ${index % 40}`,
       summary: `Decision ${index}: handled ranking/migration/auth/deploy/embedding topic ${index % 50} in detail for later recall.`,
       tags: [`topic-${index % 30}`, `area-${index % 12}`],
