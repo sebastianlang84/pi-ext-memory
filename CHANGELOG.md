@@ -13,6 +13,8 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-07-08
+
 ### Changed
 - Render the Pi footer status as a self-contained pill (`[Memory ✓]` / `[Memory ✗]`) so adjacent extension statuses remain readable with Pi's current single-space composition.
 - Scope the automatic per-turn hygiene warning (stale todos / expired handoffs) to the active repo plus global memories instead of scanning the entire cross-repo store, so warnings stay relevant to the current workspace. Other repos remain inspectable via the `memory_audit` tool.

@@ -67,6 +67,17 @@ The default store is one local SQLite database at:
 
 Current schema state is tracked by `LATEST_MEMORY_SCHEMA_VERSION` in `src/core/migrations.ts` and reported through `createMemoryCore().getStatus()`.
 
+## Lifecycle and capacity
+
+Todos and handoffs have hard per-scope caps (`MEMORY_POLICY` in `src/core/policy.ts`); exceeding a cap rejects the write. Durable notes (`kind = null`) are the only otherwise-unbounded kind, so they are instead bounded per repo and behave like human memory:
+
+- A repo keeps at most `REPO_NOTE_ACTIVE_CAP` (default 50) active notes.
+- On save, `createMemory` archives the weakest excess notes — ordered by `access_count`, then `last_accessed_at`, then `importance`, then age — and never evicts pinned notes. Evicted notes are marked `metadata.archive.evicted`.
+- Evicted archives older than `EVICTED_NOTE_PURGE_AFTER_DAYS` (default 90) are hard-deleted opportunistically on the next repo save (cascading to embeddings and the FTS index). Manually archived notes are never auto-purged.
+- Access is recorded (`access_count`, `last_accessed_at`; schema v9) when a note is surfaced via `memory_search` or per-turn injection, so frequently-retrieved notes survive eviction.
+
+Eviction and purge run inside the `createMemory` transaction. Global- and session-scoped notes are not capped. The per-turn retrieval cost scales with the number of active memories reachable from a stage; `npm run bench:retrieval` is the tripwire that tracks when that O(N) path warrants a real vector index.
+
 ## Embeddings and retrieval
 
 The embedding path is local-first:
