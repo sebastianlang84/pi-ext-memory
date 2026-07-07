@@ -546,7 +546,7 @@ test("buildTurnMemoryMessage injects only a compact top-N context block", () => 
 
   assert.ok(message);
   assert.equal(message?.display, false);
-  assert.match(message?.content ?? "", /pi-memory context \(user wins\):/);
+  assert.match(message?.content ?? "", /pi-memory context:/);
   assert.match(message?.content ?? "", /Use memory_search for more/);
   assert.match(message?.content ?? "", /First memory/);
   assert.match(message?.content ?? "", /Second memory/);

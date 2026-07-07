@@ -111,7 +111,7 @@ test("runTurnIntake returns memory content when search results are present", () 
     });
 
     const result = assertTurnMessage(runTurnIntake(store, "memoryonlyneedle", repoRoot, "session-abc"));
-    assert.match(result.content, /pi-memory context \(user wins\):/);
+    assert.match(result.content, /pi-memory context:/);
     assert.match(result.content, /Memory only fact/);
     assert.match(result.content, /Use memory_search for more/);
     assert.equal(result.details.query, "memoryonlyneedle");

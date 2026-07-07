@@ -389,7 +389,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Save Handoff",
     description: "Save/update session handoff.",
     promptSnippet: "Save handoff for context loss, compaction, session end, or transfer.",
-    promptGuidelines: ["Use memory_save_handoff only for real context loss/transfer; include state, next steps, blockers, verification."],
+    promptGuidelines: ["Include state, next steps, blockers, verification."],
     parameters: Type.Object({
       title: Type.Optional(Type.String()),
       handoffReason: StringEnum(["context_reset", "agent_transfer", "compaction", "session_end"] as const),
@@ -454,7 +454,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Update",
     description: "Patch/archive memory.",
     promptSnippet: "Update known memories instead of duplicating them.",
-    promptGuidelines: ["Use memory_update with a known id; prefer it over duplicate saves."],
+    promptGuidelines: ["Needs the id from memory_search/memory_list."],
     parameters: Type.Object({
       id: Type.String(),
       title: Type.Optional(Type.String()),
@@ -753,7 +753,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Tag Catalog",
     description: "List active tags.",
     promptSnippet: "Inspect tags before adding new ones.",
-    promptGuidelines: ["Check memory_tag_catalog before new tags."],
+    promptGuidelines: ["Read-only; reuse an existing tag over a near-duplicate."],
     parameters: Type.Object({
       scope: Type.Optional(Type.Array(StringEnum(MEMORY_SCOPES))),
       kind: Type.Optional(Type.Array(StringEnum(MEMORY_KINDS))),
@@ -785,7 +785,7 @@ export function registerMemoryTools(pi: Pick<ExtensionAPI, "registerTool">, getA
     label: "Memory Stats",
     description: "Show store health/caps.",
     promptSnippet: "Check memory-store health and caps.",
-    promptGuidelines: ["Use memory_stats only for store health/caps."],
+    promptGuidelines: ["Advanced/admin only; not a first-choice tool."],
     parameters: Type.Object({
       scope: StringEnum(MEMORY_SCOPES, { description: "global/repo/session; project legacy" }),
       repoPath: Type.Optional(Type.String()),

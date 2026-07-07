@@ -27,6 +27,7 @@ Older non-monotonic entries are preserved as legacy release-line history.
 - Configurable knobs via env: `PI_MEMORY_MIN_VECTOR_SIMILARITY`, `PI_MEMORY_WEIGHT_LEXICAL`, `PI_MEMORY_WEIGHT_SEMANTIC`, `PI_MEMORY_TURN_RESULT_LIMIT`, `PI_MEMORY_NOTE_STALE_DAYS`.
 
 ### Changed
+- Trimmed redundant injected prompt text: dropped the cryptic per-turn `user wins` from the hit-context header and the repeated write-scope reminder from hit guidance, and deduplicated tool guidelines that merely restated their snippets. No behavior change; reclaims prompt token budget.
 - `memory_search` guideline now instructs querying in English (the store language) and including code identifiers, so non-English prompts and identifier lookups route to matching memories; the targeted/coverage protocol is unchanged.
 - Turn-start retrieval distills the prompt (drops stopwords, caps tokens) and re-ranks candidates across all scope stages by match score instead of stage order.
 - `pinned` memories now receive a ranking boost (previously stored but unused).

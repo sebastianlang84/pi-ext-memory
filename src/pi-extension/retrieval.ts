@@ -69,8 +69,7 @@ const MEMORY_NO_HIT_GUIDANCE =
 // Shown after the first no-hit turn of a session — the full guidance has already
 // been injected once, so later no-hit turns only need a compact reminder.
 const MEMORY_NO_HIT_GUIDANCE_SHORT = "User wins; empty ≠ absent.";
-const MEMORY_HIT_GUIDANCE =
-  "Use memory_search for more; save/update durable notes/todos/handoffs only.";
+const MEMORY_HIT_GUIDANCE = "Use memory_search for more.";
 
 export interface RetrieveTurnMemoriesOptions {
   resultLimit?: number;
@@ -269,8 +268,11 @@ function formatTurnContextLines(
     : "";
 
   if (topResults.length > 0) {
+    const contextLabel = selfDescription
+      ? `pi-memory context (${selfDescription.trim().replace(/;$/, "")})`
+      : "pi-memory context";
     return [
-      `pi-memory context (${selfDescription}user wins):`,
+      `${contextLabel}:`,
       ...topResults.map((result, index) => formatTurnMemoryLine(index + 1, result)),
       MEMORY_HIT_GUIDANCE,
     ];
