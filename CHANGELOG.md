@@ -11,7 +11,7 @@ All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
 Older non-monotonic entries are preserved as legacy release-line history.
 
-## [Unreleased]
+## [2.2.0] - 2026-08-04
 
 ### Added
 - Code identifiers are indexed by their subtokens (camelCase / snake_case / kebab-case), so a query like `fts match query` reaches a memory about `buildFtsMatchQuery`.
