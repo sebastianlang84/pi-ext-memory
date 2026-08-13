@@ -6,7 +6,13 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { type CreateMemoryInput, type MemoryCore, type MemoryRecord, type MemorySearchResult, type MemoryStore, type SearchMemoriesInput } from "../core/index.ts";
 import { formatAuditResults, runMemoryAudit } from "./audit.ts";
 import { findLatestExactSessionHandoff } from "./handoffs.ts";
-import { deriveMemoryTurnContext, findLatestHandoffForTurn, retrieveMemoriesForTurn } from "./retrieval.ts";
+import {
+  deriveMemoryTurnContext,
+  findLatestHandoffForTurn,
+  formatLatestHandoffLines,
+  retrieveMemoriesForTurn,
+  type LatestHandoffResult,
+} from "./retrieval.ts";
 import {
   formatMemorySearchResultLine,
   formatMemorySessionSaved,
@@ -46,13 +52,20 @@ export function registerMemoryCommands(
       const turnContext = deriveMemoryTurnContext(ctx.cwd, ctx.sessionManager.getSessionId());
 
       if (query.length === 0) {
-        // No query — context mode: show what the agent currently sees
+        // No query — context mode: show what the agent currently sees. The
+        // turn-start injection always leads with the active handoff, so this
+        // view has to resolve it the same way to stay a faithful mirror.
         const session = activeStore.getSession(turnContext.sessionId);
+        const latestHandoff = findLatestHandoffForTurn(activeStore, turnContext);
         const { results, searchPlan } = retrieveMemoriesForTurn(activeStore, CONTEXT_QUERY, turnContext, {
           resultLimit: MANUAL_SEARCH_RESULT_LIMIT,
           stageLimit: MANUAL_SEARCH_STAGE_LIMIT,
         });
-        sendOutput(pi, formatContextSearch(results, searchPlan, turnContext, activeStore.dbPath, session?.summary), ctx);
+        sendOutput(
+          pi,
+          formatContextSearch(results, searchPlan, turnContext, activeStore.dbPath, latestHandoff, session?.summary),
+          ctx,
+        );
         return;
       }
 
@@ -306,6 +319,7 @@ function formatContextSearch(
   searchPlan: SearchMemoriesInput[],
   context: { sessionId: string; projectId?: string; repoPath?: string },
   dbPath: string,
+  latestHandoff: LatestHandoffResult | undefined,
   sessionSummary?: string,
 ): string {
   const lines = [
@@ -315,6 +329,7 @@ function formatContextSearch(
     `project_id: ${context.projectId ?? "none"}`,
     `repo_path: ${context.repoPath ?? "none"}`,
     `session_summary: ${sessionSummary ?? "none"}`,
+    ...(latestHandoff ? formatLatestHandoffLines(latestHandoff) : ["latest_handoff: none"]),
     "suggested_actions:",
     "- Review matching memories before saving anything new.",
     "- Use memory_update if an existing memory is stale, incomplete, closed, or should be archived.",
