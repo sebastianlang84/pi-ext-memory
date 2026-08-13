@@ -11,6 +11,11 @@ All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
 Older non-monotonic entries are preserved as legacy release-line history.
 
+## [Unreleased]
+
+### Fixed
+- `/memory-import` no longer resurrects archived memories. Records exported with `status: archived` are restored as archived, and every imported memory keeps its original `created_at`/`updated_at` instead of being re-dated to the import time — so a restored backup no longer floods turn-start injection, the active todo/handoff caps, or `/memory-audit` staleness with old, closed context. Re-running an import is idempotent for archived records as well.
+
 ## [2.2.0] - 2026-08-04
 
 ### Added

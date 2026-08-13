@@ -69,6 +69,7 @@ export type {
   MemorySearchResult,
   MemoryStatus,
   NormalizedListMemoriesInput,
+  RestoreMemoryLifecycle,
   SearchMemoriesInput,
   UpdateMemoryInput,
 } from "./memories.ts";

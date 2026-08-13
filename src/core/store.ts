@@ -16,6 +16,7 @@ import {
   type MemoryRecord,
   type MemorySearchResult,
   type NormalizedListMemoriesInput,
+  type RestoreMemoryLifecycle,
   type SearchMemoriesInput,
   type UpdateMemoryInput,
   MemoryValidationError,
@@ -86,7 +87,12 @@ export interface ListForToolResult {
 }
 
 export interface MemoryStore extends MemoryStoreStatus {
-  createMemory(input: CreateMemoryInput): MemoryRecord;
+  /**
+   * Creates a memory. `restore` is for re-creating an already-persisted record
+   * (e.g. `/memory-import`): it keeps the original status and timestamps instead
+   * of writing a fresh active memory. Normal writes omit it.
+   */
+  createMemory(input: CreateMemoryInput, restore?: RestoreMemoryLifecycle): MemoryRecord;
   updateMemory(input: UpdateMemoryInput): MemoryRecord;
   archiveMemory(input: ArchiveMemoryInput): MemoryRecord;
   getMemory(id: string): MemoryRecord | null;
@@ -130,12 +136,14 @@ export function initializeMemoryStore(input: InitializeMemoryStoreInput): Memory
       fallbackEmbeddingModel: embeddingStatus.fallbackModel,
       embeddingDimensions: embeddingStatus.dimensions,
       embeddingStrategy: embeddingStatus.strategy,
-      createMemory(input) {
+      createMemory(input, restore) {
         assertStoreOpen(isClosed);
 
-        const memory = normalizeCreateMemoryInput(input);
+        const memory = normalizeCreateMemoryInput(input, restore);
 
-        const capCountFilter = buildActiveCapCountFilter(memory);
+        // Caps bound the *active* working set, so a restored archived record
+        // must not be measured against them.
+        const capCountFilter = memory.status === "active" ? buildActiveCapCountFilter(memory) : null;
         if (capCountFilter) {
           const activeCount = readMemoryCount(db, capCountFilter);
           checkActiveCap(memory.kind, memory.scope, activeCount);
@@ -734,7 +742,10 @@ function findExactDuplicate(db: DatabaseSync, memory: MemoryRecord): MemoryRecor
   const { whereClauses, queryParams } = buildMemoryWhere({
     kind: [memory.kind],
     scope: [memory.scope],
-    status: "active",
+    // Match the status being written: an archived restore dedupes against the
+    // archived twin, so re-running an import stays idempotent instead of
+    // stacking archived copies (and never revives an archived record as new).
+    status: memory.status,
     ...(memory.repoPath ? { repoPath: memory.repoPath } : {}),
     ...(memory.projectId ? { projectId: memory.projectId } : {}),
     ...(memory.sessionId ? { sessionId: memory.sessionId } : {}),
