@@ -11,7 +11,7 @@ All notable user/operator-relevant changes are documented in this file.
 This changelog follows the Keep a Changelog format.
 Older non-monotonic entries are preserved as legacy release-line history.
 
-## [Unreleased]
+## [2.2.1] - 2026-08-14
 
 ### Fixed
 - `/memory-search` without a query now shows the active handoff block — rendered exactly like the turn-start injection it mirrors — or `latest_handoff: none`. Previously the context view silently omitted the handoff despite its own "shows current context (todos, handoffs, next steps)" description.
