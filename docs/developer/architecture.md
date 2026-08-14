@@ -67,6 +67,8 @@ The default store is one local SQLite database at:
 
 Current schema state is tracked by `LATEST_MEMORY_SCHEMA_VERSION` in `src/core/migrations.ts` and reported through `createMemoryCore().getStatus()`.
 
+`createMemory(input, restore?)` takes an optional `RestoreMemoryLifecycle` (`status`, `createdAt`, `updatedAt`) used only by restore paths such as `/memory-import`, so an exported record keeps its lifecycle instead of returning as a fresh active memory. Those fields are deliberately absent from `CreateMemoryInput`, keeping them out of reach of agent-facing writes; a restored archived record also bypasses the active caps and dedupes against archived rows.
+
 ## Embeddings and retrieval
 
 The embedding path is local-first:

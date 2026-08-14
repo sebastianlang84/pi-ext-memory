@@ -33,6 +33,19 @@ export interface CreateMemoryInput {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Lifecycle fields a restore path (currently `/memory-import`) carries over from
+ * an already-persisted record. Deliberately kept out of `CreateMemoryInput`:
+ * ordinary writes — including every agent-facing tool — must not be able to
+ * create a memory that is already archived or backdated. Omitted fields keep the
+ * normal create defaults (`active`, timestamps = now).
+ */
+export interface RestoreMemoryLifecycle {
+  status?: MemoryStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface UpdateMemoryInput {
   id: string;
   scope?: MemoryScope;
@@ -178,7 +191,10 @@ export class MemoryValidationError extends Error {
   }
 }
 
-export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryRecord {
+export function normalizeCreateMemoryInput(
+  input: CreateMemoryInput,
+  restore: RestoreMemoryLifecycle = {},
+): MemoryRecord {
   const issues: string[] = [];
 
   const kind = input.kind !== undefined ? normalizeEnum("kind", input.kind, MEMORY_KINDS, issues) : undefined;
@@ -201,11 +217,18 @@ export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryReco
   const tags = normalizeTags(input.tags, issues);
   const metadata = normalizeMetadata(input.metadata, issues);
 
-  if (issues.length > 0 || !scope || !title || !summary) {
+  const status =
+    restore.status === undefined ? "active" : normalizeEnum("status", restore.status, MEMORY_STATUSES, issues);
+  const restoredCreatedAt = normalizeTimestamp("createdAt", restore.createdAt, issues);
+  const restoredUpdatedAt = normalizeTimestamp("updatedAt", restore.updatedAt, issues);
+
+  if (issues.length > 0 || !scope || !title || !summary || !status) {
     throw new MemoryValidationError(issues);
   }
 
   const timestamp = new Date().toISOString();
+  const createdAt = restoredCreatedAt ?? timestamp;
+  const updatedAt = restoredUpdatedAt ?? createdAt;
 
   return {
     id: randomUUID(),
@@ -222,10 +245,10 @@ export function normalizeCreateMemoryInput(input: CreateMemoryInput): MemoryReco
     branch,
     importance,
     confidence,
-    status: "active",
+    status,
     pinned: input.pinned === true,
-    createdAt: timestamp,
-    updatedAt: timestamp,
+    createdAt,
+    updatedAt,
     metadata,
   };
 }
@@ -512,6 +535,23 @@ function normalizeBoolean(fieldName: string, value: boolean, issues: string[], o
 
   onChange?.();
   return value;
+}
+
+/**
+ * Validates a restored lifecycle timestamp and returns it in canonical ISO form.
+ * An unparseable value is reported instead of silently falling back to "now", so
+ * a restore never quietly re-dates a memory.
+ */
+function normalizeTimestamp(fieldName: string, value: string | undefined, issues: string[]): string | undefined {
+  if (value === undefined) return undefined;
+
+  const parsed = typeof value === "string" ? Date.parse(value) : Number.NaN;
+  if (Number.isNaN(parsed)) {
+    issues.push(`${fieldName} must be an ISO 8601 timestamp`);
+    return undefined;
+  }
+
+  return new Date(parsed).toISOString();
 }
 
 function normalizeLimit(value: number | undefined, issues: string[]): number {

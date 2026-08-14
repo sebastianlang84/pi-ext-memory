@@ -15,6 +15,7 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ### Fixed
 - `/memory-search` without a query now shows the active handoff block — rendered exactly like the turn-start injection it mirrors — or `latest_handoff: none`. Previously the context view silently omitted the handoff despite its own "shows current context (todos, handoffs, next steps)" description.
+- `/memory-import` no longer resurrects archived memories. Records exported with `status: archived` are restored as archived, and every imported memory keeps its original `created_at`/`updated_at` instead of being re-dated to the import time — so a restored backup no longer floods turn-start injection, the active todo/handoff caps, or `/memory-audit` staleness with old, closed context. Re-running an import is idempotent for archived records as well.
 
 ## [2.2.0] - 2026-08-04
 

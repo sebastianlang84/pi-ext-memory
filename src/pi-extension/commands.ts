@@ -170,12 +170,12 @@ export function registerMemoryCommands(
   });
 
   pi.registerCommand("memory-import", {
-    description: "Import memories from a /memory-export JSON file (content-preserving; assigns fresh ids)",
+    description: "Import memories from a /memory-export JSON file (keeps status and timestamps; assigns fresh ids)",
     handler: async (args, ctx) => {
       const activeStore = runtimeStore.getStoreForCwd(ctx.cwd);
       const target = args.trim();
       if (target.length === 0) {
-        sendOutput(pi, "Usage: /memory-import <file.json>\nRe-creates memories from an export (fresh ids; duplicates are skipped).", ctx);
+        sendOutput(pi, "Usage: /memory-import <file.json>\nRe-creates memories from an export (fresh ids; archived stay archived; duplicates are skipped).", ctx);
         return;
       }
 
@@ -189,6 +189,7 @@ export function registerMemoryCommands(
 
       const memories = Array.isArray(parsed.memories) ? (parsed.memories as MemoryRecord[]) : [];
       let imported = 0;
+      let archived = 0;
       let skipped = 0;
       for (const memory of memories) {
         try {
@@ -208,13 +209,25 @@ export function registerMemoryCommands(
             metadata: memory.metadata,
             sourceAgent: memory.sourceAgent,
           };
-          activeStore.createMemory(input);
+          // Restore the exported lifecycle instead of letting every record land
+          // as a fresh active memory: archived entries must stay out of turn-start
+          // injection, active caps, and audit staleness.
+          const restored = activeStore.createMemory(input, {
+            status: memory.status,
+            createdAt: memory.createdAt,
+            updatedAt: memory.updatedAt,
+          });
           imported += 1;
+          if (restored.status === "archived") archived += 1;
         } catch {
           skipped += 1;
         }
       }
-      sendOutput(pi, `Imported ${imported} memor${imported !== 1 ? "ies" : "y"} from ${resolve(target)} (${skipped} skipped).`, ctx);
+      sendOutput(
+        pi,
+        `Imported ${imported} memor${imported !== 1 ? "ies" : "y"} from ${resolve(target)} (${archived} archived, ${skipped} skipped).`,
+        ctx,
+      );
     },
   });
 

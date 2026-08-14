@@ -602,6 +602,150 @@ test("/memory-handoff archive with no matching handoff writes error to chat", as
   }
 });
 
+// --- /memory-export + /memory-import ---
+
+test("/memory-export -> /memory-import keeps archived memories archived", async () => {
+  const { cwd, repoRoot } = createProjectContext();
+  const sourceDbPath = join(createTempDir("pi-memory-export-source-"), "memory.sqlite");
+  const targetDbPath = join(createTempDir("pi-memory-import-target-"), "memory.sqlite");
+  const exportFile = join(createTempDir("pi-memory-export-file-"), "backup.json");
+
+  const setupStore = initializeMemoryStore({ dbPath: sourceDbPath });
+  try {
+    setupStore.createMemory({
+      scope: "repo",
+      title: "Open note that must stay active",
+      summary: "This memory is still current and must be restored as an active memory.",
+      repoPath: repoRoot,
+      sourceAgent: "test",
+    });
+    const closed = setupStore.createMemory({
+      scope: "repo",
+      title: "Closed note that must stay archived",
+      summary: "This memory was archived on purpose and must not return as live context.",
+      repoPath: repoRoot,
+      sourceAgent: "test",
+    });
+    setupStore.archiveMemory({ id: closed.id, reason: "archived before the backup was taken" });
+  } finally {
+    setupStore.close();
+  }
+
+  const previousDbPath = process.env.PI_MEMORY_DB_PATH;
+
+  try {
+    const { pi, commands, eventHandlers, messages } = createMockPi();
+    registerMemoryCommands(pi as never, createMemoryCore());
+
+    const exportHandler = commands.get("memory-export");
+    const importHandler = commands.get("memory-import");
+    assert.ok(exportHandler, "expected memory-export command to be registered");
+    assert.ok(importHandler, "expected memory-import command to be registered");
+
+    const { ctx } = createMockCommandContext(cwd, "session-export-import-1");
+
+    process.env.PI_MEMORY_DB_PATH = sourceDbPath;
+    await exportHandler(exportFile, ctx);
+    assert.match(messages[0]?.content ?? "", /Exported 2 memories/);
+
+    process.env.PI_MEMORY_DB_PATH = targetDbPath;
+    await importHandler(exportFile, ctx);
+    assert.match(messages[1]?.content ?? "", /Imported 2 memories .*\(1 archived, 0 skipped\)/);
+
+    for (const shutdown of eventHandlers.get("session_shutdown") ?? []) {
+      await shutdown({}, ctx);
+    }
+
+    const importedStore = initializeMemoryStore({ dbPath: targetDbPath });
+    try {
+      assert.deepEqual(
+        importedStore.listAllInternal({ status: "active" }).map((memory) => memory.title),
+        ["Open note that must stay active"],
+      );
+      assert.deepEqual(
+        importedStore.listAllInternal({ status: "archived" }).map((memory) => memory.title),
+        ["Closed note that must stay archived"],
+      );
+    } finally {
+      importedStore.close();
+    }
+  } finally {
+    if (previousDbPath === undefined) {
+      delete process.env.PI_MEMORY_DB_PATH;
+    } else {
+      process.env.PI_MEMORY_DB_PATH = previousDbPath;
+    }
+  }
+});
+
+test("/memory-import keeps the exported created/updated timestamps", async () => {
+  const { cwd } = createProjectContext();
+  const dbPath = join(createTempDir("pi-memory-import-timestamps-"), "memory.sqlite");
+  const importFile = join(createTempDir("pi-memory-import-file-"), "backup.json");
+
+  writeFileSync(
+    importFile,
+    JSON.stringify({
+      format: "pi-memory-export",
+      version: 1,
+      count: 1,
+      memories: [
+        {
+          id: "exported-memory-1",
+          kind: "todo",
+          scope: "global",
+          title: "Long-open todo from an old backup",
+          summary: "A restored todo must keep its original dates so the audit still reports it as stale.",
+          tags: [],
+          importance: 0.5,
+          confidence: 0.5,
+          status: "active",
+          pinned: false,
+          createdAt: "2025-01-02T03:04:05.000Z",
+          updatedAt: "2025-02-03T04:05:06.000Z",
+          metadata: {},
+        },
+      ],
+    }),
+    "utf8",
+  );
+
+  const previousDbPath = process.env.PI_MEMORY_DB_PATH;
+  process.env.PI_MEMORY_DB_PATH = dbPath;
+
+  try {
+    const { pi, commands, eventHandlers, messages } = createMockPi();
+    registerMemoryCommands(pi as never, createMemoryCore());
+
+    const importHandler = commands.get("memory-import");
+    assert.ok(importHandler, "expected memory-import command to be registered");
+
+    const { ctx } = createMockCommandContext(cwd, "session-import-timestamps-1");
+    await importHandler(importFile, ctx);
+    assert.match(messages[0]?.content ?? "", /Imported 1 memory .*\(0 archived, 0 skipped\)/);
+
+    for (const shutdown of eventHandlers.get("session_shutdown") ?? []) {
+      await shutdown({}, ctx);
+    }
+
+    const importedStore = initializeMemoryStore({ dbPath });
+    try {
+      const [restored] = importedStore.listAllInternal({ status: "active" });
+      assert.equal(restored?.title, "Long-open todo from an old backup");
+      assert.equal(restored?.createdAt, "2025-01-02T03:04:05.000Z");
+      assert.equal(restored?.updatedAt, "2025-02-03T04:05:06.000Z");
+    } finally {
+      importedStore.close();
+    }
+  } finally {
+    if (previousDbPath === undefined) {
+      delete process.env.PI_MEMORY_DB_PATH;
+    } else {
+      process.env.PI_MEMORY_DB_PATH = previousDbPath;
+    }
+  }
+});
+
 // --- /memory-session-save error path ---
 
 test("/memory-session-save with short summary writes usage hint to chat", async () => {
