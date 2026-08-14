@@ -4,12 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createMemoryCore, initializeMemoryStore, type MemorySearchResult, type SearchMemoriesInput } from "../../src/core/index.ts";
+import { createMemoryCore, initializeMemoryStore, type MemoryRecord, type MemorySearchResult, type SearchMemoriesInput } from "../../src/core/index.ts";
 import {
   formatMemorySessionSaved,
   formatMemorySessionSaveUsage,
 } from "../../src/pi-extension/formatters.ts";
 import { registerMemoryCommands } from "../../src/pi-extension/commands.ts";
+import { formatLatestHandoffLines } from "../../src/pi-extension/retrieval.ts";
 import type { MemoryRuntimeStore } from "../../src/pi-extension/runtime-store.ts";
 
 type CommandHandler = (args: string, ctx: MockCommandContext) => Promise<void>;
@@ -191,7 +192,69 @@ test("/memory-search without query shows current memory context", async () => {
     assert.match(output, /Current memory context \(read-only\)\. Use \/memory-search <query> for targeted search\./);
     assert.match(output, /session_id: session-review-123/);
     assert.match(output, /session_summary: Reviewed relevant memories before deciding what to persist\./);
+    assert.match(output, /latest_handoff: none/);
     assert.match(output, /Keep writes manual-first for next steps/);
+  } finally {
+    if (previousDbPath === undefined) {
+      delete process.env.PI_MEMORY_DB_PATH;
+    } else {
+      process.env.PI_MEMORY_DB_PATH = previousDbPath;
+    }
+  }
+});
+
+test("/memory-search without query shows the active handoff like the turn-start injection", async () => {
+  const { cwd, repoRoot } = createProjectContext();
+  const dbPath = join(createTempDir("pi-memory-context-handoff-db-"), "memory.sqlite");
+  const setupStore = initializeMemoryStore({ dbPath });
+
+  // The expectation is derived from the persisted record via the same formatter
+  // the turn-start injection uses, because the store collapses whitespace in
+  // bodies: stored markdown headings never survive as separate lines, so a
+  // literal `Next:`/`Blockers:` expectation would assert something neither
+  // surface emits. What this pins is that both surfaces render the same block.
+  let stored: MemoryRecord | undefined;
+  try {
+    stored = setupStore.createMemory({
+      kind: "handoff",
+      scope: "session",
+      sessionId: "session-context-handoff-123",
+      projectId: "@acme/api",
+      repoPath: repoRoot,
+      title: "Context reset handoff",
+      summary: "Resume the command UX work after context reset.",
+      body: "## Next steps\n- Implement command UX\n\n## Blockers\n- Waiting on review",
+      metadata: { handoff: { resumeInstruction: "Start with command UX" } },
+      sourceAgent: "test",
+    });
+  } finally {
+    setupStore.close();
+  }
+  assert.ok(stored, "expected the handoff memory to be persisted");
+
+  const previousDbPath = process.env.PI_MEMORY_DB_PATH;
+  process.env.PI_MEMORY_DB_PATH = dbPath;
+
+  try {
+    const { pi, commands, messages } = createMockPi();
+    registerMemoryCommands(pi as never, createMemoryCore());
+
+    const handler = commands.get("memory-search");
+    assert.ok(handler, "expected memory-search command to be registered");
+
+    const { ctx } = createMockCommandContext(cwd, "session-context-handoff-123");
+    await handler("", ctx);
+
+    assert.equal(messages.length, 1);
+    const output = messages[0]?.content ?? "";
+    assert.match(output, /Latest active handoff:/);
+    assert.match(output, /Context reset handoff/);
+    assert.match(output, /Resume: Start with command UX/);
+    assert.doesNotMatch(output, /latest_handoff: none/);
+    assert.ok(
+      output.includes(formatLatestHandoffLines({ memory: stored, isFallback: false }).join("\n")),
+      "expected the context view to render the same handoff block as the turn-start injection",
+    );
   } finally {
     if (previousDbPath === undefined) {
       delete process.env.PI_MEMORY_DB_PATH;

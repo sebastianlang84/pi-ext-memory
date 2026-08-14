@@ -289,7 +289,7 @@ function isMemoryIntrospectionQuery(query: string): boolean {
   );
 }
 
-function formatLatestHandoffLines(latestHandoff: LatestHandoffResult): string[] {
+export function formatLatestHandoffLines(latestHandoff: LatestHandoffResult): string[] {
   const { memory, isFallback } = latestHandoff;
   const metadata = [`${memory.scope}`, `updated=${memory.updatedAt.slice(0, 10)}`];
 
