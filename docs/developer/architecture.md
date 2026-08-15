@@ -139,6 +139,8 @@ For release-relevant commits, keep these in sync:
 - `src/core/memory-core.ts` runtime status version,
 - `CHANGELOG.md` release entry.
 
+`test/core/memory-core-version.test.ts` guards the first three: it fails when the runtime status version drifts from the `package.json` version or the lockfile falls behind.
+
 ## Verification
 
 Use the smallest relevant check for the change. Common checks:

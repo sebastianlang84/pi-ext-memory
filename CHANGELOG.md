@@ -14,6 +14,7 @@ Older non-monotonic entries are preserved as legacy release-line history.
 ## [2.2.1] - 2026-08-14
 
 ### Fixed
+- `/memory-status` now reports the current release version. The runtime status version was still `v2.1.6` while `package.json`, `package-lock.json`, and this changelog said 2.2.1, so the status output named a five-release-stale version. A regression test now pins the runtime version to `package.json`.
 - `/memory-search` without a query now shows the active handoff block — rendered exactly like the turn-start injection it mirrors — or `latest_handoff: none`. Previously the context view silently omitted the handoff despite its own "shows current context (todos, handoffs, next steps)" description.
 - `/memory-import` no longer resurrects archived memories. Records exported with `status: archived` are restored as archived, and every imported memory keeps its original `created_at`/`updated_at` instead of being re-dated to the import time — so a restored backup no longer floods turn-start injection, the active todo/handoff caps, or `/memory-audit` staleness with old, closed context. Re-running an import is idempotent for archived records as well.
 
