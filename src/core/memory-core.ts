@@ -28,7 +28,7 @@ export function createMemoryCore(): MemoryCore {
   return {
     getStatus() {
       return {
-        version: "v2.1.6",
+        version: "v2.2.1",
         mode: "local-core",
         storage: "sqlite-session-summary-ready",
         latestSchemaVersion: LATEST_MEMORY_SCHEMA_VERSION,
