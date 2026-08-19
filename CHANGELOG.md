@@ -13,6 +13,9 @@ Older non-monotonic entries are preserved as legacy release-line history.
 
 ## [2.2.1] - 2026-08-14
 
+### Removed
+- Dropped the unused internal `listRelevantActiveHandoffsForScope` helper, the last leftover of the `memory_list_active_handoffs` tool removed in ADR 007. No callable behavior changes; use `memory_list(kind="handoff", status="active")`.
+
 ### Fixed
 - `/memory-status` now reports the current release version. The runtime status version was still `v2.1.6` while `package.json`, `package-lock.json`, and this changelog said 2.2.1, so the status output named a five-release-stale version. A regression test now pins the runtime version to `package.json`.
 - `/memory-search` without a query now shows the active handoff block — rendered exactly like the turn-start injection it mirrors — or `latest_handoff: none`. Previously the context view silently omitted the handoff despite its own "shows current context (todos, handoffs, next steps)" description.
