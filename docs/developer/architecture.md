@@ -85,6 +85,7 @@ The normal tool path is intentionally small:
 
 - `memory_search`,
 - `memory_list`,
+- `memory_get`,
 - `memory_save`,
 - `memory_save_todo`,
 - `memory_save_handoff`,
