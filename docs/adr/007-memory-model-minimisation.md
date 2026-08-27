@@ -1,7 +1,7 @@
 # ADR 007: Memory Model Minimisation
 
 Date: 2026-05-13
-Status: Accepted
+Status: Accepted; §Duplicate detection revised 2026-08-27
 
 ## Context
 
@@ -42,7 +42,12 @@ Both fields are removed. Expiry is not reliably set by agents, and automatic exp
 
 ### Duplicate detection
 
-Not implemented. Exact duplicates are rare in practice. Semantic duplicate detection (embedding-based O(n²)) has unacceptable false-positive risk and complexity. If duplicates appear, `memory_audit` and `memory_search` are sufficient to find and resolve them manually.
+Semantic duplicate detection (embedding-based O(n²)) is rejected: unacceptable false-positive risk and complexity. If duplicates appear, `memory_audit` and `memory_search` are sufficient to find and resolve them manually.
+
+**Revised 2026-08-27.** The decision above was recorded as "not implemented", and two narrower mechanisms have shipped since. They are cheap, exact or advisory, and neither is the embedding-based detection this ADR rejects:
+
+- **Exact duplicates collapse on write.** `findExactDuplicate` (`src/core/store.ts`) matches title, summary, kind, scope, status and the scope keys, and `saveMemory` returns the existing record instead of writing a second one. It matches the status being written, so re-running an import stays idempotent and never revives an archived record as new.
+- **Near-duplicates are an advisory hint, never a block.** `findNearDuplicateMemories` (`src/core/search.ts`) uses the same token-set similarity heuristic that dedupes search results. `memory_save` and `memory_save_todo` return `similar_existing` lines with the existing ids; the save still succeeds, so genuinely distinct records are never dropped.
 
 ### Knowledge graph / memory_link
 
