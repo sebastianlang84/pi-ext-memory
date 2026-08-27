@@ -89,7 +89,8 @@ Default principles:
 - simple configuration,
 - explicit lifecycle hygiene through audit warnings and manual archiving,
 - no automatic TTL or expiry in the current V1 line,
-- ranking signals for recency, importance, confidence, scope, and lexical/tag matches.
+- ranking signals for recency, importance, confidence, scope, and lexical/tag matches,
+- whole-store JSON export/import for backup and machine migration.
 
 ### Not in V1
 
@@ -98,7 +99,7 @@ Default principles:
 - central server architecture,
 - automatic codebase indexing,
 - heavy background infrastructure,
-- general memory import/export commands.
+- interoperability formats beyond the JSON store export, for example Markdown export/import.
 
 ---
 
@@ -239,7 +240,8 @@ Core operations:
 - list/filter memories,
 - get a memory by id,
 - archive through a status update,
-- save a session summary.
+- save a session summary,
+- export and import the whole store as JSON for backup and machine migration.
 
 Not current V1 APIs:
 
@@ -247,7 +249,7 @@ Not current V1 APIs:
 - artifact APIs,
 - TTL/expiry operations,
 - pin/unpin flows,
-- general import/export flows.
+- cross-tool import/export formats beyond the JSON store export.
 
 Possible later exposure:
 
@@ -331,9 +333,9 @@ Current posture: manual-first writes with explicit tools and commands.
 7. Should pi-memory add a boot-loaded startup context segment?
    - Current posture: no general startup segment. Keep context turn-start and retrieval-driven; revisit only with concrete evidence and a tiny measured design.
 
-8. Should import/export become a product feature?
-   - Not in current V1.
-   - Revisit only when backup, migration, or cross-tool portability needs become concrete.
+8. How far should import/export portability go?
+   - Whole-store JSON export/import is part of V1 through `/memory-export` and `/memory-import`, covering backup and machine migration.
+   - Open only for cross-tool formats such as Markdown; revisit when a concrete interoperability need becomes clear.
 
 ---
 
@@ -350,6 +352,7 @@ Current posture: manual-first writes with explicit tools and commands.
 - hybrid search,
 - session summary saves,
 - kindless memories plus dedicated `todo` and `handoff` flows,
+- whole-store JSON export/import for backup and machine migration,
 - a simple Pi adapter.
 
 ### Excluded
@@ -360,7 +363,7 @@ Current posture: manual-first writes with explicit tools and commands.
 - large UI surface,
 - remote multi-agent usage,
 - automatic codebase indexing,
-- general import/export commands.
+- cross-tool import/export formats beyond the JSON store export.
 
 ---
 
@@ -381,4 +384,4 @@ Current posture: manual-first writes with explicit tools and commands.
 2. Keep the deterministic fallback until measurements justify another lightweight fallback model.
 3. Revisit the runtime boundary in an ADR if evidence later argues against the in-process extension.
 4. Record the MCP/OpenAPI target model when a second integration surface becomes concrete.
-5. Reassess import/export only when a concrete backup, migration, or interoperability workflow needs it.
+5. Reassess richer interoperability formats such as Markdown export/import only when a concrete cross-tool workflow needs them; backup and machine migration are already covered by the JSON `/memory-export` and `/memory-import` commands.
