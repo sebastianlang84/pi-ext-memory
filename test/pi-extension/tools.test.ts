@@ -880,6 +880,9 @@ test("memory_save_handoff does not update an expired current-session handoff", a
 
   const store = initializeMemoryStore({ dbPath: join(projectContext.cwd, "memory.sqlite") });
   t.after(() => { store.close(); });
+  // MEMORY_POLICY expires handoffs after 7 days without an update, measured
+  // from updatedAt, so age the fixture through the createMemory restore seam.
+  const expiredAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
   const expired = store.createMemory({
     kind: "handoff",
     scope: "session",
@@ -887,8 +890,8 @@ test("memory_save_handoff does not update an expired current-session handoff", a
     projectId: projectContext.projectId,
     repoPath: projectContext.cwd,
     title: "Current handoff",
-    summary: "Current handoff will be updated since expiresAt is removed.",
-  });
+    summary: "Expired handoff must not be overwritten by a fresh save.",
+  }, { createdAt: expiredAt, updatedAt: expiredAt });
 
   const tools: RegisteredTool[] = [];
   const registerMemoryTools = await importRegisterMemoryTools();
@@ -908,10 +911,12 @@ test("memory_save_handoff does not update an expired current-session handoff", a
     { cwd: projectContext.cwd, sessionManager: { getSessionId: () => projectContext.sessionId } },
   );
 
-  // expiresAt removed in slice5 — the existing handoff is always treated as active and updated
+  // findLatestExactSessionHandoff filters through isActiveHandoff, so an expired
+  // handoff is not found and a fresh one is created instead of being overwritten.
   const saved = output.details.memory as MemoryRecord;
-  assert.equal(saved.id, expired.id);
+  assert.notEqual(saved.id, expired.id);
   assert.equal(store.getMemory(saved.id)?.summary, "Fresh current-session handoff.");
+  assert.equal(store.getMemory(expired.id)?.summary, "Expired handoff must not be overwritten by a fresh save.");
 });
 
 test("memory_list supports optional kind/scope catalog mode", async (t) => {
