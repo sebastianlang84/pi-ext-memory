@@ -678,6 +678,85 @@ test("/memory-export -> /memory-import keeps archived memories archived", async 
   }
 });
 
+test("/memory-import run twice reports the duplicates as skipped, not imported", async () => {
+  const { cwd, repoRoot } = createProjectContext();
+  const sourceDbPath = join(createTempDir("pi-memory-reimport-source-"), "memory.sqlite");
+  const targetDbPath = join(createTempDir("pi-memory-reimport-target-"), "memory.sqlite");
+  const exportFile = join(createTempDir("pi-memory-reimport-file-"), "backup.json");
+
+  const setupStore = initializeMemoryStore({ dbPath: sourceDbPath });
+  try {
+    setupStore.createMemory({
+      scope: "repo",
+      title: "Open note that must stay active",
+      summary: "This memory is still current and must be restored as an active memory.",
+      repoPath: repoRoot,
+      sourceAgent: "test",
+    });
+    const closed = setupStore.createMemory({
+      scope: "repo",
+      title: "Closed note that must stay archived",
+      summary: "This memory was archived on purpose and must not return as live context.",
+      repoPath: repoRoot,
+      sourceAgent: "test",
+    });
+    setupStore.archiveMemory({ id: closed.id, reason: "archived before the backup was taken" });
+  } finally {
+    setupStore.close();
+  }
+
+  const previousDbPath = process.env.PI_MEMORY_DB_PATH;
+
+  try {
+    const { pi, commands, eventHandlers, messages } = createMockPi();
+    registerMemoryCommands(pi as never, createMemoryCore());
+
+    const exportHandler = commands.get("memory-export");
+    const importHandler = commands.get("memory-import");
+    assert.ok(exportHandler, "expected memory-export command to be registered");
+    assert.ok(importHandler, "expected memory-import command to be registered");
+
+    const { ctx } = createMockCommandContext(cwd, "session-reimport-1");
+
+    process.env.PI_MEMORY_DB_PATH = sourceDbPath;
+    await exportHandler(exportFile, ctx);
+
+    process.env.PI_MEMORY_DB_PATH = targetDbPath;
+    await importHandler(exportFile, ctx);
+    assert.match(messages[1]?.content ?? "", /Imported 2 memories .*\(1 archived, 0 skipped\)/);
+
+    // Re-running the same import is the expected operator action for the
+    // backup/migration flow: every record is already present, so the second run
+    // must report that it wrote nothing instead of claiming a full import.
+    await importHandler(exportFile, ctx);
+    assert.match(messages[2]?.content ?? "", /Imported 0 memories .*\(0 archived, 2 skipped\)/);
+
+    for (const shutdown of eventHandlers.get("session_shutdown") ?? []) {
+      await shutdown({}, ctx);
+    }
+
+    const importedStore = initializeMemoryStore({ dbPath: targetDbPath });
+    try {
+      assert.deepEqual(
+        importedStore.listAllInternal({ status: "active" }).map((memory) => memory.title),
+        ["Open note that must stay active"],
+      );
+      assert.deepEqual(
+        importedStore.listAllInternal({ status: "archived" }).map((memory) => memory.title),
+        ["Closed note that must stay archived"],
+      );
+    } finally {
+      importedStore.close();
+    }
+  } finally {
+    if (previousDbPath === undefined) {
+      delete process.env.PI_MEMORY_DB_PATH;
+    } else {
+      process.env.PI_MEMORY_DB_PATH = previousDbPath;
+    }
+  }
+});
+
 test("/memory-import keeps the exported created/updated timestamps", async () => {
   const { cwd } = createProjectContext();
   const dbPath = join(createTempDir("pi-memory-import-timestamps-"), "memory.sqlite");
