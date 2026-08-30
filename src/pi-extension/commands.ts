@@ -188,11 +188,29 @@ export function registerMemoryCommands(
       }
 
       const memories = Array.isArray(parsed.memories) ? (parsed.memories as MemoryRecord[]) : [];
+      // Re-running a backup is the normal operator action here, so the counters have
+      // to report what this run wrote — not what the file contained. Recognise a
+      // record that is already stored before writing it, and keep the ids created so
+      // far: createMemory collapses an exact duplicate by *returning* the pre-existing
+      // row instead of throwing, so an already-known id also means nothing was
+      // written. Without both, every duplicate lands in `imported` and a repeat import
+      // claims a full import on a run that changed nothing.
+      const existing = [
+        ...activeStore.listAllInternal({ status: "active" }),
+        ...activeStore.listAllInternal({ status: "archived" }),
+      ];
+      const storedKeys = new Set(existing.map(importDuplicateKey));
+      const knownIds = new Set(existing.map((memory) => memory.id));
       let imported = 0;
       let archived = 0;
       let skipped = 0;
       for (const memory of memories) {
         try {
+          if (storedKeys.has(importDuplicateKey(memory))) {
+            skipped += 1;
+            continue;
+          }
+
           const input: CreateMemoryInput = {
             kind: memory.kind ?? undefined,
             scope: memory.scope,
@@ -217,6 +235,12 @@ export function registerMemoryCommands(
             createdAt: memory.createdAt,
             updatedAt: memory.updatedAt,
           });
+          storedKeys.add(importDuplicateKey(restored));
+          if (knownIds.has(restored.id)) {
+            skipped += 1;
+            continue;
+          }
+          knownIds.add(restored.id);
           imported += 1;
           if (restored.status === "archived") archived += 1;
         } catch {
@@ -240,6 +264,29 @@ export function registerMemoryCommands(
       sendOutput(pi, formatAuditResults(staleTodos, oldHandoffs, activeStore.dbPath, identityViolations, projectMigrationPreview, legacyWorkflowTags, staleNotes), ctx);
     },
   });
+}
+
+/**
+ * Identity under which /memory-import recognises a record it already holds.
+ * Mirrors the store's exact-duplicate predicate — kind, scope, status and the
+ * scope keys plus title and summary — and its whitespace normalization, so an
+ * exported record matches the row a previous import created from it. Body, tags
+ * and scores are deliberately excluded, exactly as in the store's own check.
+ */
+function importDuplicateKey(memory: Partial<MemoryRecord>): string {
+  const text = (value: string | null | undefined): string =>
+    typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+
+  return JSON.stringify([
+    memory.kind ?? null,
+    memory.scope ?? null,
+    memory.status ?? "active",
+    text(memory.repoPath),
+    text(memory.projectId),
+    text(memory.sessionId),
+    text(memory.title),
+    text(memory.summary),
+  ]);
 }
 
 const SESSION_SUMMARY_TAG = "session-summary";

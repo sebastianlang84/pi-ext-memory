@@ -33,7 +33,7 @@ pi install .
 /memory-session-save <summary> persist an explicit session summary (also stored as a searchable session-summary memory)
 /memory-audit                  run the memory audit and print results
 /memory-export <file.json>     export all memories (active + archived) to JSON for backup/migration
-/memory-import <file.json>     import memories from an export file (keeps status and created/updated timestamps; assigns fresh ids)
+/memory-import <file.json>     import memories from an export file (keeps status and created/updated timestamps; assigns fresh ids; re-importing counts existing duplicates as skipped)
 ```
 
 ## Normal tools
